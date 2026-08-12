@@ -1,0 +1,23 @@
+{
+  "email": "Email",
+  "firstName": "First Name",
+  "surname": "Surname",
+  "idNumber": "ID Number",
+  "mobile": "Mobile Number",
+  "addressLine1": "Address",
+  "postalCode": "Postal Code",
+  "residencyStartDate": "Living Here Since",
+  "nextOfKinName": "Next of Kin Name",
+  "nextOfKinSurname": "Next of Kin Surname",
+  "employerName": "Employer",
+  "employerPhone": "Employer Phone",
+  "employerAddress": "Employer Address",
+  "employerPostalCode": "Employer Postal Code",
+  "employmentStartDate": "Employed Since",
+  "grossMonthly": "Gross Salary",
+  "nettSalary": "Nett Salary",
+  "telephoneExpense": "Telephone Expense",
+  "transportExpense": "Transport Expense",
+  "foodExpense": "Food/Entertainment Expense",
+  "accountHolder": "Account Holder Name"
+}

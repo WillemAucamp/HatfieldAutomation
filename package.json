@@ -1,0 +1,28 @@
+{
+  "name": "vw-melrose-finance-autofill",
+  "version": "1.0.0",
+  "description": "Browser automation for VW Melrose finance application form",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/runBatch.js",
+    "dev": "tsx src/runBatch.ts",
+    "dry-run": "tsx src/runBatch.ts --dry-run",
+    "install-browsers": "playwright install chromium"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "fuse.js": "^7.5.0",
+    "papaparse": "^5.5.4",
+    "playwright": "^1.62.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/papaparse": "^5.5.2",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}

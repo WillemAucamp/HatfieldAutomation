@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+runs/
+processed-rows.json
+*.log
+playwright-report/
+test-results/
