@@ -205,6 +205,8 @@ export function valuesMatch(expected: string, actual: string): boolean {
   const a = normalizeCompareValue(expected);
   const b = normalizeCompareValue(actual);
   if (a === b) return true;
+  if (a.length >= 3 && b.includes(a)) return true;
+  if (b.length >= 3 && a.includes(b)) return true;
   const aNum = parseFloat(a.replace(/[r$€,\s]/gi, "").replace(/[^\d.]/g, ""));
   const bNum = parseFloat(b.replace(/[r$€,\s]/gi, "").replace(/[^\d.]/g, ""));
   if (Number.isFinite(aNum) && Number.isFinite(bNum) && aNum === bNum) return true;

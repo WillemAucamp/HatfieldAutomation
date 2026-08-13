@@ -159,20 +159,14 @@ async function findBySemanticHints(form: FormScope, target: FieldTarget): Promis
   for (const id of target.ids ?? []) {
     const exact = byId(form, id);
     if ((await exact.count()) > 0) return exact.first();
-    const suffix = id.replace(/^\d+_/, "");
-    if (suffix && suffix !== id) {
-      const bySuffix = form.locator(`[id$="${suffix}"]`);
-      if ((await bySuffix.count()) > 0) return bySuffix.first();
-    }
+    const bySuffix = form.locator(`[id$="${id}"]`);
+    if ((await bySuffix.count()) > 0) return bySuffix.first();
   }
   for (const name of target.names ?? []) {
     const byName = form.locator(`[name="${name}"]`);
     if ((await byName.count()) > 0) return byName.first();
-    const suffix = name.replace(/^\d+_/, "");
-    if (suffix && suffix !== name) {
-      const bySuffix = form.locator(`[name$="${suffix}"]`);
-      if ((await bySuffix.count()) > 0) return bySuffix.first();
-    }
+    const byNameSuffix = form.locator(`[name$="${name}"]`);
+    if ((await byNameSuffix.count()) > 0) return byNameSuffix.first();
   }
   return null;
 }

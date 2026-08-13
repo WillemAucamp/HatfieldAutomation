@@ -96,6 +96,8 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     labels: ["Employment start date", "Employed since", "Start date", "Date started employment"],
     role: "textbox",
     type: "text",
+    names: ["employerStartDate"],
+    ids: ["empAddressStartDate"],
   }, data.employmentStartDate);
 
   await fillField(ctx, {

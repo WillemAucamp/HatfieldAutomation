@@ -131,6 +131,8 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     ],
     role: "textbox",
     type: "text",
+    names: ["clientPhysicalAddressDate"],
+    ids: ["txtClientPhysicalAddressDate"],
   }, data.residencyStartDate);
 
   await fillField(ctx, {
@@ -139,6 +141,8 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     labels: ["Marital status"],
     role: "combobox",
     type: "select",
+    names: ["clientMaritalStatus"],
+    ids: ["ddlClientMaritalStatus"],
   }, "Single");
 
   await fillField(ctx, {
