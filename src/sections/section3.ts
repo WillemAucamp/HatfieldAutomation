@@ -18,7 +18,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientTitle"],
     ids: ["ddlClientTitle"],
-  }, "Mr", { selectByIndex: 0 });
+  }, "Mr");
 
   await fillField(ctx, {
     name: "First name",

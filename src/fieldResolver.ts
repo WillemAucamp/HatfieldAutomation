@@ -28,8 +28,8 @@ export interface FillContext {
   warnings: FieldWarning[];
 }
 
-function cssEscape(value: string): string {
-  return value.replace(/([ !"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, "\\$1");
+function byId(form: FormScope, id: string): Locator {
+  return form.locator(`[id="${id}"]`);
 }
 
 function normalizeText(text: string): string {
@@ -57,7 +57,7 @@ async function findByLabel(form: FormScope, target: FieldTarget): Promise<Locato
       if (text.includes(normalized) || normalized.includes(text)) {
         const forAttr = await labelEl.getAttribute("for");
         if (forAttr) {
-          const input = form.locator(`#${cssEscape(forAttr)}`);
+          const input = form.locator(`[id="${forAttr}"]`);
           if ((await input.count()) > 0) return input.first();
         }
         const nested = labelEl.locator("input, select, textarea");
@@ -144,7 +144,7 @@ async function findByFuzzy(form: FormScope, target: FieldTarget): Promise<Locato
       if (match) {
         const forAttr = await match.locator.getAttribute("for");
         if (forAttr) {
-          const input = form.locator(`#${cssEscape(forAttr)}`);
+          const input = form.locator(`[id="${forAttr}"]`);
           if ((await input.count()) > 0) return input.first();
         }
         const nested = match.locator.locator("input, select, textarea");
@@ -157,8 +157,8 @@ async function findByFuzzy(form: FormScope, target: FieldTarget): Promise<Locato
 
 async function findBySemanticHints(form: FormScope, target: FieldTarget): Promise<Locator | null> {
   for (const id of target.ids ?? []) {
-    const byId = form.locator(`#${cssEscape(id)}`);
-    if ((await byId.count()) > 0) return byId.first();
+    const byIdLocator = byId(form, id);
+    if ((await byIdLocator.count()) > 0) return byIdLocator.first();
   }
   for (const name of target.names ?? []) {
     const byName = form.locator(`[name="${name}"]`);
@@ -333,7 +333,7 @@ async function selectRadioInGroup(
     if (optionPattern.test(text.trim())) {
       const forAttr = await label.getAttribute("for");
       if (forAttr) {
-        await form.locator(`#${cssEscape(forAttr)}`).check({ force: true });
+        await form.locator(`[id="${forAttr}"]`).check({ force: true });
         await randomDelay(config);
         return;
       }

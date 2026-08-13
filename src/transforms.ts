@@ -205,8 +205,8 @@ export function valuesMatch(expected: string, actual: string): boolean {
   const a = normalizeCompareValue(expected);
   const b = normalizeCompareValue(actual);
   if (a === b) return true;
-  const aDigits = a.replace(/\s/g, "");
-  const bDigits = b.replace(/\s/g, "");
-  if (/^\d+$/.test(aDigits) && aDigits === bDigits) return true;
+  const aDigits = a.replace(/\D/g, "");
+  const bDigits = b.replace(/\D/g, "");
+  if (aDigits.length > 0 && aDigits === bDigits) return true;
   return false;
 }
