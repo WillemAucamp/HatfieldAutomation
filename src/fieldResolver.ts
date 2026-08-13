@@ -233,7 +233,9 @@ async function verifyFill(
 }
 
 async function fillTextInput(locator: Locator, value: string, config: AppConfig): Promise<void> {
-  await locator.fill(value, { force: true, timeout: 10000 });
+  await locator.waitFor({ state: "visible", timeout: 15000 });
+  await locator.click({ timeout: 10000 });
+  await locator.fill(value, { timeout: 10000 });
   await randomDelay(config);
 }
 
@@ -243,6 +245,7 @@ async function selectDropdownByText(
   value: string,
   config: AppConfig
 ): Promise<void> {
+  await locator.waitFor({ state: "visible", timeout: 15000 }).catch(() => undefined);
   const tag = await locator.evaluate((el) => el.tagName.toLowerCase());
 
   if (tag === "select") {

@@ -5,6 +5,7 @@ import {
   fillRadioGroupsByAnswer,
   fillSelectByVisibleText,
   screenshotSection,
+  waitForHeading,
 } from "../formUtils.js";
 import { randomDelay } from "../utils.js";
 
@@ -22,6 +23,7 @@ export async function runSection1(ctx: FillContext): Promise<void> {
 
   if (!config.dryRun) {
     await clickNext(form, config);
+    await waitForHeading(form, /declarations|email address|qualifying criteria/i);
   }
 
   await screenshotSection(page, form, ctx.screenshotDir, `${SECTION}-step2`, "before");

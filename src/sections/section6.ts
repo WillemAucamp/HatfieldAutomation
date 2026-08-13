@@ -1,5 +1,5 @@
 import type { FillContext } from "../fieldResolver.js";
-import { clickNext, screenshotSection } from "../formUtils.js";
+import { clickNext, screenshotSection, waitForHeading } from "../formUtils.js";
 import { parseReferenceNumber } from "../reference.js";
 import { randomDelay } from "../utils.js";
 
@@ -8,6 +8,7 @@ const SECTION = "section6";
 export async function runSection6(ctx: FillContext): Promise<string> {
   const { page, form, config } = ctx;
 
+  await waitForHeading(form, /upload documents/i);
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before");
 
   const finish = form.locator("button:visible").filter({ hasText: /^finish$/i }).first();

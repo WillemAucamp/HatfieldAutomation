@@ -33,6 +33,10 @@ export async function clickApplyForFinance(page: Page, config: AppConfig): Promi
   return waitForFormFrame(page);
 }
 
+export async function waitForHeading(form: FormScope, pattern: RegExp, timeoutMs = 20000): Promise<void> {
+  await form.getByText(pattern).first().waitFor({ state: "visible", timeout: timeoutMs });
+}
+
 export async function clickNext(form: FormScope, config: AppConfig): Promise<void> {
   const next = form.locator("button:visible").filter({ hasText: /^next$/i }).first();
   await next.waitFor({ state: "visible", timeout: 15000 });

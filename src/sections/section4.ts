@@ -1,6 +1,6 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
-import { clickNext, screenshotSection } from "../formUtils.js";
+import { clickNext, screenshotSection, waitForHeading } from "../formUtils.js";
 
 const SECTION = "section4";
 
@@ -8,6 +8,7 @@ export async function runSection4(ctx: FillContext): Promise<void> {
   const { page, form, config } = ctx;
   const data = ctx.applicant;
 
+  await waitForHeading(form, /work\s*&\s*salary/i);
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before");
 
   await fillField(ctx, {
