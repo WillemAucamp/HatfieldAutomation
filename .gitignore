@@ -3,6 +3,8 @@ dist/
 .env
 runs/
 processed-rows.json
+application-references.json
+service-account.json
 *.log
 playwright-report/
 test-results/

@@ -12,6 +12,9 @@ interface FileConfig {
   sheetCsvUrl?: string;
   mappingPath?: string;
   financeUrl?: string;
+  sheetId?: string;
+  sheetWebhookUrl?: string;
+  googleServiceAccountFile?: string;
 }
 
 function loadFileConfig(): FileConfig {
@@ -64,7 +67,21 @@ export function loadConfig(): AppConfig {
     skipProcessed:
       cliFlag("skip-processed") || parseBool(process.env.SKIP_PROCESSED, false),
     keepLastOpen: cliFlag("keep-last-open") || parseBool(process.env.KEEP_LAST_OPEN, false),
+    sheetId:
+      process.env.SHEET_ID ||
+      fileConfig.sheetId ||
+      extractSheetId(
+        process.env.SHEET_CSV_URL || fileConfig.sheetCsvUrl || DEFAULT_SHEET_CSV_URL
+      ),
+    sheetWebhookUrl: process.env.SHEET_WEBHOOK_URL ?? fileConfig.sheetWebhookUrl ?? "",
+    googleServiceAccountFile:
+      process.env.GOOGLE_SERVICE_ACCOUNT_FILE ?? fileConfig.googleServiceAccountFile ?? "",
   };
+}
+
+function extractSheetId(url: string): string {
+  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  return match?.[1] ?? "";
 }
 
 export function loadColumnMapping(mappingPath: string): ColumnMapping {

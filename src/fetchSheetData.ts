@@ -266,6 +266,9 @@ function mapRow(
     foodExpense: foodResult.value,
     accountHolder: accountResult.value,
     processed: getCell(row, PROCESSED_COLUMN) || undefined,
+    existingReference: mapping.referenceNumber
+      ? getCell(row, mapping.referenceNumber)
+      : getCell(row, "Reference Number") || undefined,
     errors,
   };
 }
@@ -343,6 +346,12 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
       for (const err of applicant.errors) {
         console.error(`  [${err.code}] ${err.message}`);
       }
+    }
+
+    if (applicant.existingReference) {
+      console.log(
+        `Row ${rowNumber} (${applicant.rowId}): already has reference ${applicant.existingReference} — will not resubmit`
+      );
     }
 
     applicants.push(applicant);

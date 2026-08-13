@@ -24,6 +24,7 @@ export interface ColumnMapping {
   transportExpense: string;
   foodExpense: string;
   accountHolder: string;
+  referenceNumber?: string;
 }
 
 export interface ApplicantRecord {
@@ -52,6 +53,7 @@ export interface ApplicantRecord {
   foodExpense: string;
   accountHolder: string;
   processed?: string;
+  existingReference?: string;
   errors: DataError[];
 }
 
@@ -74,6 +76,9 @@ export interface AppConfig {
   financeUrl: string;
   skipProcessed: boolean;
   keepLastOpen: boolean;
+  sheetId: string;
+  sheetWebhookUrl: string;
+  googleServiceAccountFile: string;
 }
 
 export type FieldStrategy =
@@ -99,6 +104,8 @@ export interface FieldWarning {
 
 export type RunStatus =
   | "stopped-at-uploads"
+  | "submitted"
+  | "already-submitted"
   | "failed"
   | "data-error"
   | "manual-review-needed"
@@ -116,6 +123,8 @@ export interface ApplicantRunResult {
   finishedAt: string;
   error?: string;
   errorCodes?: string[];
+  referenceNumber?: string;
+  writtenToSheet?: boolean;
 }
 
 export interface BatchRunLog {

@@ -49,10 +49,10 @@ Ensure the sheet column headers match `mapping.json` (or update that file to mat
 ### Run
 
 ```bash
-# Dry-run: fills all sections, screenshots each step, stops before Section 5 Next click
+# Dry-run: fills sections 1–5, screenshots each step, does not click Finish
 npm run dry-run
 
-# Live run (leaves browser open at Upload Documents for manual completion)
+# Live run: fills the form, clicks Finish, captures the reference, writes it to the sheet
 npm run dev
 
 # Process specific rows only (1-based, comma-separated)
@@ -91,7 +91,7 @@ Fields are located using strategies in priority order:
 
 Every fill is followed by read-back verification. In strict mode, mismatches abort that applicant's run (the batch still continues with the next row). Default is non-strict: log a warning and keep filling.
 
-Each sheet row is a **new browser context**. A failure or stop at Upload Documents closes that session and starts the next row from a blank slate. Pass `--keep-last-open` to leave only the final applicant's window open.
+Each sheet row is a **new browser context**. After submit (or a failure) that session closes and the next row starts clean. Pass `--keep-last-open` to leave only the final applicant's window open.
 
 ## Configuration
 
@@ -107,6 +107,8 @@ Environment variables (`.env`):
 | `ROW_FILTER` | — | Comma-separated 1-based row numbers |
 | `SKIP_PROCESSED` | `false` | Skip IDs already in `processed-rows.json` |
 | `KEEP_LAST_OPEN` | `false` | Leave the last headed session open |
+| `SHEET_WEBHOOK_URL` | — | Apps Script web app URL for writing the reference |
+| `GOOGLE_SERVICE_ACCOUNT_FILE` | — | Service account JSON for Sheets API write-back |
 | `ACTION_DELAY_MIN` | `200` | Min ms delay between actions |
 | `ACTION_DELAY_MAX` | `800` | Max ms delay between actions |
 
@@ -144,7 +146,46 @@ runs/2026-08-12T07-30-00-000Z/
 
 ## Duplicate-run guard
 
-By default **every sheet row is processed**. To skip IDs already completed, pass `--skip-processed` or set `SKIP_PROCESSED=true`. Completed IDs are recorded in `processed-rows.json`.
+A row that already has a **Reference Number** in the sheet is never resubmitted.
+
+## Submit and write the reference back
+
+After Section 5 the live run:
+
+1. Opens **Upload Documents** (no files are uploaded — documents stay optional).
+2. Clicks **FINISH**.
+3. Reads the success popup (`Your Reference Number is : ZAHTVW…`).
+4. Clicks **OK**.
+5. Writes that reference into the matching Google Sheet row, column **Reference Number**.
+
+Dry-run still stops before Finish.
+
+### Enable Google Sheet write-back
+
+CSV export is read-only. To write the reference you need one of:
+
+**Option A — Apps Script webhook (simplest)**
+
+1. Open the sheet → Extensions → Apps Script.
+2. Paste `apps-script/Code.gs`.
+3. Deploy → New deployment → Web app. Execute as *Me*, access *Anyone*.
+4. Put the web app URL in `.env`:
+
+```
+SHEET_WEBHOOK_URL=https://script.google.com/macros/s/…/exec
+```
+
+**Option B — Google service account**
+
+1. Create a service account JSON key.
+2. Share the sheet with that account as Editor.
+3. Set `GOOGLE_SERVICE_ACCOUNT_FILE=./service-account.json`.
+
+Until one of those is configured, the reference is still saved locally in `application-references.json` so nothing is lost.
+
+## Resuming a session
+
+`storage-state.json` is saved per applicant after submit (or dry-run) in the run folder.
 
 ## Data errors (human error in the sheet)
 
@@ -167,10 +208,6 @@ The only automatic rewrite is the known Google Sheets artefact: a 9-digit mobile
 Fix the sheet cell, then re-run. Error codes are printed to the console and stored in `run-log.json` / `run-log.csv`.
 
 Postal code: type the sheet value, then select the first dropdown match. Province is always `Gauteng`.
-
-## Resuming a session
-
-After a live run stops at Upload Documents, `storage-state.json` is saved in the applicant folder. Load it in a custom script or Playwright codegen session to resume where automation left off.
 
 ## Development
 

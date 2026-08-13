@@ -3,25 +3,22 @@ import { join } from "node:path";
 import { loadConfig, loadColumnMapping } from "./config.js";
 import { fetchSheetData, markRowProcessed } from "./fetchSheetData.js";
 import type { FillContext } from "./fieldResolver.js";
-import {
-  clickApplyForFinance,
-  clickNext,
-  getVisibleStepText,
-  isUploadDocumentsSection,
-  screenshotSection,
-} from "./formUtils.js";
+import { clickApplyForFinance } from "./formUtils.js";
 import { RunLogger, createWarning } from "./logger.js";
 import {
+  goToUploadDocumentsThenSubmit,
   runSection1,
   runSection2,
   runSection3,
   runSection4,
   runSection5,
 } from "./sections/index.js";
+import { writeReferenceToSheet } from "./sheetWriter.js";
 import type {
   ApplicantRecord,
   ApplicantRunResult,
   AppConfig,
+  ColumnMapping,
   FieldWarning,
   RunStatus,
 } from "./types.js";
@@ -32,6 +29,7 @@ async function processApplicant(
   applicant: ApplicantRecord,
   logger: RunLogger,
   config: AppConfig,
+  mapping: ColumnMapping,
   isLast: boolean
 ): Promise<ApplicantRunResult> {
   const startedAt = new Date().toISOString();
@@ -42,7 +40,7 @@ async function processApplicant(
   let context: BrowserContext | undefined;
   let page: Page | undefined;
   let sectionReached = 0;
-  let status: RunStatus = "stopped-at-uploads";
+  let status: RunStatus = "submitted";
 
   console.log(`\n=== Processing row ${applicant.rowIndex}: ${applicantName} (fresh session) ===`);
 
@@ -69,6 +67,25 @@ async function processApplicant(
       finishedAt: new Date().toISOString(),
       error,
       errorCodes,
+    };
+  }
+
+  if (applicant.existingReference) {
+    console.log(
+      `Row ${applicant.rowIndex} already has reference ${applicant.existingReference} — skipping to avoid a duplicate application.`
+    );
+    return {
+      rowIndex: applicant.rowIndex,
+      rowId: applicant.rowId,
+      applicantName,
+      status: "already-submitted",
+      sectionReached: 6,
+      warnings: [],
+      screenshotDir,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      referenceNumber: applicant.existingReference,
+      writtenToSheet: true,
     };
   }
 
@@ -108,25 +125,35 @@ async function processApplicant(
       status = "dry-run-complete";
       console.log(`[dry-run] Stopped after filling Section 5 for ${applicantName}`);
     } else {
-      await clickNext(form, config);
-      await form.waitForLoadState("networkidle").catch(() => undefined);
+      const referenceNumber = await goToUploadDocumentsThenSubmit(ctx);
+      sectionReached = 6;
+      status = "submitted";
+      markRowProcessed(applicant.rowId);
 
-      const bodyText = await getVisibleStepText(form);
-      if (isUploadDocumentsSection(bodyText)) {
-        status = "stopped-at-uploads";
-        await screenshotSection(page, form, screenshotDir, "section6-upload", "before");
-        console.log(`Ready for manual document upload for ${applicantName}`);
-        markRowProcessed(applicant.rowId);
-      } else {
-        status = "manual-review-needed";
+      const write = await writeReferenceToSheet(config, mapping, applicant, referenceNumber);
+      if (!write.writtenToSheet && write.sheetError) {
         warnings.push(
-          createWarning(
-            "section6",
-            "navigation",
-            "Expected Upload Documents section but page content did not match"
-          )
+          createWarning("referenceNumber", "sheet-write", write.sheetError)
         );
       }
+
+      const statePath = join(screenshotDir, "storage-state.json");
+      await context.storageState({ path: statePath });
+      console.log(`Saved session state to ${statePath}`);
+
+      return {
+        rowIndex: applicant.rowIndex,
+        rowId: applicant.rowId,
+        applicantName,
+        status,
+        sectionReached,
+        warnings,
+        screenshotDir,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        referenceNumber,
+        writtenToSheet: write.writtenToSheet,
+      };
     }
 
     const statePath = join(screenshotDir, "storage-state.json");
@@ -231,14 +258,15 @@ async function main(): Promise<void> {
         applicant,
         logger,
         config,
+        mapping,
         i === applicants.length - 1
       );
       logger.appendResult(result);
       logger.appendCsvSummary(result);
       console.log(
         `Result for ${result.applicantName}: ${result.status}${
-          result.errorCodes?.length ? ` [${result.errorCodes.join(", ")}]` : ""
-        } (section ${result.sectionReached})`
+          result.referenceNumber ? ` ref=${result.referenceNumber}` : ""
+        }${result.errorCodes?.length ? ` [${result.errorCodes.join(", ")}]` : ""} (section ${result.sectionReached})`
       );
     }
   } finally {
