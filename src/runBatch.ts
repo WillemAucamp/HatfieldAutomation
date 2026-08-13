@@ -234,11 +234,11 @@ async function persistOutcome(
     }
 
     const reference = successfulReferenceFromCell(sheetStatus);
-    if (reference) {
+    if (reference && applicant.mobile) {
       const loaded = await appendLoadedClient(
         config,
         `${applicant.firstName} ${applicant.surname}`.trim(),
-        reference
+        applicant.mobile
       );
       if (!loaded.written && loaded.error) {
         warnings.push(createWarning("loaded-clients", "sheet-write", loaded.error));

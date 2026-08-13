@@ -122,7 +122,7 @@ export async function writeRowOutcomeToSheet(
 async function postWebhookJson(
   url: string,
   payload: Record<string, unknown>
-): Promise<{ ok?: boolean; skipped?: boolean; error?: string }> {
+): Promise<{ ok?: boolean; skipped?: boolean; updated?: boolean; error?: string; row?: number }> {
   // Apps Script web apps 302 to googleusercontent.com. Following that
   // redirect with POST yields 405; the JSON result must be fetched with GET.
   const response = await fetch(url, {
@@ -155,12 +155,24 @@ async function postWebhookJson(
   return parseWebhookBody(body);
 }
 
-function parseWebhookBody(body: string): { ok?: boolean; skipped?: boolean; error?: string } {
+function parseWebhookBody(body: string): {
+  ok?: boolean;
+  skipped?: boolean;
+  updated?: boolean;
+  error?: string;
+  row?: number;
+} {
   if (!body.trim()) {
     return { ok: true };
   }
   try {
-    return JSON.parse(body) as { ok?: boolean; skipped?: boolean; error?: string };
+    return JSON.parse(body) as {
+      ok?: boolean;
+      skipped?: boolean;
+      updated?: boolean;
+      error?: string;
+      row?: number;
+    };
   } catch {
     if (/<!doctype html/i.test(body) || /authorization/i.test(body)) {
       throw new Error(
@@ -169,6 +181,32 @@ function parseWebhookBody(body: string): { ok?: boolean; skipped?: boolean; erro
     }
     throw new Error(`Webhook returned non-JSON: ${body.slice(0, 300)}`);
   }
+}
+
+/**
+ * Overwrite Number on an existing Name row. Uses the already-deployed writeStatus
+ * action (it can target any spreadsheet + column) so this works without a redeploy.
+ */
+async function updateLoadedNumberByName(
+  webhook: string,
+  config: AppConfig,
+  name: string,
+  number: string
+): Promise<boolean> {
+  const parsed = await postWebhookJson(webhook, {
+    action: "writeStatus",
+    sourceSheetId: config.loadedSheetId,
+    email: name,
+    emailColumn: config.loadedNameColumn,
+    status: number,
+    statusColumn: config.loadedNumberColumn,
+    timingColumn: config.loadedNumberColumn,
+  });
+  if (parsed.ok === false) {
+    if (/could not match/i.test(parsed.error || "")) return false;
+    throw new Error(parsed.error || "Loaded-clients name update failed");
+  }
+  return Boolean(parsed.row);
 }
 
 async function writeViaWebhook(
@@ -296,10 +334,11 @@ function columnIndexToLetter(index: number): string {
 export interface LoadedClientWrite {
   written: boolean;
   skipped?: boolean;
+  updated?: boolean;
   error?: string;
 }
 
-/** Append Name + Number to the loaded-clients spreadsheet after a successful submit. */
+/** Upsert Name + cellphone on the loaded-clients spreadsheet after a successful submit. */
 export async function appendLoadedClient(
   config: AppConfig,
   name: string,
@@ -308,10 +347,17 @@ export async function appendLoadedClient(
   const webhook = config.loadedSheetWebhookUrl || config.sheetWebhookUrl;
   if (webhook) {
     try {
+      const updated = await updateLoadedNumberByName(webhook, config, name, number);
+      if (updated) {
+        console.log(`  [sheetWriter] Loaded-clients sheet: ${name} → ${number} (updated)`);
+        return { written: true, updated: true };
+      }
+
       const parsed = await postWebhookJson(webhook, {
         action: "appendLoaded",
         name,
         number,
+        mobile: number,
         loadedSheetId: config.loadedSheetId,
         nameColumn: config.loadedNameColumn,
         numberColumn: config.loadedNumberColumn,
@@ -319,11 +365,13 @@ export async function appendLoadedClient(
       if (parsed.ok === false) {
         throw new Error(parsed.error || "Webhook appendLoaded returned ok=false");
       }
+      const skipped = Boolean(parsed.skipped);
+      const wasUpdate = Boolean(parsed.updated);
       console.log(
         `  [sheetWriter] Loaded-clients sheet: ${name} → ${number}` +
-          (parsed.skipped ? " (already present)" : "")
+          (skipped ? " (already present)" : wasUpdate ? " (updated)" : "")
       );
-      return { written: true, skipped: parsed.skipped };
+      return { written: true, skipped, updated: wasUpdate };
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       console.error(`  [sheetWriter] Loaded-clients webhook failed: ${error}`);
@@ -391,14 +439,38 @@ async function appendLoadedViaSheetsApi(
     config.loadedNumberColumn
   );
 
+  const nameCol = columnIndexToLetter(nameIndex);
   const numberCol = columnIndexToLetter(numberIndex);
-  const existing = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: `'${sheetTitle}'!${numberCol}2:${numberCol}`,
-  });
-  const already = (existing.data.values ?? []).some(
-    (row) => String(row[0] ?? "").trim() === number
-  );
+  const [nameRes, numberRes] = await Promise.all([
+    sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `'${sheetTitle}'!${nameCol}2:${nameCol}`,
+    }),
+    sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `'${sheetTitle}'!${numberCol}2:${numberCol}`,
+    }),
+  ]);
+  const names = nameRes.data.values ?? [];
+  const numbers = numberRes.data.values ?? [];
+  const nameKey = name.trim().toLowerCase();
+  const updates: { range: string; values: string[][] }[] = [];
+  for (let i = 0; i < names.length; i++) {
+    if (String(names[i]?.[0] ?? "").trim().toLowerCase() !== nameKey) continue;
+    updates.push({
+      range: `'${sheetTitle}'!${numberCol}${i + 2}`,
+      values: [[number]],
+    });
+  }
+  if (updates.length > 0) {
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId,
+      requestBody: { valueInputOption: "USER_ENTERED", data: updates },
+    });
+    return;
+  }
+
+  const already = numbers.some((row) => String(row[0] ?? "").trim() === number);
   if (already) return;
 
   const rowRes = await sheets.spreadsheets.values.get({

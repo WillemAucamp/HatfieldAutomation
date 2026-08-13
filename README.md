@@ -108,7 +108,7 @@ Environment variables (`.env`):
 | `SKIP_PROCESSED` | `false` | Skip IDs already in `processed-rows.json` |
 | `KEEP_LAST_OPEN` | `false` | Leave the last headed session open |
 | `SHEET_WEBHOOK_URL` | — | Apps Script web app URL (writes source Status and loaded Name/Number) |
-| `LOADED_SHEET_ID` | loaded-clients sheet | Spreadsheet that receives Name + Number after each successful load |
+| `LOADED_SHEET_ID` | loaded-clients sheet | Spreadsheet that receives Name + cellphone after each successful load |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | — | Service account JSON for Sheets API write-back |
 | `ACTION_DELAY_MIN` | `0` | Min ms delay between actions |
 | `ACTION_DELAY_MAX` | `0` | Max ms delay between actions |
@@ -163,7 +163,7 @@ After Section 5 the live run:
 4. Clicks **OK**.
 5. Writes the outcome:
    - Applicant sheet **Status** — `ZAHTVW…` on success, or `error CODE` on failure; **Timing** — seconds.
-   - Loaded-clients sheet **Name** + **Number** — applicant name and `ZAHTVW…` (successes only).
+   - Loaded-clients sheet **Name** + **Number** — applicant name and cellphone (successes only).
 
 If a row fails (bad sheet data or a form error), the batch **does not stop**. It writes `error …` plus timing on the applicant sheet, skips the loaded-clients row, closes the session, and continues.
 
@@ -182,7 +182,7 @@ CSV export is read-only. One Apps Script webhook can edit **both** spreadsheets 
 SHEET_WEBHOOK_URL=https://script.google.com/macros/s/…/exec
 ```
 
-Push already-captured outcomes with `npm run sync-loaded` (writes Status/Timing and appends Name/Number).
+Push already-captured outcomes with `npm run sync-loaded` (writes Status/Timing and upserts Name + cellphone). Use `npx tsx src/syncLoadedSheet.ts --loaded-only` to update only the money sheet.
 
 **Option B — Google service account:** share **both** sheets with the account as Editor and set `GOOGLE_SERVICE_ACCOUNT_FILE`.
 

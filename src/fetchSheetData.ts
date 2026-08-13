@@ -23,6 +23,8 @@ export interface FetchOptions {
   rowFilter?: number[];
   localCsvPath?: string;
   skipProcessed?: boolean;
+  /** Include rows that already have Status / a local reference (used for sheet sync). */
+  includeCompleted?: boolean;
 }
 
 function getCell(row: Record<string, string>, columnHeader: string): string {
@@ -351,7 +353,7 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
 
     const applicant = mapRow(row, options.mapping, rowNumber);
 
-    if (isStatusPopulated(applicant.existingStatus)) {
+    if (!options.includeCompleted && isStatusPopulated(applicant.existingStatus)) {
       console.log(
         `Skipping row ${rowNumber}: Status already populated (${applicant.existingStatus})`
       );
@@ -359,7 +361,7 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
     }
 
     const localRef = successfulReferenceFromCell(localReferences[applicant.rowId]);
-    if (localRef) {
+    if (!options.includeCompleted && localRef) {
       console.log(
         `Skipping row ${rowNumber} (${applicant.rowId}): already submitted locally (${localRef})`
       );

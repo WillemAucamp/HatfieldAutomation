@@ -9,7 +9,7 @@
  * 4. Put the /exec URL in .env as SHEET_WEBHOOK_URL
  *
  * Actions
- *   appendLoaded — add Name + Number on the loaded-clients sheet
+ *   appendLoaded — add/update Name + cellphone on the loaded-clients sheet
  *   writeStatus  — write Status + Timing on the applicant source sheet
  *
  * The account that deploys this must be able to edit both spreadsheets.
@@ -36,10 +36,14 @@ function doPost(e) {
 }
 
 function inferAction_(data) {
-  if (data.name && (data.number || data.referenceNumber) && data.action !== "writeStatus") {
+  if (data.name && (data.number || data.mobile || data.referenceNumber) && data.action !== "writeStatus") {
     return "appendLoaded";
   }
   return "writeStatus";
+}
+
+function writePhone_(sheet, row, col, value) {
+  sheet.getRange(row, col).setNumberFormat("@").setValue(String(value));
 }
 
 function appendLoaded_(data) {
@@ -52,17 +56,33 @@ function appendLoaded_(data) {
   var numberCol = headers.indexOf(numberColumn) + 1;
 
   var name = String(data.name || "").trim();
-  var number = String(data.number || data.referenceNumber || "").trim();
+  var number = String(data.number || data.mobile || "").trim();
   if (!name || !number) {
     return { ok: false, error: "name and number are required" };
   }
 
   var last = Math.max(sheet.getLastRow(), 1);
   if (last >= 2) {
-    var existing = sheet.getRange(2, numberCol, last - 1, 1).getValues();
-    for (var i = 0; i < existing.length; i++) {
-      if (String(existing[i][0]).trim() === number) {
-        return { ok: true, skipped: true, row: i + 2, number: number };
+    var names = sheet.getRange(2, nameCol, last - 1, 1).getValues();
+    var numbers = sheet.getRange(2, numberCol, last - 1, 1).getValues();
+    var updated = 0;
+    var lastRow = 0;
+    for (var i = 0; i < names.length; i++) {
+      if (String(names[i][0]).trim().toLowerCase() !== name.toLowerCase()) continue;
+      lastRow = i + 2;
+      if (String(numbers[i][0]).trim() === number) {
+        updated++;
+        continue;
+      }
+      writePhone_(sheet, lastRow, numberCol, number);
+      updated++;
+    }
+    if (updated > 0) {
+      return { ok: true, updated: true, row: lastRow, name: name, number: number, count: updated };
+    }
+    for (var j = 0; j < numbers.length; j++) {
+      if (String(numbers[j][0]).trim() === number) {
+        return { ok: true, skipped: true, row: j + 2, number: number };
       }
     }
   }
@@ -72,7 +92,7 @@ function appendLoaded_(data) {
     row = 2;
   }
   sheet.getRange(row, nameCol).setValue(name);
-  sheet.getRange(row, numberCol).setValue(number);
+  writePhone_(sheet, row, numberCol, number);
   return { ok: true, row: row, name: name, number: number };
 }
 
