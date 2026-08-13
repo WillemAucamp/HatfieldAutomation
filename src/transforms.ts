@@ -201,12 +201,64 @@ export function normalizeCompareValue(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+/**
+ * Sheet nicknames → search terms for the live finance dropdown.
+ * FNB must not rely on substring "fnb" inside "FIRSTRAND BANK LIMITED".
+ */
+export function expandSelectNeedles(raw: string): string[] {
+  const value = String(raw ?? "").trim();
+  if (!value) return [];
+
+  const lower = value.toLowerCase().replace(/[_/]+/g, " ").replace(/\s+/g, " ");
+  const aliasTable: Array<{ keys: string[]; terms: string[] }> = [
+    { keys: ["fnb", "first national", "firstrand"], terms: ["FIRSTRAND", "FIRST NATIONAL", "FNB"] },
+    { keys: ["capitec"], terms: ["CAPITEC"] },
+    { keys: ["nedbank"], terms: ["NEDBANK"] },
+    { keys: ["standard bank", "standard"], terms: ["STANDARD BANK", "STANDARD"] },
+    { keys: ["absa"], terms: ["ABSA"] },
+    { keys: ["african bank"], terms: ["AFRICAN BANK"] },
+    { keys: ["discovery"], terms: ["DISCOVERY"] },
+    { keys: ["tyme", "tymebank", "tyme bank"], terms: ["TYME"] },
+    { keys: ["investec"], terms: ["INVESTEC"] },
+    { keys: ["bidvest"], terms: ["BIDVEST"] },
+    { keys: ["old mutual"], terms: ["OLD MUTUAL"] },
+    { keys: ["savings transactional", "savings/transactional", "transactional"], terms: ["SAVINGS"] },
+    { keys: ["cheque current", "cheque/current", "current cheque"], terms: ["CURRENT", "CHEQUE"] },
+    { keys: ["savings"], terms: ["SAVINGS"] },
+    { keys: ["cheque"], terms: ["CHEQUE", "CURRENT"] },
+    { keys: ["current"], terms: ["CURRENT", "CHEQUE"] },
+  ];
+
+  for (const { keys, terms } of aliasTable) {
+    if (keys.some((key) => lower === key || lower.startsWith(`${key} `))) {
+      return uniqueNeedles([value, ...terms]);
+    }
+  }
+
+  return [value];
+}
+
+function uniqueNeedles(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    const key = trimmed.toLowerCase();
+    if (!trimmed || seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
+}
+
 export function valuesMatch(expected: string, actual: string): boolean {
   const a = normalizeCompareValue(expected);
   const b = normalizeCompareValue(actual);
   if (a === b) return true;
   if (a.length >= 3 && b.includes(a)) return true;
   if (b.length >= 3 && a.includes(b)) return true;
+  const needles = expandSelectNeedles(expected).map((n) => n.toLowerCase());
+  if (needles.some((n) => n.length >= 3 && b.includes(n))) return true;
   const aNum = parseFloat(a.replace(/[r$€,\s]/gi, "").replace(/[^\d.]/g, ""));
   const bNum = parseFloat(b.replace(/[r$€,\s]/gi, "").replace(/[^\d.]/g, ""));
   if (Number.isFinite(aNum) && Number.isFinite(bNum) && aNum === bNum) return true;

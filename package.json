@@ -9,7 +9,7 @@
     "start": "node dist/runBatch.js",
     "dev": "tsx src/runBatch.ts",
     "dry-run": "tsx src/runBatch.ts --dry-run",
-    "test": "tsx --test src/outcome.test.ts",
+    "test": "tsx --test src/outcome.test.ts src/transforms.test.ts",
     "install-browsers": "playwright install chromium"
   },
   "engines": {

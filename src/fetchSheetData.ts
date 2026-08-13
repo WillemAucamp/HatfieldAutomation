@@ -249,6 +249,20 @@ function mapRow(
   );
   pushError(errors, accountResult, "accountHolder", accountRaw);
 
+  const bankRaw = mapping.bank ? getCell(row, mapping.bank) : getCell(row, "Bank name");
+  const bankResult = requireText(bankRaw, "BANK_EMPTY", "Bank name is empty");
+  pushError(errors, bankResult, "bank", bankRaw);
+
+  const accountTypeRaw = mapping.accountType
+    ? getCell(row, mapping.accountType)
+    : getCell(row, "Account type (AI—most likely option based on bank)");
+  const accountTypeResult = requireText(
+    accountTypeRaw,
+    "ACCOUNT_TYPE_EMPTY",
+    "Account type is empty"
+  );
+  pushError(errors, accountTypeResult, "accountType", accountTypeRaw);
+
   return {
     rowIndex,
     rowId: buildRowId(row, mapping, rowIndex),
@@ -274,6 +288,8 @@ function mapRow(
     transportExpense: transportResult.value,
     foodExpense: foodResult.value,
     accountHolder: accountResult.value,
+    bank: bankResult.value,
+    accountType: accountTypeResult.value,
     processed: getCell(row, PROCESSED_COLUMN) || undefined,
     existingStatus: readStatusCell(row, mapping) || undefined,
     errors,

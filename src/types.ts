@@ -24,6 +24,8 @@ export interface ColumnMapping {
   transportExpense: string;
   foodExpense: string;
   accountHolder: string;
+  bank?: string;
+  accountType?: string;
   /** Column for ZAHTVW… on success or `error CODE` on failure. */
   status?: string;
   timing?: string;
@@ -54,6 +56,8 @@ export interface ApplicantRecord {
   transportExpense: string;
   foodExpense: string;
   accountHolder: string;
+  bank: string;
+  accountType: string;
   processed?: string;
   /** Non-empty Status (or legacy Reference Number) cell — row must not be submitted again. */
   existingStatus?: string;

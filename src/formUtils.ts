@@ -1,5 +1,6 @@
 import type { Frame, Locator, Page } from "playwright";
 import type { AppConfig } from "./types.js";
+import { expandSelectNeedles } from "./transforms.js";
 import { randomDelay } from "./utils.js";
 
 const FORM_FRAME_PATTERN = /seritisolutions/i;
@@ -160,19 +161,27 @@ export async function matchSelectOption(
       text: opt.text.trim(),
     }))
   );
-  const needle = value.trim().toLowerCase();
   const usable = options.filter((opt) => opt.text && opt.text !== "......");
-  const match =
-    usable.find((opt) => opt.text.toLowerCase() === needle) ??
-    usable.find((opt) => opt.text.toLowerCase().includes(needle)) ??
-    usable.find((opt) => needle.includes(opt.text.toLowerCase()) && opt.text.length >= 4);
+  const needles = expandSelectNeedles(value).map((n) => n.toLowerCase());
 
-  if (!match) {
-    throw new Error(
-      `No option matching "${value}". Available: ${options.map((opt) => opt.text).filter(Boolean).join(" | ")}`
-    );
+  for (const needle of needles) {
+    const exact = usable.find((opt) => opt.text.toLowerCase() === needle);
+    if (exact) return exact;
   }
-  return match;
+  for (const needle of needles) {
+    const partial = usable.find((opt) => opt.text.toLowerCase().includes(needle));
+    if (partial) return partial;
+  }
+  for (const needle of needles) {
+    const reverse = usable.find(
+      (opt) => needle.includes(opt.text.toLowerCase()) && opt.text.length >= 4
+    );
+    if (reverse) return reverse;
+  }
+
+  throw new Error(
+    `No option matching "${value}". Available: ${options.map((opt) => opt.text).filter(Boolean).join(" | ")}`
+  );
 }
 
 export type FormScope = Page | Frame;

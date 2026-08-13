@@ -211,7 +211,9 @@ The only automatic rewrite is the known Google Sheets artefact: a 9-digit mobile
 | `NAME_EMPTY` / `NAME_MISSING_SURNAME` | Applicant name missing or not "First Last" |
 | `NEXT_OF_KIN_EMPTY` / `NEXT_OF_KIN_MISSING_SURNAME` | Next of kin name missing or incomplete |
 | `RESIDENCY_DATE_FORMAT` / `EMPLOYMENT_DATE_FORMAT` | Date is not `MM DD YYYY` |
-| `ADDRESS_EMPTY` / `POSTAL_EMPTY` / `EMPLOYER_EMPTY` / … | Required field is empty |
+| `ACCOUNT_HOLDER_EMPTY` | Account holder is empty |
+| `BANK_EMPTY` | Bank name cell is empty |
+| `ACCOUNT_TYPE_EMPTY` | Account type cell is empty |
 | `PERSONAL_NEXT_FAILED` | Next did not leave Personal Information |
 | `WORK_NEXT_FAILED` | Next did not leave Work & Salary |
 | `FINANCIAL_NEXT_FAILED` | Next did not reach Upload Documents |
@@ -221,7 +223,7 @@ The only automatic rewrite is the known Google Sheets artefact: a 9-digit mobile
 
 Fix the sheet cell, then clear **Status** and re-run. Error codes are written to **Status** as `error ID_NOT_13_DIGITS`, and also stored in `run-log.json` / `run-log.csv`.
 
-Postal code: type the sheet value, then select the first dropdown match. Province is always `Gauteng`.
+Postal code: type the sheet value, then select the first dropdown match. Province is always `Gauteng`. **Bank** and **Account type** come from the sheet (`Bank name`, `Account type`); nicknames such as FNB are matched to the live dropdown (e.g. Firstrand).
 
 ## Development
 

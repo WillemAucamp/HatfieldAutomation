@@ -19,6 +19,8 @@
   "transportExpense": "Transport cost",
   "foodExpense": "Food cost",
   "accountHolder": "Account holder name and surname (same as client)",
+  "bank": "Bank name",
+  "accountType": "Account type (AI—most likely option based on bank)",
   "status": "Status",
   "timing": "Timing"
 }

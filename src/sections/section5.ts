@@ -50,7 +50,7 @@ export async function runSection5(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientBank"],
     ids: ["ddlBank"],
-  }, "Capitec");
+  }, data.bank);
 
   await fillField(ctx, {
     name: "Account type",
@@ -60,7 +60,7 @@ export async function runSection5(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientBankAccountType"],
     ids: ["clientBankDdlAccountType"],
-  }, "Savings");
+  }, data.accountType);
 
   await fillField(ctx, {
     name: "Account holder",

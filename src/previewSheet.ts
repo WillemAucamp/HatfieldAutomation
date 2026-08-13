@@ -46,6 +46,8 @@ async function main(): Promise<void> {
           transportExpense: applicant.transportExpense,
           foodExpense: applicant.foodExpense,
           accountHolder: applicant.accountHolder,
+          bank: applicant.bank,
+          accountType: applicant.accountType,
           errors: applicant.errors,
           errorCodes: applicant.errors.map((e) => e.code),
         },
