@@ -14,6 +14,7 @@ import {
 
 const PROCESSED_COLUMN = "Processed";
 const PROCESSED_LOG_FILE = "processed-rows.json";
+const LOCAL_REFERENCES_FILE = "application-references.json";
 
 export interface FetchOptions {
   csvUrl: string;
@@ -302,6 +303,7 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
   }
 
   const processedLog = options.skipProcessed ? loadProcessedLog() : [];
+  const localReferences = loadLocalReferences();
   let rowNumber = 1;
 
   const applicants: ApplicantRecord[] = [];
@@ -326,6 +328,10 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
     }
 
     const applicant = mapRow(row, options.mapping, rowNumber);
+    const localRef = localReferences[applicant.rowId];
+    if (!applicant.existingReference && localRef) {
+      applicant.existingReference = localRef;
+    }
 
     if (options.skipProcessed && applicant.processed) {
       console.log(
@@ -367,6 +373,26 @@ function loadProcessedLog(): string[] {
     return JSON.parse(readFileSync(logPath, "utf-8")) as string[];
   } catch {
     return [];
+  }
+}
+
+function loadLocalReferences(): Record<string, string> {
+  const path = join(process.cwd(), LOCAL_REFERENCES_FILE);
+  if (!existsSync(path)) return {};
+  try {
+    const records = JSON.parse(readFileSync(path, "utf-8")) as Array<{
+      rowId?: string;
+      referenceNumber?: string;
+    }>;
+    const map: Record<string, string> = {};
+    for (const record of records) {
+      if (record.rowId && record.referenceNumber) {
+        map[record.rowId] = record.referenceNumber;
+      }
+    }
+    return map;
+  } catch {
+    return {};
   }
 }
 
