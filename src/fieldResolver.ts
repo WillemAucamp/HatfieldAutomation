@@ -366,26 +366,15 @@ async function fillPostalCode(
   await locator.click({ timeout: 10000 });
   await locator.fill("");
   await locator.pressSequentially(value, { delay: 40 });
-  await randomDelay(config);
 
-  const page = locator.page();
-  const optionSelectors = [
-    form.getByRole("option").first(),
-    form.locator("[role='listbox'] li, .autocomplete-item, .dropdown-item, .tt-suggestion, .ui-menu-item").first(),
-    page.getByRole("option").first(),
-    page.locator("[role='listbox'] li, .autocomplete-item, .dropdown-item, .tt-suggestion, .ui-menu-item").first(),
-  ];
-
-  for (const option of optionSelectors) {
-    if (await option.isVisible({ timeout: 1500 }).catch(() => false)) {
-      await option.click();
-      await randomDelay(config);
-      return;
-    }
-  }
-
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("Enter");
+  const row = form
+    .locator(".angucomplete-holder")
+    .filter({ has: locator })
+    .locator(".angucomplete-row")
+    .first();
+  await row.waitFor({ state: "visible", timeout: 10000 });
+  await row.click();
+  console.log("  [fieldResolver] Picked first postal autocomplete option");
   await randomDelay(config);
 }
 
