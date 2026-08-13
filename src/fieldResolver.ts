@@ -1,7 +1,7 @@
 import Fuse from "fuse.js";
 import type { Frame, Locator, Page } from "playwright";
 import type { ApplicantRecord, AppConfig, FieldStrategy, FieldWarning } from "./types.js";
-import type { FormScope } from "./formUtils.js";
+import { matchSelectOption, type FormScope } from "./formUtils.js";
 import { valuesMatch } from "./transforms.js";
 import { createWarning } from "./logger.js";
 import { randomDelay } from "./utils.js";
@@ -155,18 +155,25 @@ async function findByFuzzy(form: FormScope, target: FieldTarget): Promise<Locato
   return null;
 }
 
+async function firstVisibleOrAny(locator: Locator): Promise<Locator | null> {
+  if ((await locator.count()) === 0) return null;
+  const visible = locator.filter({ visible: true });
+  if ((await visible.count()) > 0) return visible.first();
+  return locator.first();
+}
+
 async function findBySemanticHints(form: FormScope, target: FieldTarget): Promise<Locator | null> {
   for (const id of target.ids ?? []) {
-    const exact = byId(form, id);
-    if ((await exact.count()) > 0) return exact.first();
-    const bySuffix = form.locator(`[id$="${id}"]`);
-    if ((await bySuffix.count()) > 0) return bySuffix.first();
+    const exact = await firstVisibleOrAny(byId(form, id));
+    if (exact) return exact;
+    const bySuffix = await firstVisibleOrAny(form.locator(`[id$="${id}"]`));
+    if (bySuffix) return bySuffix;
   }
   for (const name of target.names ?? []) {
-    const byName = form.locator(`[name="${name}"]`);
-    if ((await byName.count()) > 0) return byName.first();
-    const byNameSuffix = form.locator(`[name$="${name}"]`);
-    if ((await byNameSuffix.count()) > 0) return byNameSuffix.first();
+    const byName = await firstVisibleOrAny(form.locator(`[name="${name}"]`));
+    if (byName) return byName;
+    const byNameSuffix = await firstVisibleOrAny(form.locator(`[name$="${name}"]`));
+    if (byNameSuffix) return byNameSuffix;
   }
   return null;
 }
@@ -234,8 +241,14 @@ async function verifyFill(
 
 async function fillTextInput(locator: Locator, value: string, config: AppConfig): Promise<void> {
   await locator.waitFor({ state: "visible", timeout: 15000 });
+  await locator.scrollIntoViewIfNeeded();
   await locator.click({ timeout: 10000 });
   await locator.fill(value, { timeout: 10000 });
+  await locator.evaluate((el) => {
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await locator.blur();
   await randomDelay(config);
 }
 
@@ -245,34 +258,18 @@ async function selectDropdownByText(
   value: string,
   config: AppConfig
 ): Promise<void> {
-  await locator.waitFor({ state: "visible", timeout: 15000 }).catch(() => undefined);
+  await locator.waitFor({ state: "visible", timeout: 15000 });
+  await locator.scrollIntoViewIfNeeded();
   const tag = await locator.evaluate((el) => el.tagName.toLowerCase());
 
   if (tag === "select") {
-    const matched = await locator.evaluate((el, search) => {
-      const select = el as HTMLSelectElement;
-      const needle = search.trim().toLowerCase();
-      for (const opt of Array.from(select.options)) {
-        if (opt.text.trim().toLowerCase() === needle) {
-          select.value = opt.value;
-          select.dispatchEvent(new Event("change", { bubbles: true }));
-          select.dispatchEvent(new Event("input", { bubbles: true }));
-          return opt.text;
-        }
-      }
-      for (const opt of Array.from(select.options)) {
-        if (opt.text.toLowerCase().includes(needle)) {
-          select.value = opt.value;
-          select.dispatchEvent(new Event("change", { bubbles: true }));
-          select.dispatchEvent(new Event("input", { bubbles: true }));
-          return opt.text;
-        }
-      }
-      return null;
-    }, value);
-    if (!matched) {
-      throw new Error(`No dropdown option matching "${value}"`);
-    }
+    const match = await matchSelectOption(locator, value);
+    await locator.selectOption({ value: match.value });
+    await locator.evaluate((el) => {
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    console.log(`  [fieldResolver] Selected "${match.text}"`);
   } else {
     await locator.click();
     await randomDelay(config);
@@ -291,6 +288,7 @@ async function selectDropdownByIndex(
   index: number,
   config: AppConfig
 ): Promise<string> {
+  await locator.waitFor({ state: "visible", timeout: 15000 });
   const tag = await locator.evaluate((el) => el.tagName.toLowerCase());
   if (tag === "select") {
     const text = await locator.evaluate((el, idx) => {

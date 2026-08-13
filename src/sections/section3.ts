@@ -1,6 +1,6 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
-import { clickNext, screenshotSection, waitForHeading } from "../formUtils.js";
+import { clickNext, screenshotSection, waitForSelectorVisible } from "../formUtils.js";
 
 const SECTION = "section3";
 
@@ -8,7 +8,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
   const { page, form, config } = ctx;
   const data = ctx.applicant;
 
-  await waitForHeading(form, /personal information/i);
+  await waitForSelectorVisible(form, '[id="txtClientFirstName"]');
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before");
 
   await fillField(ctx, {
@@ -186,7 +186,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["relativeRelation"],
     ids: ["ddlRelativeRelation"],
-  }, "Siblings");
+  }, "Sibling");
 
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after");
 

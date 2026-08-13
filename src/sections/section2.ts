@@ -1,13 +1,13 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
-import { clickNext, screenshotSection, waitForHeading } from "../formUtils.js";
+import { clickNext, screenshotSection, waitForSelectorVisible } from "../formUtils.js";
 
 const SECTION = "section2";
 
 export async function runSection2(ctx: FillContext): Promise<void> {
   const { page, form, config } = ctx;
 
-  await waitForHeading(form, /item information/i);
+  await waitForSelectorVisible(form, '[id="ddlcarChoiceInd"], [id="txtVehicleMaxPriceRange"]');
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before");
 
   await fillField(ctx, {

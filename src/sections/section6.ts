@@ -1,5 +1,5 @@
 import type { FillContext } from "../fieldResolver.js";
-import { clickNext, screenshotSection, waitForHeading } from "../formUtils.js";
+import { clickNext, screenshotSection, waitForVisibleButton } from "../formUtils.js";
 import { parseReferenceNumber } from "../reference.js";
 import { randomDelay } from "../utils.js";
 
@@ -8,10 +8,9 @@ const SECTION = "section6";
 export async function runSection6(ctx: FillContext): Promise<string> {
   const { page, form, config } = ctx;
 
-  await waitForHeading(form, /upload documents/i);
+  await waitForVisibleButton(form, /^finish$/i, 20000);
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before");
-
-  const finish = form.locator("button:visible").filter({ hasText: /^finish$/i }).first();
+  const finish = form.locator("button").filter({ hasText: /^finish$/i }).filter({ visible: true }).first();
   await finish.waitFor({ state: "visible", timeout: 15000 });
   await finish.click();
   console.log("  [section6] Clicked FINISH");

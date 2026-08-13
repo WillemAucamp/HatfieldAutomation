@@ -1,4 +1,4 @@
-import type { Frame, Page } from "playwright";
+import type { Frame, Locator, Page } from "playwright";
 import type { AppConfig } from "./types.js";
 import { randomDelay } from "./utils.js";
 
@@ -34,7 +34,36 @@ export async function clickApplyForFinance(page: Page, config: AppConfig): Promi
 }
 
 export async function waitForHeading(form: FormScope, pattern: RegExp, timeoutMs = 20000): Promise<void> {
-  await form.getByText(pattern).first().waitFor({ state: "visible", timeout: timeoutMs });
+  await form
+    .getByText(pattern)
+    .filter({ visible: true })
+    .first()
+    .waitFor({ state: "visible", timeout: timeoutMs });
+}
+
+export async function waitForSelectorVisible(
+  form: FormScope,
+  selector: string,
+  timeoutMs = 20000
+): Promise<void> {
+  await form
+    .locator(selector)
+    .filter({ visible: true })
+    .first()
+    .waitFor({ state: "visible", timeout: timeoutMs });
+}
+
+export async function waitForVisibleButton(
+  form: FormScope,
+  label: RegExp,
+  timeoutMs = 20000
+): Promise<void> {
+  await form
+    .locator("button")
+    .filter({ hasText: label })
+    .filter({ visible: true })
+    .first()
+    .waitFor({ state: "visible", timeout: timeoutMs });
 }
 
 export async function clickNext(form: FormScope, config: AppConfig): Promise<void> {
@@ -107,35 +136,43 @@ export async function fillSelectByVisibleText(
   selectLocator: string,
   value: string
 ): Promise<void> {
-  const select = form.locator(selectLocator);
+  const select = form.locator(selectLocator).filter({ visible: true }).first();
+  await select.waitFor({ state: "visible", timeout: 15000 });
   await select.scrollIntoViewIfNeeded().catch(() => undefined);
 
-  const selected = await select.evaluate((el, search) => {
-    const sel = el as HTMLSelectElement;
-    for (const opt of Array.from(sel.options)) {
-      if (opt.text.trim().toLowerCase() === search.toLowerCase()) {
-        sel.value = opt.value;
-        sel.dispatchEvent(new Event("change", { bubbles: true }));
-        sel.dispatchEvent(new Event("input", { bubbles: true }));
-        return opt.text;
-      }
-    }
-    for (const opt of Array.from(sel.options)) {
-      if (opt.text.toLowerCase().includes(search.toLowerCase())) {
-        sel.value = opt.value;
-        sel.dispatchEvent(new Event("change", { bubbles: true }));
-        sel.dispatchEvent(new Event("input", { bubbles: true }));
-        return opt.text;
-      }
-    }
-    return null;
-  }, value);
-
-  if (!selected) {
-    throw new Error(`No option matching "${value}" in ${selectLocator}`);
-  }
-  console.log(`  [formUtils] Selected "${selected}" in ${selectLocator}`);
+  const match = await matchSelectOption(select, value);
+  await select.selectOption({ value: match.value });
+  await select.evaluate((el) => {
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  console.log(`  [formUtils] Selected "${match.text}" in ${selectLocator}`);
   await randomDelay(config);
+}
+
+export async function matchSelectOption(
+  locator: Locator,
+  value: string
+): Promise<{ value: string; text: string }> {
+  const options = await locator.evaluate((el) =>
+    Array.from((el as HTMLSelectElement).options).map((opt) => ({
+      value: opt.value,
+      text: opt.text.trim(),
+    }))
+  );
+  const needle = value.trim().toLowerCase();
+  const usable = options.filter((opt) => opt.text && opt.text !== "......");
+  const match =
+    usable.find((opt) => opt.text.toLowerCase() === needle) ??
+    usable.find((opt) => opt.text.toLowerCase().includes(needle)) ??
+    usable.find((opt) => needle.includes(opt.text.toLowerCase()) && opt.text.length >= 4);
+
+  if (!match) {
+    throw new Error(
+      `No option matching "${value}". Available: ${options.map((opt) => opt.text).filter(Boolean).join(" | ")}`
+    );
+  }
+  return match;
 }
 
 export type FormScope = Page | Frame;
