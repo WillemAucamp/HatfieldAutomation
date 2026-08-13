@@ -146,20 +146,27 @@ runs/2026-08-12T07-30-00-000Z/
 
 By default **every sheet row is processed**. To skip IDs already completed, pass `--skip-processed` or set `SKIP_PROCESSED=true`. Completed IDs are recorded in `processed-rows.json`.
 
-## Data compensation
+## Data errors (human error in the sheet)
 
-Sheet values that do not match form expectations are rewritten so the run can continue. Compensations are logged on the applicant and in `run-log.json` — they never skip the row.
+The website rejects values that do not match its format. The script therefore **does not invent or pad invalid data**. It records an error code, skips filling that row, and continues with the next row in a new session.
 
-| Field | Rule |
+The only automatic rewrite is the known Google Sheets artefact: a 9-digit mobile with no leading `0` gets `"0"` prepended.
+
+| Code | Meaning |
 |---|---|
-| ID number | RSA IDs are 13 digits. Shorter values are left-padded with zeros and given a valid checksum (e.g. `8225878084` → `0008225878083`) |
-| Mobile / employer / kin phone | Strip `+27`/`27`, prepend `0` for 9-digit values, pad/trim to 10 digits; empty → `0600000000` |
-| Combined names | Split on the last space; single-token names get surname `Unknown` |
-| Dates | Accept `MM DD YYYY`, slashes/dashes, ISO, Excel serials; unparseable → `01 01 2020` |
-| Empty text | Placeholder (`Address not provided`, `Unknown Employer`, synthesized email) |
-| Empty amounts | `0` |
-| Postal code | Type value, then select first dropdown match |
-| Province | Always `Gauteng` |
+| `ID_NOT_13_DIGITS` | RSA ID is not exactly 13 digits |
+| `ID_EMPTY` | ID number cell is empty |
+| `MOBILE_NOT_10_DIGITS` | Mobile is not 10 digits starting with 0 (after optional leading-0 restore) |
+| `MOBILE_EMPTY` | Mobile number is empty |
+| `EMAIL_EMPTY` / `EMAIL_INVALID` | Missing or malformed email |
+| `NAME_EMPTY` / `NAME_MISSING_SURNAME` | Applicant name missing or not "First Last" |
+| `NEXT_OF_KIN_EMPTY` / `NEXT_OF_KIN_MISSING_SURNAME` | Next of kin name missing or incomplete |
+| `RESIDENCY_DATE_FORMAT` / `EMPLOYMENT_DATE_FORMAT` | Date is not `MM DD YYYY` |
+| `ADDRESS_EMPTY` / `POSTAL_EMPTY` / `EMPLOYER_EMPTY` / … | Required field is empty |
+
+Fix the sheet cell, then re-run. Error codes are printed to the console and stored in `run-log.json` / `run-log.csv`.
+
+Postal code: type the sheet value, then select the first dropdown match. Province is always `Gauteng`.
 
 ## Resuming a session
 

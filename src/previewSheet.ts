@@ -1,5 +1,5 @@
 import { loadColumnMapping, loadConfig } from "./config.js";
-import { fetchSheetData, validateApplicant } from "./fetchSheetData.js";
+import { fetchSheetData } from "./fetchSheetData.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -18,7 +18,6 @@ async function main(): Promise<void> {
   }
 
   for (const applicant of applicants) {
-    const issues = validateApplicant(applicant);
     console.log("\n---");
     console.log(
       JSON.stringify(
@@ -47,8 +46,8 @@ async function main(): Promise<void> {
           transportExpense: applicant.transportExpense,
           foodExpense: applicant.foodExpense,
           accountHolder: applicant.accountHolder,
-          compensations: applicant.compensations,
-          validationIssues: issues,
+          errors: applicant.errors,
+          errorCodes: applicant.errors.map((e) => e.code),
         },
         null,
         2
@@ -56,7 +55,11 @@ async function main(): Promise<void> {
     );
   }
 
-  console.log(`\n${applicants.length} applicant(s) ready to process.`);
+  const ready = applicants.filter((a) => a.errors.length === 0);
+  const blocked = applicants.filter((a) => a.errors.length > 0);
+  console.log(
+    `\n${applicants.length} row(s): ${ready.length} ready to fill, ${blocked.length} blocked by data errors.`
+  );
 }
 
 main().catch((err) => {

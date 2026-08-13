@@ -1,15 +1,15 @@
 import Papa from "papaparse";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import type { ApplicantRecord, ColumnMapping, Compensation } from "./types.js";
+import type { ApplicantRecord, ColumnMapping, DataError } from "./types.js";
 import {
-  fallbackAmount,
-  fallbackText,
-  pushCompensation,
+  requireAmount,
+  requireEmail,
+  requireText,
   splitFullName,
-  transformDate,
-  transformIdNumber,
   transformMobile,
+  validateDateFormat,
+  validateIdNumber,
 } from "./transforms.js";
 
 const PROCESSED_COLUMN = "Processed";
@@ -33,34 +33,55 @@ function buildRowId(row: Record<string, string>, mapping: ColumnMapping, rowInde
   return id || email || `row-${rowIndex}`;
 }
 
+function pushError(
+  errors: DataError[],
+  result: { valid: boolean; code?: string; message?: string; value?: string },
+  field: string,
+  raw: string
+): void {
+  if (result.valid || !result.code) return;
+  errors.push({
+    code: result.code,
+    field,
+    message: result.message ?? result.code,
+    value: raw,
+  });
+}
+
 function resolveName(
   row: Record<string, string>,
   mapping: ColumnMapping
-): { firstName: string; surname: string; original: string; compensated: boolean; reason?: string } {
+): { firstName: string; surname: string; original: string; error?: DataError } {
   const firstFromCol = mapping.firstName ? getCell(row, mapping.firstName) : "";
   const surnameFromCol = mapping.surname ? getCell(row, mapping.surname) : "";
   if (firstFromCol && surnameFromCol && mapping.firstName !== mapping.surname) {
-    return { firstName: firstFromCol, surname: surnameFromCol, original: `${firstFromCol} ${surnameFromCol}`, compensated: false };
+    return { firstName: firstFromCol, surname: surnameFromCol, original: `${firstFromCol} ${surnameFromCol}` };
   }
 
   const combined =
     (mapping.fullName ? getCell(row, mapping.fullName) : "") ||
     firstFromCol ||
     surnameFromCol;
-  const split = splitFullName(combined);
+  const split = splitFullName(combined, "NAME_EMPTY", "NAME_MISSING_SURNAME", "Applicant name");
   return {
     firstName: split.firstName,
     surname: split.surname,
     original: combined,
-    compensated: split.compensated,
-    reason: split.reason,
+    error: split.valid
+      ? undefined
+      : {
+          code: split.code ?? "NAME_EMPTY",
+          field: "fullName",
+          message: split.message ?? "Applicant name is invalid",
+          value: combined,
+        },
   };
 }
 
 function resolveNextOfKin(
   row: Record<string, string>,
   mapping: ColumnMapping
-): { firstName: string; surname: string; original: string; compensated: boolean; reason?: string } {
+): { firstName: string; surname: string; original: string; error?: DataError } {
   const firstFromCol = mapping.nextOfKinName ? getCell(row, mapping.nextOfKinName) : "";
   const surnameFromCol = mapping.nextOfKinSurname
     ? getCell(row, mapping.nextOfKinSurname)
@@ -74,7 +95,6 @@ function resolveNextOfKin(
       firstName: firstFromCol,
       surname: surnameFromCol,
       original: `${firstFromCol} ${surnameFromCol}`,
-      compensated: false,
     };
   }
 
@@ -82,13 +102,24 @@ function resolveNextOfKin(
     (mapping.nextOfKinFullName ? getCell(row, mapping.nextOfKinFullName) : "") ||
     firstFromCol ||
     surnameFromCol;
-  const split = splitFullName(combined);
+  const split = splitFullName(
+    combined,
+    "NEXT_OF_KIN_EMPTY",
+    "NEXT_OF_KIN_MISSING_SURNAME",
+    "Next of kin name"
+  );
   return {
     firstName: split.firstName,
     surname: split.surname,
     original: combined,
-    compensated: split.compensated,
-    reason: split.reason,
+    error: split.valid
+      ? undefined
+      : {
+          code: split.code ?? "NEXT_OF_KIN_EMPTY",
+          field: "nextOfKin",
+          message: split.message ?? "Next of kin name is invalid",
+          value: combined,
+        },
   };
 }
 
@@ -97,127 +128,117 @@ function mapRow(
   mapping: ColumnMapping,
   rowIndex: number
 ): ApplicantRecord {
-  const compensations: Compensation[] = [];
+  const errors: DataError[] = [];
 
   const name = resolveName(row, mapping);
-  if (name.compensated) {
-    compensations.push({
-      field: "fullName",
-      original: name.original,
-      compensated: `${name.firstName} ${name.surname}`,
-      reason: name.reason ?? "Name was compensated",
-    });
-  }
+  if (name.error) errors.push(name.error);
 
   const nextOfKin = resolveNextOfKin(row, mapping);
-  if (nextOfKin.compensated) {
-    compensations.push({
-      field: "nextOfKin",
-      original: nextOfKin.original,
-      compensated: `${nextOfKin.firstName} ${nextOfKin.surname}`,
-      reason: nextOfKin.reason ?? "Next of kin name was compensated",
-    });
-  }
+  if (nextOfKin.error) errors.push(nextOfKin.error);
+
+  const emailRaw = getCell(row, mapping.email);
+  const emailResult = requireEmail(emailRaw);
+  pushError(errors, emailResult, "email", emailRaw);
+
+  const idRaw = getCell(row, mapping.idNumber);
+  const idResult = validateIdNumber(idRaw);
+  pushError(errors, idResult, "idNumber", idRaw);
 
   const mobileRaw = getCell(row, mapping.mobile);
   const mobileResult = transformMobile(mobileRaw);
-  pushCompensation(compensations, "mobile", mobileRaw, mobileResult);
+  pushError(errors, mobileResult, "mobile", mobileRaw);
 
-  const idRaw = getCell(row, mapping.idNumber);
-  const idResult = transformIdNumber(idRaw);
-  pushCompensation(compensations, "idNumber", idRaw, idResult);
+  const addressRaw = getCell(row, mapping.addressLine1);
+  const addressResult = requireText(addressRaw, "ADDRESS_EMPTY", "Address is empty");
+  pushError(errors, addressResult, "addressLine1", addressRaw);
+
+  const postalRaw = getCell(row, mapping.postalCode);
+  const postalResult = requireText(postalRaw, "POSTAL_EMPTY", "Postal code is empty");
+  pushError(errors, postalResult, "postalCode", postalRaw);
 
   const residencyRaw = getCell(row, mapping.residencyStartDate);
-  const residencyResult = transformDate(residencyRaw, "Residency start date");
-  pushCompensation(compensations, "residencyStartDate", residencyRaw, residencyResult);
+  const residencyResult = validateDateFormat(
+    residencyRaw,
+    "Residency start date",
+    "RESIDENCY_DATE_EMPTY",
+    "RESIDENCY_DATE_FORMAT"
+  );
+  pushError(errors, residencyResult, "residencyStartDate", residencyRaw);
 
   const employmentRaw = getCell(row, mapping.employmentStartDate);
-  const employmentResult = transformDate(employmentRaw, "Employment start date");
-  pushCompensation(compensations, "employmentStartDate", employmentRaw, employmentResult);
-
-  const employerPhoneRaw = getCell(row, mapping.employerPhone);
-  const employerPhoneResult = transformMobile(employerPhoneRaw);
-  pushCompensation(compensations, "employerPhone", employerPhoneRaw, employerPhoneResult);
+  const employmentResult = validateDateFormat(
+    employmentRaw,
+    "Employment start date",
+    "EMPLOYMENT_DATE_EMPTY",
+    "EMPLOYMENT_DATE_FORMAT"
+  );
+  pushError(errors, employmentResult, "employmentStartDate", employmentRaw);
 
   const nextOfKinPhoneRaw = mapping.nextOfKinPhone
     ? getCell(row, mapping.nextOfKinPhone)
     : "";
-  const nextOfKinPhoneResult = transformMobile(nextOfKinPhoneRaw || "0600000000");
+  const nextOfKinPhoneResult = nextOfKinPhoneRaw
+    ? transformMobile(nextOfKinPhoneRaw)
+    : { value: "", valid: true };
   if (nextOfKinPhoneRaw) {
-    pushCompensation(compensations, "nextOfKinPhone", nextOfKinPhoneRaw, nextOfKinPhoneResult);
+    pushError(errors, nextOfKinPhoneResult, "nextOfKinPhone", nextOfKinPhoneRaw);
   }
 
-  const emailRaw = getCell(row, mapping.email);
-  const emailResult = fallbackText(
-    emailRaw,
-    `row${rowIndex}.applicant@autofill.local`,
-    "Email"
+  const employerNameRaw = getCell(row, mapping.employerName);
+  const employerNameResult = requireText(
+    employerNameRaw,
+    "EMPLOYER_EMPTY",
+    "Employer name is empty"
   );
-  pushCompensation(compensations, "email", emailRaw, emailResult);
+  pushError(errors, employerNameResult, "employerName", employerNameRaw);
 
-  const addressResult = fallbackText(
-    getCell(row, mapping.addressLine1),
-    "Address not provided",
-    "Address"
+  const employerPhoneRaw = getCell(row, mapping.employerPhone);
+  const employerPhoneResult = transformMobile(employerPhoneRaw);
+  pushError(errors, employerPhoneResult, "employerPhone", employerPhoneRaw);
+
+  const employerAddressRaw = getCell(row, mapping.employerAddress);
+  const employerAddressResult = requireText(
+    employerAddressRaw,
+    "EMPLOYER_ADDRESS_EMPTY",
+    "Employer address is empty"
   );
-  pushCompensation(compensations, "addressLine1", getCell(row, mapping.addressLine1), addressResult);
+  pushError(errors, employerAddressResult, "employerAddress", employerAddressRaw);
 
-  const postalResult = fallbackText(getCell(row, mapping.postalCode), "0000", "Postal code");
-  pushCompensation(compensations, "postalCode", getCell(row, mapping.postalCode), postalResult);
-
-  const employerNameResult = fallbackText(
-    getCell(row, mapping.employerName),
-    "Unknown Employer",
-    "Employer name"
+  const employerPostalRaw = getCell(row, mapping.employerPostalCode);
+  const employerPostalResult = requireText(
+    employerPostalRaw,
+    "EMPLOYER_POSTAL_EMPTY",
+    "Employer postal code is empty"
   );
-  pushCompensation(compensations, "employerName", getCell(row, mapping.employerName), employerNameResult);
+  pushError(errors, employerPostalResult, "employerPostalCode", employerPostalRaw);
 
-  const employerAddressResult = fallbackText(
-    getCell(row, mapping.employerAddress),
-    addressResult.value,
-    "Employer address"
-  );
-  pushCompensation(
-    compensations,
-    "employerAddress",
-    getCell(row, mapping.employerAddress),
-    employerAddressResult
-  );
+  const grossRaw = getCell(row, mapping.grossMonthly);
+  const grossResult = requireAmount(grossRaw, "GROSS_EMPTY", "Gross monthly salary");
+  pushError(errors, grossResult, "grossMonthly", grossRaw);
 
-  const employerPostalResult = fallbackText(
-    getCell(row, mapping.employerPostalCode),
-    postalResult.value,
-    "Employer postal code"
-  );
-  pushCompensation(
-    compensations,
-    "employerPostalCode",
-    getCell(row, mapping.employerPostalCode),
-    employerPostalResult
-  );
+  const nettRaw = getCell(row, mapping.nettSalary);
+  const nettResult = requireAmount(nettRaw, "NETT_EMPTY", "Nett salary");
+  pushError(errors, nettResult, "nettSalary", nettRaw);
 
-  const grossResult = fallbackAmount(getCell(row, mapping.grossMonthly), "Gross monthly");
-  pushCompensation(compensations, "grossMonthly", getCell(row, mapping.grossMonthly), grossResult);
+  const telRaw = getCell(row, mapping.telephoneExpense);
+  const telResult = requireAmount(telRaw, "TELEPHONE_EXPENSE_EMPTY", "Telephone expense");
+  pushError(errors, telResult, "telephoneExpense", telRaw);
 
-  const nettResult = fallbackAmount(getCell(row, mapping.nettSalary), "Nett salary");
-  pushCompensation(compensations, "nettSalary", getCell(row, mapping.nettSalary), nettResult);
+  const transportRaw = getCell(row, mapping.transportExpense);
+  const transportResult = requireAmount(transportRaw, "TRANSPORT_EXPENSE_EMPTY", "Transport expense");
+  pushError(errors, transportResult, "transportExpense", transportRaw);
 
-  const telExp = fallbackAmount(getCell(row, mapping.telephoneExpense), "Telephone expense");
-  pushCompensation(compensations, "telephoneExpense", getCell(row, mapping.telephoneExpense), telExp);
-
-  const transportExp = fallbackAmount(getCell(row, mapping.transportExpense), "Transport expense");
-  pushCompensation(compensations, "transportExpense", getCell(row, mapping.transportExpense), transportExp);
-
-  const foodExp = fallbackAmount(getCell(row, mapping.foodExpense), "Food expense");
-  pushCompensation(compensations, "foodExpense", getCell(row, mapping.foodExpense), foodExp);
+  const foodRaw = getCell(row, mapping.foodExpense);
+  const foodResult = requireAmount(foodRaw, "FOOD_EXPENSE_EMPTY", "Food expense");
+  pushError(errors, foodResult, "foodExpense", foodRaw);
 
   const accountRaw = getCell(row, mapping.accountHolder);
-  const accountResult = fallbackText(
+  const accountResult = requireText(
     accountRaw,
-    `${name.firstName} ${name.surname}`.trim(),
-    "Account holder"
+    "ACCOUNT_HOLDER_EMPTY",
+    "Account holder is empty"
   );
-  pushCompensation(compensations, "accountHolder", accountRaw, accountResult);
+  pushError(errors, accountResult, "accountHolder", accountRaw);
 
   return {
     rowIndex,
@@ -225,34 +246,32 @@ function mapRow(
     email: emailResult.value,
     firstName: name.firstName,
     surname: name.surname,
-    idNumber: idResult.value,
-    mobile: mobileResult.value,
+    idNumber: idResult.valid ? idResult.value : idRaw,
+    mobile: mobileResult.valid ? mobileResult.value : mobileRaw,
     addressLine1: addressResult.value,
     postalCode: postalResult.value,
     residencyStartDate: residencyResult.value,
     nextOfKinName: nextOfKin.firstName,
     nextOfKinSurname: nextOfKin.surname,
-    nextOfKinPhone: nextOfKinPhoneResult.value,
+    nextOfKinPhone: nextOfKinPhoneResult.valid ? nextOfKinPhoneResult.value : nextOfKinPhoneRaw,
     employerName: employerNameResult.value,
-    employerPhone: employerPhoneResult.value,
+    employerPhone: employerPhoneResult.valid ? employerPhoneResult.value : employerPhoneRaw,
     employerAddress: employerAddressResult.value,
     employerPostalCode: employerPostalResult.value,
     employmentStartDate: employmentResult.value,
     grossMonthly: grossResult.value,
     nettSalary: nettResult.value,
-    telephoneExpense: telExp.value,
-    transportExpense: transportExp.value,
-    foodExpense: foodExp.value,
+    telephoneExpense: telResult.value,
+    transportExpense: transportResult.value,
+    foodExpense: foodResult.value,
     accountHolder: accountResult.value,
     processed: getCell(row, PROCESSED_COLUMN) || undefined,
-    compensations,
+    errors,
   };
 }
 
-export function validateApplicant(applicant: ApplicantRecord): string[] {
-  return applicant.compensations.map(
-    (c) => `${c.field}: ${c.reason} (original "${c.original}" → "${c.compensated}")`
-  );
+export function validateApplicant(applicant: ApplicantRecord): DataError[] {
+  return applicant.errors;
 }
 
 export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRecord[]> {
@@ -317,12 +336,12 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
       continue;
     }
 
-    if (applicant.compensations.length > 0) {
-      console.log(
-        `Row ${rowNumber} (${applicant.firstName} ${applicant.surname}): ${applicant.compensations.length} compensation(s)`
+    if (applicant.errors.length > 0) {
+      console.error(
+        `Row ${rowNumber} (${applicant.firstName || "?"} ${applicant.surname || "?"}): DATA ERROR — not filling`
       );
-      for (const c of applicant.compensations) {
-        console.log(`  - ${c.reason}`);
+      for (const err of applicant.errors) {
+        console.error(`  [${err.code}] ${err.message}`);
       }
     }
 

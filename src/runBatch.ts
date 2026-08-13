@@ -37,9 +37,7 @@ async function processApplicant(
   const startedAt = new Date().toISOString();
   const applicantName = `${applicant.firstName} ${applicant.surname}`.trim();
   const screenshotDir = logger.applicantDir(applicant.rowIndex, applicantName);
-  const warnings: FieldWarning[] = applicant.compensations.map((c) =>
-    createWarning(c.field, "compensation", `${c.reason} (original "${c.original}" → "${c.compensated}")`)
-  );
+  const warnings: FieldWarning[] = [];
 
   let context: BrowserContext | undefined;
   let page: Page | undefined;
@@ -47,8 +45,31 @@ async function processApplicant(
   let status: RunStatus = "stopped-at-uploads";
 
   console.log(`\n=== Processing row ${applicant.rowIndex}: ${applicantName} (fresh session) ===`);
-  if (warnings.length > 0) {
-    console.log(`  ${warnings.length} data compensation(s) applied — continuing anyway`);
+
+  if (applicant.errors.length > 0) {
+    const errorCodes = applicant.errors.map((e) => e.code);
+    const error = applicant.errors.map((e) => `[${e.code}] ${e.message}`).join("; ");
+    console.error(`DATA ERROR for row ${applicant.rowIndex} (${applicantName || "unnamed"}):`);
+    for (const err of applicant.errors) {
+      console.error(`  [${err.code}] ${err.message}`);
+    }
+    console.error("Skipping this row (human error in sheet data). Continuing to the next applicant.");
+
+    return {
+      rowIndex: applicant.rowIndex,
+      rowId: applicant.rowId,
+      applicantName: applicantName || "(unnamed)",
+      status: "data-error",
+      sectionReached: 0,
+      warnings: applicant.errors.map((e) =>
+        createWarning(e.field, "data-error", `[${e.code}] ${e.message}`)
+      ),
+      screenshotDir,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      error,
+      errorCodes,
+    };
   }
 
   try {
@@ -215,7 +236,9 @@ async function main(): Promise<void> {
       logger.appendResult(result);
       logger.appendCsvSummary(result);
       console.log(
-        `Result for ${result.applicantName}: ${result.status} (section ${result.sectionReached})`
+        `Result for ${result.applicantName}: ${result.status}${
+          result.errorCodes?.length ? ` [${result.errorCodes.join(", ")}]` : ""
+        } (section ${result.sectionReached})`
       );
     }
   } finally {

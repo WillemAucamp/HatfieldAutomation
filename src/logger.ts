@@ -49,14 +49,14 @@ export class RunLogger {
   appendCsvSummary(result: ApplicantRunResult): void {
     const csvPath = join(this.runDir, "run-log.csv");
     const header =
-      "rowIndex,rowId,applicantName,status,sectionReached,warningCount,error,startedAt,finishedAt\n";
+      "rowIndex,rowId,applicantName,status,sectionReached,errorCodes,error,startedAt,finishedAt\n";
     const line = [
       result.rowIndex,
       result.rowId,
       `"${result.applicantName.replace(/"/g, '""')}"`,
       result.status,
       result.sectionReached,
-      result.warnings.length,
+      result.errorCodes?.length ? `"${result.errorCodes.join("|")}"` : "",
       result.error ? `"${result.error.replace(/"/g, '""')}"` : "",
       result.startedAt,
       result.finishedAt,

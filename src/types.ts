@@ -52,14 +52,14 @@ export interface ApplicantRecord {
   foodExpense: string;
   accountHolder: string;
   processed?: string;
-  compensations: Compensation[];
+  errors: DataError[];
 }
 
-export interface Compensation {
+export interface DataError {
+  code: string;
   field: string;
-  original: string;
-  compensated: string;
-  reason: string;
+  message: string;
+  value: string;
 }
 
 export interface AppConfig {
@@ -100,6 +100,7 @@ export interface FieldWarning {
 export type RunStatus =
   | "stopped-at-uploads"
   | "failed"
+  | "data-error"
   | "manual-review-needed"
   | "dry-run-complete";
 
@@ -114,6 +115,7 @@ export interface ApplicantRunResult {
   startedAt: string;
   finishedAt: string;
   error?: string;
+  errorCodes?: string[];
 }
 
 export interface BatchRunLog {
