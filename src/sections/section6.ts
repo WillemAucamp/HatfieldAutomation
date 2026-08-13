@@ -1,7 +1,6 @@
 import type { FillContext } from "../fieldResolver.js";
 import { clickNext, screenshotSection, waitForVisibleButton } from "../formUtils.js";
 import { parseReferenceNumber } from "../reference.js";
-import { randomDelay } from "../utils.js";
 
 const SECTION = "section6";
 
@@ -9,15 +8,14 @@ export async function runSection6(ctx: FillContext): Promise<string> {
   const { page, form, config } = ctx;
 
   await waitForVisibleButton(form, /^finish$/i, 20000);
-  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before");
+  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before", config);
   const finish = form.locator("button").filter({ hasText: /^finish$/i }).filter({ visible: true }).first();
   await finish.waitFor({ state: "visible", timeout: 15000 });
   await finish.click();
   console.log("  [section6] Clicked FINISH");
-  await randomDelay(config);
 
   const reference = await waitForReference(ctx);
-  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after");
+  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
   return reference;
 }
 
@@ -33,14 +31,13 @@ async function waitForReference(ctx: FillContext): Promise<string> {
       if (parsed) {
         console.log(`  [section6] Captured reference ${parsed}`);
         const ok = scope.getByRole("button", { name: /^ok$/i }).first();
-        if (await ok.isVisible({ timeout: 2000 }).catch(() => false)) {
+        if (await ok.isVisible({ timeout: 500 }).catch(() => false)) {
           await ok.click();
-          await randomDelay(config);
         }
         return parsed;
       }
     }
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 100));
   }
 
   throw new Error("Finish was clicked but no application reference number appeared in the popup");
@@ -49,6 +46,5 @@ async function waitForReference(ctx: FillContext): Promise<string> {
 /** Advance from Section 5 onto Upload Documents, then submit. */
 export async function goToUploadDocumentsThenSubmit(ctx: FillContext): Promise<string> {
   await clickNext(ctx.form, ctx.config);
-  await ctx.form.waitForLoadState("networkidle").catch(() => undefined);
   return runSection6(ctx);
 }

@@ -7,7 +7,6 @@ import {
   screenshotSection,
   waitForSelectorVisible,
 } from "../formUtils.js";
-import { randomDelay } from "../utils.js";
 
 const SECTION = "section1";
 
@@ -15,18 +14,17 @@ export async function runSection1(ctx: FillContext): Promise<void> {
   const { page, form, config } = ctx;
   const data = ctx.applicant;
 
-  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before");
+  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before", config);
 
   // Sub-step 1: Applicant type (radio-style label click)
   await form.locator("label").filter({ hasText: /Private Individual/i }).first().click();
-  await randomDelay(config);
 
   if (!config.dryRun) {
     await clickNext(form, config);
     await waitForSelectorVisible(form, '[id="txtEmailAddress"]');
   }
 
-  await screenshotSection(page, form, ctx.screenshotDir, `${SECTION}-step2`, "before");
+  await screenshotSection(page, form, ctx.screenshotDir, `${SECTION}-step2`, "before", config);
 
   // Sub-step 2: Email, declarations, consents, salesperson
   await fillField(ctx, {
@@ -48,7 +46,7 @@ export async function runSection1(ctx: FillContext): Promise<void> {
 
   await fillSelectByVisibleText(form, config, "#branchSalesPerson", "Willem Leendert Kuperus");
 
-  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after");
+  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 
   if (!config.dryRun) {
     await clickNext(form, config);

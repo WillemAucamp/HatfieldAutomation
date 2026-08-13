@@ -109,8 +109,10 @@ Environment variables (`.env`):
 | `KEEP_LAST_OPEN` | `false` | Leave the last headed session open |
 | `SHEET_WEBHOOK_URL` | — | Apps Script web app URL for writing the reference |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | — | Service account JSON for Sheets API write-back |
-| `ACTION_DELAY_MIN` | `200` | Min ms delay between actions |
-| `ACTION_DELAY_MAX` | `800` | Max ms delay between actions |
+| `ACTION_DELAY_MIN` | `0` | Min ms delay between actions |
+| `ACTION_DELAY_MAX` | `0` | Max ms delay between actions |
+| `SCREENSHOTS` | dry-run only | Save before/after step screenshots |
+| `VERIFY_FILLS` | `false` | Read back every field after fill |
 
 CLI flags: `--dry-run`, `--strict`, `--no-strict`, `--skip-processed`, `--keep-last-open`, `--local-csv=path.csv`
 

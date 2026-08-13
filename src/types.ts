@@ -83,6 +83,8 @@ export interface AppConfig {
   financeUrl: string;
   skipProcessed: boolean;
   keepLastOpen: boolean;
+  screenshots: boolean;
+  verifyFills: boolean;
   sheetId: string;
   sheetWebhookUrl: string;
   googleServiceAccountFile: string;

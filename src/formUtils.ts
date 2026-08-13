@@ -13,7 +13,7 @@ export async function waitForFormFrame(page: Page, timeoutMs = 30000): Promise<F
       await frame.waitForLoadState("domcontentloaded").catch(() => undefined);
       return frame;
     }
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 50));
   }
   throw new Error("Finance application iframe did not load");
 }
@@ -71,8 +71,6 @@ export async function clickNext(form: FormScope, config: AppConfig): Promise<voi
   const next = form.locator("button:visible").filter({ hasText: /^next$/i }).first();
   await next.waitFor({ state: "visible", timeout: 15000 });
   await next.click();
-  await form.waitForLoadState("networkidle").catch(() => undefined);
-  await randomDelay(config);
 }
 
 export async function screenshotSection(
@@ -80,10 +78,11 @@ export async function screenshotSection(
   form: FormScope,
   dir: string,
   section: string,
-  phase: "before" | "after"
+  phase: "before" | "after",
+  config?: AppConfig
 ): Promise<string> {
+  if (config && !config.screenshots) return "";
   const path = `${dir}/section-${section}-${phase}.png`;
-  // Capture iframe content when available, otherwise full page
   try {
     await form.locator("body").screenshot({ path });
   } catch {
@@ -125,9 +124,7 @@ export async function fillRadioGroupsByAnswer(
 
   for (const name of slice) {
     const radio = scope.locator(`input[type="radio"][name="${name}"]`).nth(answerIndex);
-    await radio.scrollIntoViewIfNeeded();
     await radio.check({ force: true });
-    await randomDelay(config);
   }
 }
 
@@ -148,7 +145,6 @@ export async function fillSelectByVisibleText(
     el.dispatchEvent(new Event("change", { bubbles: true }));
   });
   console.log(`  [formUtils] Selected "${match.text}" in ${selectLocator}`);
-  await randomDelay(config);
 }
 
 export async function matchSelectOption(

@@ -61,12 +61,18 @@ export function loadConfig(): AppConfig {
     strictMode,
     headless: parseBool(process.env.HEADLESS, false),
     rowFilter: parseRowFilter(process.env.ROW_FILTER),
-    actionDelayMin: parseInt(process.env.ACTION_DELAY_MIN ?? "200", 10),
-    actionDelayMax: parseInt(process.env.ACTION_DELAY_MAX ?? "800", 10),
+    actionDelayMin: parseInt(process.env.ACTION_DELAY_MIN ?? "0", 10),
+    actionDelayMax: parseInt(process.env.ACTION_DELAY_MAX ?? "0", 10),
     financeUrl: fileConfig.financeUrl ?? "https://vwmelrose.hatfieldgroup.co.za/finance",
     skipProcessed:
       cliFlag("skip-processed") || parseBool(process.env.SKIP_PROCESSED, false),
     keepLastOpen: cliFlag("keep-last-open") || parseBool(process.env.KEEP_LAST_OPEN, false),
+    screenshots:
+      cliFlag("screenshots") || parseBool(process.env.SCREENSHOTS, dryRun),
+    verifyFills:
+      cliFlag("verify") ||
+      parseBool(process.env.VERIFY_FILLS, false) ||
+      strictMode,
     sheetId:
       process.env.SHEET_ID ||
       fileConfig.sheetId ||

@@ -9,7 +9,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
   const data = ctx.applicant;
 
   await waitForSelectorVisible(form, '[id="txtClientFirstName"]');
-  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before");
+  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before", config);
 
   await fillField(ctx, {
     name: "Title",
@@ -43,7 +43,6 @@ export async function runSection3(ctx: FillContext): Promise<void> {
   }, data.surname);
 
   // Name entry recreates identity controls with a new numeric prefix (71_IdType → 72_IdType).
-  await new Promise((r) => setTimeout(r, 750));
   await waitForSelectorVisible(form, '[id$="_IdType"], [id$="_IdNumber"]');
 
   await fillField(ctx, {
@@ -202,7 +201,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     ids: ["ddlRelativeRelation"],
   }, "Sibling");
 
-  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after");
+  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 
   if (!config.dryRun) {
     await clickNext(form, config);

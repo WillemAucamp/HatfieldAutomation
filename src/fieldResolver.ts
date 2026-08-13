@@ -240,17 +240,14 @@ async function verifyFill(
   return valuesMatch(expected, actual);
 }
 
-async function fillTextInput(locator: Locator, value: string, config: AppConfig): Promise<void> {
-  await locator.waitFor({ state: "visible", timeout: 15000 });
-  await locator.scrollIntoViewIfNeeded();
-  await locator.click({ timeout: 10000 });
+async function fillTextInput(locator: Locator, value: string, _config: AppConfig): Promise<void> {
   await locator.fill(value, { timeout: 10000 });
-  await locator.evaluate((el) => {
+  await locator.evaluate((el, val) => {
+    const input = el as HTMLInputElement;
+    if (input.value !== val) input.value = val;
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await locator.blur();
-  await randomDelay(config);
+  }, value);
 }
 
 async function selectDropdownByText(
@@ -260,7 +257,6 @@ async function selectDropdownByText(
   config: AppConfig
 ): Promise<void> {
   await locator.waitFor({ state: "visible", timeout: 15000 });
-  await locator.scrollIntoViewIfNeeded();
   const tag = await locator.evaluate((el) => el.tagName.toLowerCase());
 
   if (tag === "select") {
@@ -273,15 +269,13 @@ async function selectDropdownByText(
     console.log(`  [fieldResolver] Selected "${match.text}"`);
   } else {
     await locator.click();
-    await randomDelay(config);
     const option = form.getByRole("option", { name: new RegExp(`^${value}$`, "i") }).first();
-    if (await option.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await option.isVisible({ timeout: 1500 }).catch(() => false)) {
       await option.click();
     } else {
       await form.getByText(new RegExp(`^${value}$`, "i")).first().click();
     }
   }
-  await randomDelay(config);
 }
 
 async function selectDropdownByIndex(
@@ -365,7 +359,7 @@ async function fillPostalCode(
   await locator.scrollIntoViewIfNeeded();
   await locator.click({ timeout: 10000 });
   await locator.fill("");
-  await locator.pressSequentially(value, { delay: 40 });
+  await locator.pressSequentially(value, { delay: 0 });
 
   const row = form
     .locator(".angucomplete-holder")
@@ -375,7 +369,6 @@ async function fillPostalCode(
   await row.waitFor({ state: "visible", timeout: 10000 });
   await row.click();
   console.log("  [fieldResolver] Picked first postal autocomplete option");
-  await randomDelay(config);
 }
 
 export async function fillField(
@@ -429,7 +422,6 @@ export async function fillField(
         } else {
           await locator.uncheck().catch(() => locator.click());
         }
-        await randomDelay(config);
         break;
       case "postal":
         await fillPostalCode(form, locator, value, config);
@@ -438,7 +430,9 @@ export async function fillField(
         await fillTextInput(locator, value, config);
     }
 
-    if (!options?.skipVerify && fieldType !== "radio") {
+    const shouldVerify =
+      !options?.skipVerify && fieldType !== "radio" && (config.verifyFills || config.strictMode);
+    if (shouldVerify) {
       const verified = await verifyFill(locator, value, fieldType);
       if (!verified) {
         const actual = await readFieldValue(locator);
@@ -485,7 +479,6 @@ export async function fillRadioGroupSection(
 
   for (let i = 0; i < count; i++) {
     await radios.nth(i).check({ force: true });
-    await randomDelay(config);
   }
 }
 

@@ -9,7 +9,7 @@ export async function runSection4(ctx: FillContext): Promise<void> {
   const data = ctx.applicant;
 
   await waitForSelectorVisible(form, '[id="txtemployerName"], [id="ddlIndustry"]');
-  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before");
+  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before", config);
 
   await fillField(ctx, {
     name: "Industry",
@@ -130,7 +130,7 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     ids: ["txtNettSalary"],
   }, data.nettSalary);
 
-  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after");
+  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 
   if (!config.dryRun) {
     await clickNext(form, config);

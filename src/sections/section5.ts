@@ -5,11 +5,11 @@ import { screenshotSection, waitForSelectorVisible } from "../formUtils.js";
 const SECTION = "section5";
 
 export async function runSection5(ctx: FillContext): Promise<void> {
-  const { page, form } = ctx;
+  const { page, form, config } = ctx;
   const data = ctx.applicant;
 
   await waitForSelectorVisible(form, '[id="txtTelephonePayment"], [id="ddlBank"]');
-  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before");
+  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before", config);
 
   await fillField(ctx, {
     name: "Telephone payment",
@@ -94,5 +94,5 @@ export async function runSection5(ctx: FillContext): Promise<void> {
     ids: ["clientBanklblPayeeEntityNumberIndicator"],
   }, "No");
 
-  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after");
+  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 }

@@ -8,7 +8,7 @@ export async function runSection2(ctx: FillContext): Promise<void> {
   const { page, form, config } = ctx;
 
   await waitForSelectorVisible(form, '[id="ddlcarChoiceInd"], [id="txtVehicleMaxPriceRange"]');
-  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before");
+  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before", config);
 
   await fillField(ctx, {
     name: "Know which vehicle you want",
@@ -39,7 +39,7 @@ export async function runSection2(ctx: FillContext): Promise<void> {
     ids: ["ddlPaymentDay"],
   }, "25");
 
-  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after");
+  await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 
   if (!config.dryRun) {
     await clickNext(form, config);

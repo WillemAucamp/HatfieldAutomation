@@ -27,7 +27,6 @@ import type {
   FieldWarning,
   RunStatus,
 } from "./types.js";
-import { randomDelay } from "./utils.js";
 
 async function processApplicant(
   browser: Browser,
@@ -107,8 +106,7 @@ async function processApplicant(
     context = await browser.newContext();
     page = await context.newPage();
 
-    await page.goto(config.financeUrl, { waitUntil: "networkidle" });
-    await randomDelay(config);
+    await page.goto(config.financeUrl, { waitUntil: "domcontentloaded" });
     const form = await clickApplyForFinance(page, config);
 
     const ctx: FillContext = {
@@ -138,10 +136,6 @@ async function processApplicant(
     if (config.dryRun) {
       status = "dry-run-complete";
       console.log(`[dry-run] Stopped after filling Section 5 for ${applicantName}`);
-
-      const statePath = join(screenshotDir, "storage-state.json");
-      await context.storageState({ path: statePath });
-      console.log(`Saved session state to ${statePath}`);
 
       return {
         rowIndex: applicant.rowIndex,
@@ -177,10 +171,6 @@ async function processApplicant(
       durationSeconds: elapsed(),
     };
     await persistOutcome(config, mapping, applicant, result, warnings);
-
-    const statePath = join(screenshotDir, "storage-state.json");
-    await context.storageState({ path: statePath });
-    console.log(`Saved session state to ${statePath}`);
     return result;
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
