@@ -52,6 +52,14 @@ export interface ApplicantRecord {
   foodExpense: string;
   accountHolder: string;
   processed?: string;
+  compensations: Compensation[];
+}
+
+export interface Compensation {
+  field: string;
+  original: string;
+  compensated: string;
+  reason: string;
 }
 
 export interface AppConfig {
@@ -64,6 +72,8 @@ export interface AppConfig {
   actionDelayMin: number;
   actionDelayMax: number;
   financeUrl: string;
+  skipProcessed: boolean;
+  keepLastOpen: boolean;
 }
 
 export type FieldStrategy =

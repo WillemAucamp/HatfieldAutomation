@@ -1,8 +1,16 @@
 import Papa from "papaparse";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import type { ApplicantRecord, ColumnMapping } from "./types.js";
-import { splitFullName, transformMobile, validateDateFormat } from "./transforms.js";
+import type { ApplicantRecord, ColumnMapping, Compensation } from "./types.js";
+import {
+  fallbackAmount,
+  fallbackText,
+  pushCompensation,
+  splitFullName,
+  transformDate,
+  transformIdNumber,
+  transformMobile,
+} from "./transforms.js";
 
 const PROCESSED_COLUMN = "Processed";
 const PROCESSED_LOG_FILE = "processed-rows.json";
@@ -12,6 +20,7 @@ export interface FetchOptions {
   mapping: ColumnMapping;
   rowFilter?: number[];
   localCsvPath?: string;
+  skipProcessed?: boolean;
 }
 
 function getCell(row: Record<string, string>, columnHeader: string): string {
@@ -27,11 +36,11 @@ function buildRowId(row: Record<string, string>, mapping: ColumnMapping, rowInde
 function resolveName(
   row: Record<string, string>,
   mapping: ColumnMapping
-): { firstName: string; surname: string } {
+): { firstName: string; surname: string; original: string; compensated: boolean; reason?: string } {
   const firstFromCol = mapping.firstName ? getCell(row, mapping.firstName) : "";
   const surnameFromCol = mapping.surname ? getCell(row, mapping.surname) : "";
   if (firstFromCol && surnameFromCol && mapping.firstName !== mapping.surname) {
-    return { firstName: firstFromCol, surname: surnameFromCol };
+    return { firstName: firstFromCol, surname: surnameFromCol, original: `${firstFromCol} ${surnameFromCol}`, compensated: false };
   }
 
   const combined =
@@ -39,13 +48,19 @@ function resolveName(
     firstFromCol ||
     surnameFromCol;
   const split = splitFullName(combined);
-  return { firstName: split.firstName, surname: split.surname };
+  return {
+    firstName: split.firstName,
+    surname: split.surname,
+    original: combined,
+    compensated: split.compensated,
+    reason: split.reason,
+  };
 }
 
 function resolveNextOfKin(
   row: Record<string, string>,
   mapping: ColumnMapping
-): { firstName: string; surname: string } {
+): { firstName: string; surname: string; original: string; compensated: boolean; reason?: string } {
   const firstFromCol = mapping.nextOfKinName ? getCell(row, mapping.nextOfKinName) : "";
   const surnameFromCol = mapping.nextOfKinSurname
     ? getCell(row, mapping.nextOfKinSurname)
@@ -55,7 +70,12 @@ function resolveNextOfKin(
     surnameFromCol &&
     mapping.nextOfKinName !== mapping.nextOfKinSurname
   ) {
-    return { firstName: firstFromCol, surname: surnameFromCol };
+    return {
+      firstName: firstFromCol,
+      surname: surnameFromCol,
+      original: `${firstFromCol} ${surnameFromCol}`,
+      compensated: false,
+    };
   }
 
   const combined =
@@ -63,7 +83,13 @@ function resolveNextOfKin(
     firstFromCol ||
     surnameFromCol;
   const split = splitFullName(combined);
-  return { firstName: split.firstName, surname: split.surname };
+  return {
+    firstName: split.firstName,
+    surname: split.surname,
+    original: combined,
+    compensated: split.compensated,
+    reason: split.reason,
+  };
 }
 
 function mapRow(
@@ -71,92 +97,162 @@ function mapRow(
   mapping: ColumnMapping,
   rowIndex: number
 ): ApplicantRecord {
+  const compensations: Compensation[] = [];
+
+  const name = resolveName(row, mapping);
+  if (name.compensated) {
+    compensations.push({
+      field: "fullName",
+      original: name.original,
+      compensated: `${name.firstName} ${name.surname}`,
+      reason: name.reason ?? "Name was compensated",
+    });
+  }
+
+  const nextOfKin = resolveNextOfKin(row, mapping);
+  if (nextOfKin.compensated) {
+    compensations.push({
+      field: "nextOfKin",
+      original: nextOfKin.original,
+      compensated: `${nextOfKin.firstName} ${nextOfKin.surname}`,
+      reason: nextOfKin.reason ?? "Next of kin name was compensated",
+    });
+  }
+
   const mobileRaw = getCell(row, mapping.mobile);
   const mobileResult = transformMobile(mobileRaw);
+  pushCompensation(compensations, "mobile", mobileRaw, mobileResult);
+
+  const idRaw = getCell(row, mapping.idNumber);
+  const idResult = transformIdNumber(idRaw);
+  pushCompensation(compensations, "idNumber", idRaw, idResult);
 
   const residencyRaw = getCell(row, mapping.residencyStartDate);
-  const residencyResult = validateDateFormat(residencyRaw, "Residency start date");
+  const residencyResult = transformDate(residencyRaw, "Residency start date");
+  pushCompensation(compensations, "residencyStartDate", residencyRaw, residencyResult);
 
   const employmentRaw = getCell(row, mapping.employmentStartDate);
-  const employmentResult = validateDateFormat(employmentRaw, "Employment start date");
-
-  const { firstName, surname } = resolveName(row, mapping);
-  const nextOfKin = resolveNextOfKin(row, mapping);
+  const employmentResult = transformDate(employmentRaw, "Employment start date");
+  pushCompensation(compensations, "employmentStartDate", employmentRaw, employmentResult);
 
   const employerPhoneRaw = getCell(row, mapping.employerPhone);
   const employerPhoneResult = transformMobile(employerPhoneRaw);
+  pushCompensation(compensations, "employerPhone", employerPhoneRaw, employerPhoneResult);
 
   const nextOfKinPhoneRaw = mapping.nextOfKinPhone
     ? getCell(row, mapping.nextOfKinPhone)
     : "";
-  const nextOfKinPhoneResult = nextOfKinPhoneRaw
-    ? transformMobile(nextOfKinPhoneRaw)
-    : undefined;
+  const nextOfKinPhoneResult = transformMobile(nextOfKinPhoneRaw || "0600000000");
+  if (nextOfKinPhoneRaw) {
+    pushCompensation(compensations, "nextOfKinPhone", nextOfKinPhoneRaw, nextOfKinPhoneResult);
+  }
+
+  const emailRaw = getCell(row, mapping.email);
+  const emailResult = fallbackText(
+    emailRaw,
+    `row${rowIndex}.applicant@autofill.local`,
+    "Email"
+  );
+  pushCompensation(compensations, "email", emailRaw, emailResult);
+
+  const addressResult = fallbackText(
+    getCell(row, mapping.addressLine1),
+    "Address not provided",
+    "Address"
+  );
+  pushCompensation(compensations, "addressLine1", getCell(row, mapping.addressLine1), addressResult);
+
+  const postalResult = fallbackText(getCell(row, mapping.postalCode), "0000", "Postal code");
+  pushCompensation(compensations, "postalCode", getCell(row, mapping.postalCode), postalResult);
+
+  const employerNameResult = fallbackText(
+    getCell(row, mapping.employerName),
+    "Unknown Employer",
+    "Employer name"
+  );
+  pushCompensation(compensations, "employerName", getCell(row, mapping.employerName), employerNameResult);
+
+  const employerAddressResult = fallbackText(
+    getCell(row, mapping.employerAddress),
+    addressResult.value,
+    "Employer address"
+  );
+  pushCompensation(
+    compensations,
+    "employerAddress",
+    getCell(row, mapping.employerAddress),
+    employerAddressResult
+  );
+
+  const employerPostalResult = fallbackText(
+    getCell(row, mapping.employerPostalCode),
+    postalResult.value,
+    "Employer postal code"
+  );
+  pushCompensation(
+    compensations,
+    "employerPostalCode",
+    getCell(row, mapping.employerPostalCode),
+    employerPostalResult
+  );
+
+  const grossResult = fallbackAmount(getCell(row, mapping.grossMonthly), "Gross monthly");
+  pushCompensation(compensations, "grossMonthly", getCell(row, mapping.grossMonthly), grossResult);
+
+  const nettResult = fallbackAmount(getCell(row, mapping.nettSalary), "Nett salary");
+  pushCompensation(compensations, "nettSalary", getCell(row, mapping.nettSalary), nettResult);
+
+  const telExp = fallbackAmount(getCell(row, mapping.telephoneExpense), "Telephone expense");
+  pushCompensation(compensations, "telephoneExpense", getCell(row, mapping.telephoneExpense), telExp);
+
+  const transportExp = fallbackAmount(getCell(row, mapping.transportExpense), "Transport expense");
+  pushCompensation(compensations, "transportExpense", getCell(row, mapping.transportExpense), transportExp);
+
+  const foodExp = fallbackAmount(getCell(row, mapping.foodExpense), "Food expense");
+  pushCompensation(compensations, "foodExpense", getCell(row, mapping.foodExpense), foodExp);
+
+  const accountRaw = getCell(row, mapping.accountHolder);
+  const accountResult = fallbackText(
+    accountRaw,
+    `${name.firstName} ${name.surname}`.trim(),
+    "Account holder"
+  );
+  pushCompensation(compensations, "accountHolder", accountRaw, accountResult);
 
   return {
     rowIndex,
     rowId: buildRowId(row, mapping, rowIndex),
-    email: getCell(row, mapping.email),
-    firstName,
-    surname,
-    idNumber: getCell(row, mapping.idNumber),
-    mobile: mobileResult.valid ? mobileResult.value : mobileRaw,
-    addressLine1: getCell(row, mapping.addressLine1),
-    postalCode: getCell(row, mapping.postalCode),
-    residencyStartDate: residencyResult.valid ? residencyResult.value : residencyRaw,
+    email: emailResult.value,
+    firstName: name.firstName,
+    surname: name.surname,
+    idNumber: idResult.value,
+    mobile: mobileResult.value,
+    addressLine1: addressResult.value,
+    postalCode: postalResult.value,
+    residencyStartDate: residencyResult.value,
     nextOfKinName: nextOfKin.firstName,
     nextOfKinSurname: nextOfKin.surname,
-    nextOfKinPhone: nextOfKinPhoneResult?.valid
-      ? nextOfKinPhoneResult.value
-      : nextOfKinPhoneRaw || undefined,
-    employerName: getCell(row, mapping.employerName),
-    employerPhone: employerPhoneResult.valid ? employerPhoneResult.value : employerPhoneRaw,
-    employerAddress: getCell(row, mapping.employerAddress),
-    employerPostalCode: getCell(row, mapping.employerPostalCode),
-    employmentStartDate: employmentResult.valid ? employmentResult.value : employmentRaw,
-    grossMonthly: getCell(row, mapping.grossMonthly),
-    nettSalary: getCell(row, mapping.nettSalary),
-    telephoneExpense: getCell(row, mapping.telephoneExpense),
-    transportExpense: getCell(row, mapping.transportExpense),
-    foodExpense: getCell(row, mapping.foodExpense),
-    accountHolder: getCell(row, mapping.accountHolder),
+    nextOfKinPhone: nextOfKinPhoneResult.value,
+    employerName: employerNameResult.value,
+    employerPhone: employerPhoneResult.value,
+    employerAddress: employerAddressResult.value,
+    employerPostalCode: employerPostalResult.value,
+    employmentStartDate: employmentResult.value,
+    grossMonthly: grossResult.value,
+    nettSalary: nettResult.value,
+    telephoneExpense: telExp.value,
+    transportExpense: transportExp.value,
+    foodExpense: foodExp.value,
+    accountHolder: accountResult.value,
     processed: getCell(row, PROCESSED_COLUMN) || undefined,
+    compensations,
   };
 }
 
 export function validateApplicant(applicant: ApplicantRecord): string[] {
-  const issues: string[] = [];
-
-  const mobileResult = transformMobile(applicant.mobile);
-  if (!mobileResult.valid) {
-    issues.push(mobileResult.reason ?? "Invalid mobile number");
-  }
-
-  const residencyResult = validateDateFormat(
-    applicant.residencyStartDate,
-    "Residency start date"
+  return applicant.compensations.map(
+    (c) => `${c.field}: ${c.reason} (original "${c.original}" → "${c.compensated}")`
   );
-  if (!residencyResult.valid) {
-    issues.push(residencyResult.reason ?? "Invalid residency date");
-  }
-
-  const employmentResult = validateDateFormat(
-    applicant.employmentStartDate,
-    "Employment start date"
-  );
-  if (!employmentResult.valid) {
-    issues.push(employmentResult.reason ?? "Invalid employment date");
-  }
-
-  if (!applicant.firstName || !applicant.surname) {
-    issues.push("Could not split first name and surname from the sheet");
-  }
-
-  if (!applicant.nextOfKinName || !applicant.nextOfKinSurname) {
-    issues.push("Could not split next-of-kin first name and surname from the sheet");
-  }
-
-  return issues;
 }
 
 export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRecord[]> {
@@ -183,32 +279,51 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
     console.warn("CSV parse warnings:", parsed.errors.slice(0, 5));
   }
 
-  const processedLog = loadProcessedLog();
-  let rowNumber = 1; // 1-based (header is not counted)
+  const processedLog = options.skipProcessed ? loadProcessedLog() : [];
+  let rowNumber = 1;
 
   const applicants: ApplicantRecord[] = [];
 
   for (const row of parsed.data) {
     rowNumber++;
-    const applicant = mapRow(row, options.mapping, rowNumber);
-
     if (options.rowFilter && options.rowFilter.length > 0) {
       if (!options.rowFilter.includes(rowNumber)) continue;
     }
 
-    if (applicant.processed) {
-      console.log(`Skipping row ${rowNumber} (${applicant.rowId}): already processed at ${applicant.processed}`);
+    const emailRaw = getCell(row, options.mapping.email);
+    const idRaw = getCell(row, options.mapping.idNumber);
+    const nameRaw = options.mapping.fullName
+      ? getCell(row, options.mapping.fullName)
+      : [options.mapping.firstName, options.mapping.surname]
+          .filter(Boolean)
+          .map((h) => getCell(row, h as string))
+          .join("");
+    if (!emailRaw && !idRaw && !nameRaw) {
+      console.log(`Skipping row ${rowNumber}: empty row`);
       continue;
     }
 
-    if (processedLog.includes(applicant.rowId)) {
+    const applicant = mapRow(row, options.mapping, rowNumber);
+
+    if (options.skipProcessed && applicant.processed) {
+      console.log(
+        `Skipping row ${rowNumber} (${applicant.rowId}): already processed at ${applicant.processed}`
+      );
+      continue;
+    }
+
+    if (options.skipProcessed && processedLog.includes(applicant.rowId)) {
       console.log(`Skipping row ${rowNumber} (${applicant.rowId}): in local processed log`);
       continue;
     }
 
-    if (!applicant.email && !applicant.idNumber) {
-      console.log(`Skipping row ${rowNumber}: no email or ID number`);
-      continue;
+    if (applicant.compensations.length > 0) {
+      console.log(
+        `Row ${rowNumber} (${applicant.firstName} ${applicant.surname}): ${applicant.compensations.length} compensation(s)`
+      );
+      for (const c of applicant.compensations) {
+        console.log(`  - ${c.reason}`);
+      }
     }
 
     applicants.push(applicant);

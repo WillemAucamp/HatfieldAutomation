@@ -1,7 +1,7 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { join } from "node:path";
 import { loadConfig, loadColumnMapping } from "./config.js";
-import { fetchSheetData, markRowProcessed, validateApplicant } from "./fetchSheetData.js";
+import { fetchSheetData, markRowProcessed } from "./fetchSheetData.js";
 import type { FillContext } from "./fieldResolver.js";
 import {
   clickApplyForFinance,
@@ -18,51 +18,42 @@ import {
   runSection4,
   runSection5,
 } from "./sections/index.js";
-import type { ApplicantRecord, ApplicantRunResult, FieldWarning, RunStatus } from "./types.js";
+import type {
+  ApplicantRecord,
+  ApplicantRunResult,
+  AppConfig,
+  FieldWarning,
+  RunStatus,
+} from "./types.js";
 import { randomDelay } from "./utils.js";
 
 async function processApplicant(
   browser: Browser,
   applicant: ApplicantRecord,
   logger: RunLogger,
-  headless: boolean,
-  dryRun: boolean
+  config: AppConfig,
+  isLast: boolean
 ): Promise<ApplicantRunResult> {
   const startedAt = new Date().toISOString();
   const applicantName = `${applicant.firstName} ${applicant.surname}`.trim();
   const screenshotDir = logger.applicantDir(applicant.rowIndex, applicantName);
-  const warnings: FieldWarning[] = [];
-
-  const validationIssues = validateApplicant(applicant);
-  if (validationIssues.length > 0) {
-    return {
-      rowIndex: applicant.rowIndex,
-      rowId: applicant.rowId,
-      applicantName,
-      status: "manual-review-needed",
-      sectionReached: 0,
-      warnings: validationIssues.map((msg) =>
-        createWarning("validation", "preflight", msg)
-      ),
-      screenshotDir,
-      startedAt,
-      finishedAt: new Date().toISOString(),
-      error: validationIssues.join("; "),
-    };
-  }
+  const warnings: FieldWarning[] = applicant.compensations.map((c) =>
+    createWarning(c.field, "compensation", `${c.reason} (original "${c.original}" → "${c.compensated}")`)
+  );
 
   let context: BrowserContext | undefined;
   let page: Page | undefined;
   let sectionReached = 0;
   let status: RunStatus = "stopped-at-uploads";
-  let failed = false;
+
+  console.log(`\n=== Processing row ${applicant.rowIndex}: ${applicantName} (fresh session) ===`);
+  if (warnings.length > 0) {
+    console.log(`  ${warnings.length} data compensation(s) applied — continuing anyway`);
+  }
 
   try {
-    const config = loadConfig();
     context = await browser.newContext();
     page = await context.newPage();
-
-    console.log(`\n=== Processing row ${applicant.rowIndex}: ${applicantName} ===`);
 
     await page.goto(config.financeUrl, { waitUntil: "networkidle" });
     await randomDelay(config);
@@ -92,7 +83,7 @@ async function processApplicant(
     await runSection5(ctx);
     sectionReached = 5;
 
-    if (dryRun) {
+    if (config.dryRun) {
       status = "dry-run-complete";
       console.log(`[dry-run] Stopped after filling Section 5 for ${applicantName}`);
     } else {
@@ -105,10 +96,6 @@ async function processApplicant(
         await screenshotSection(page, form, screenshotDir, "section6-upload", "before");
         console.log(`Ready for manual document upload for ${applicantName}`);
         markRowProcessed(applicant.rowId);
-
-        const statePath = join(screenshotDir, "storage-state.json");
-        await context.storageState({ path: statePath });
-        console.log(`Saved resumable session to ${statePath}`);
       } else {
         status = "manual-review-needed";
         warnings.push(
@@ -120,6 +107,10 @@ async function processApplicant(
         );
       }
     }
+
+    const statePath = join(screenshotDir, "storage-state.json");
+    await context.storageState({ path: statePath });
+    console.log(`Saved session state to ${statePath}`);
 
     return {
       rowIndex: applicant.rowIndex,
@@ -133,9 +124,9 @@ async function processApplicant(
       finishedAt: new Date().toISOString(),
     };
   } catch (err) {
-    failed = true;
     const error = err instanceof Error ? err.message : String(err);
-    console.error(`Failed on row ${applicant.rowIndex}: ${error}`);
+    console.error(`Failed on row ${applicant.rowIndex} (${applicantName}): ${error}`);
+    console.error("Continuing to the next applicant with a new session.");
 
     if (page) {
       const failPath = join(screenshotDir, "failure.png");
@@ -155,14 +146,14 @@ async function processApplicant(
       error,
     };
   } finally {
-    if (headless && context) {
+    const leaveOpen = config.keepLastOpen && isLast && !config.headless;
+    if (leaveOpen && context) {
+      console.log(
+        `Left last session open for ${applicantName}. Close the browser when finished reviewing.`
+      );
+    } else if (context) {
       await context.close();
-    } else if (context && !dryRun && status === "stopped-at-uploads") {
-      console.log(`Browser left open for ${applicantName} — close manually when done.`);
-    } else if (context && dryRun) {
-      if (headless) await context.close();
-    } else if (context && failed) {
-      if (headless) await context.close();
+      console.log(`Closed session for ${applicantName}`);
     }
   }
 }
@@ -193,14 +184,15 @@ async function main(): Promise<void> {
     mapping,
     rowFilter: config.rowFilter.length > 0 ? config.rowFilter : undefined,
     localCsvPath,
+    skipProcessed: config.skipProcessed,
   });
 
   if (applicants.length === 0) {
-    console.log("No unprocessed applicants found.");
+    console.log("No applicants found.");
     return;
   }
 
-  console.log(`Found ${applicants.length} applicant(s) to process.`);
+  console.log(`Found ${applicants.length} applicant(s). Each row runs in a fresh browser session.`);
 
   const logger = new RunLogger(join(process.cwd(), "runs"), config.dryRun);
   console.log(`Run output directory: ${logger.getRunDir()}`);
@@ -211,28 +203,31 @@ async function main(): Promise<void> {
   });
 
   try {
-    for (const applicant of applicants) {
+    for (let i = 0; i < applicants.length; i++) {
+      const applicant = applicants[i];
       const result = await processApplicant(
         browser,
         applicant,
         logger,
-        config.headless,
-        config.dryRun
+        config,
+        i === applicants.length - 1
       );
       logger.appendResult(result);
       logger.appendCsvSummary(result);
-      console.log(`Result: ${result.status} (section ${result.sectionReached})`);
+      console.log(
+        `Result for ${result.applicantName}: ${result.status} (section ${result.sectionReached})`
+      );
     }
   } finally {
-    if (config.headless) {
+    if (!config.keepLastOpen || config.headless) {
       await browser.close();
     } else {
-      console.log("\nBrowser left open. Close it manually when finished reviewing.");
+      console.log("\nBrowser process left running because --keep-last-open was set.");
     }
   }
 
   logger.flush();
-  console.log(`\nBatch complete. Log saved to ${logger.getRunDir()}`);
+  console.log(`\nBatch complete. Processed ${applicants.length} row(s). Log: ${logger.getRunDir()}`);
 }
 
 main().catch((err) => {

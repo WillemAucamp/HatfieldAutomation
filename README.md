@@ -89,7 +89,9 @@ Fields are located using strategies in priority order:
 5. **Fuzzy match** — Levenshtein via fuse.js against visible labels
 6. **Semantic name/id** — stable `name`/`id` attributes (e.g. `emailAddress`, `txtClientFirstName`) as a last resort
 
-Every fill is followed by read-back verification. In strict mode (default), mismatches abort that applicant's run.
+Every fill is followed by read-back verification. In strict mode, mismatches abort that applicant's run (the batch still continues with the next row). Default is non-strict: log a warning and keep filling.
+
+Each sheet row is a **new browser context**. A failure or stop at Upload Documents closes that session and starts the next row from a blank slate. Pass `--keep-last-open` to leave only the final applicant's window open.
 
 ## Configuration
 
@@ -100,13 +102,15 @@ Environment variables (`.env`):
 | `SHEET_CSV_URL` | live applicant sheet | Public Google Sheet CSV export URL |
 | `MAPPING_PATH` | `./mapping.json` | Column mapping file |
 | `DRY_RUN` | `false` | Fill only, no navigation past Section 5 |
-| `STRICT_MODE` | `true` | Abort applicant on field lookup/verify failure |
+| `STRICT_MODE` | `false` | Abort that applicant on field lookup/verify failure |
 | `HEADLESS` | `false` | Run browser headlessly |
 | `ROW_FILTER` | — | Comma-separated 1-based row numbers |
+| `SKIP_PROCESSED` | `false` | Skip IDs already in `processed-rows.json` |
+| `KEEP_LAST_OPEN` | `false` | Leave the last headed session open |
 | `ACTION_DELAY_MIN` | `200` | Min ms delay between actions |
 | `ACTION_DELAY_MAX` | `800` | Max ms delay between actions |
 
-CLI flags: `--dry-run`, `--strict`, `--no-strict`, `--local-csv=path.csv`
+CLI flags: `--dry-run`, `--strict`, `--no-strict`, `--skip-processed`, `--keep-last-open`, `--local-csv=path.csv`
 
 ## Pointing at a different sheet
 
@@ -140,20 +144,20 @@ runs/2026-08-12T07-30-00-000Z/
 
 ## Duplicate-run guard
 
-Processed applicants are tracked in two ways:
+By default **every sheet row is processed**. To skip IDs already completed, pass `--skip-processed` or set `SKIP_PROCESSED=true`. Completed IDs are recorded in `processed-rows.json`.
 
-- A **Processed** column in the sheet (if present) — rows with a timestamp are skipped.
-- A local `processed-rows.json` file — row IDs marked after successful completion.
+## Data compensation
 
-Delete an entry from `processed-rows.json` to re-run a specific applicant.
-
-## Data transforms
+Sheet values that do not match form expectations are rewritten so the run can continue. Compensations are logged on the applicant and in `run-log.json` — they never skip the row.
 
 | Field | Rule |
 |---|---|
-| Mobile number | Prepend `0` if 9 digits without leading zero; must end up 10 digits |
-| Combined names | Split `First names + surname` / next-of-kin on the last space |
-| Residency / employment dates | Must match `MM DD YYYY` in the sheet; filled verbatim |
+| ID number | RSA IDs are 13 digits. Shorter values are left-padded with zeros and given a valid checksum (e.g. `8225878084` → `0008225878083`) |
+| Mobile / employer / kin phone | Strip `+27`/`27`, prepend `0` for 9-digit values, pad/trim to 10 digits; empty → `0600000000` |
+| Combined names | Split on the last space; single-token names get surname `Unknown` |
+| Dates | Accept `MM DD YYYY`, slashes/dashes, ISO, Excel serials; unparseable → `01 01 2020` |
+| Empty text | Placeholder (`Address not provided`, `Unknown Employer`, synthesized email) |
+| Empty amounts | `0` |
 | Postal code | Type value, then select first dropdown match |
 | Province | Always `Gauteng` |
 

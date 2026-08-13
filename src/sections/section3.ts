@@ -1,6 +1,5 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
-import { transformMobile } from "../transforms.js";
 import { clickNext, screenshotSection } from "../formUtils.js";
 
 const SECTION = "section3";
@@ -8,11 +7,6 @@ const SECTION = "section3";
 export async function runSection3(ctx: FillContext): Promise<void> {
   const { page, form, config } = ctx;
   const data = ctx.applicant;
-
-  const mobileResult = transformMobile(data.mobile);
-  if (!mobileResult.valid) {
-    throw new Error(mobileResult.reason ?? "Invalid mobile number");
-  }
 
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before");
 
@@ -85,7 +79,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "text",
     names: ["clientMobileNumber"],
     ids: ["txtClientMobileNumber"],
-  }, mobileResult.value);
+  }, data.mobile);
 
   await fillField(ctx, {
     name: "Foreign birthplace",

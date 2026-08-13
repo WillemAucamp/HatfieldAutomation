@@ -47,6 +47,7 @@ async function main(): Promise<void> {
           transportExpense: applicant.transportExpense,
           foodExpense: applicant.foodExpense,
           accountHolder: applicant.accountHolder,
+          compensations: applicant.compensations,
           validationIssues: issues,
         },
         null,

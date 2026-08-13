@@ -46,7 +46,7 @@ export function loadConfig(): AppConfig {
   const dryRun = cliFlag("dry-run") || parseBool(process.env.DRY_RUN, false);
   const strictMode =
     cliFlag("strict") ||
-    (!cliFlag("no-strict") && parseBool(process.env.STRICT_MODE, true));
+    (!cliFlag("no-strict") && parseBool(process.env.STRICT_MODE, false));
 
   return {
     sheetCsvUrl:
@@ -61,6 +61,9 @@ export function loadConfig(): AppConfig {
     actionDelayMin: parseInt(process.env.ACTION_DELAY_MIN ?? "200", 10),
     actionDelayMax: parseInt(process.env.ACTION_DELAY_MAX ?? "800", 10),
     financeUrl: fileConfig.financeUrl ?? "https://vwmelrose.hatfieldgroup.co.za/finance",
+    skipProcessed:
+      cliFlag("skip-processed") || parseBool(process.env.SKIP_PROCESSED, false),
+    keepLastOpen: cliFlag("keep-last-open") || parseBool(process.env.KEEP_LAST_OPEN, false),
   };
 }
 
