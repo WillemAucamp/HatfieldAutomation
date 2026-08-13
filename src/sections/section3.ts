@@ -167,6 +167,18 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     ids: ["txtRelativeLastName"],
   }, data.nextOfKinSurname);
 
+  if (data.nextOfKinPhone) {
+    await fillField(ctx, {
+      name: "Next of kin mobile",
+      section: SECTION,
+      labels: ["Next of kin mobile", "Kin mobile", "Relative mobile"],
+      role: "textbox",
+      type: "text",
+      names: ["relativeMobileNumber"],
+      ids: ["txtRelativeMobileNumber"],
+    }, data.nextOfKinPhone);
+  }
+
   await fillField(ctx, {
     name: "Next of kin relationship",
     section: SECTION,

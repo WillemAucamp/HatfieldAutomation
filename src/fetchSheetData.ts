@@ -2,7 +2,7 @@ import Papa from "papaparse";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ApplicantRecord, ColumnMapping } from "./types.js";
-import { transformMobile, validateDateFormat } from "./transforms.js";
+import { splitFullName, transformMobile, validateDateFormat } from "./transforms.js";
 
 const PROCESSED_COLUMN = "Processed";
 const PROCESSED_LOG_FILE = "processed-rows.json";
@@ -24,6 +24,48 @@ function buildRowId(row: Record<string, string>, mapping: ColumnMapping, rowInde
   return id || email || `row-${rowIndex}`;
 }
 
+function resolveName(
+  row: Record<string, string>,
+  mapping: ColumnMapping
+): { firstName: string; surname: string } {
+  const firstFromCol = mapping.firstName ? getCell(row, mapping.firstName) : "";
+  const surnameFromCol = mapping.surname ? getCell(row, mapping.surname) : "";
+  if (firstFromCol && surnameFromCol && mapping.firstName !== mapping.surname) {
+    return { firstName: firstFromCol, surname: surnameFromCol };
+  }
+
+  const combined =
+    (mapping.fullName ? getCell(row, mapping.fullName) : "") ||
+    firstFromCol ||
+    surnameFromCol;
+  const split = splitFullName(combined);
+  return { firstName: split.firstName, surname: split.surname };
+}
+
+function resolveNextOfKin(
+  row: Record<string, string>,
+  mapping: ColumnMapping
+): { firstName: string; surname: string } {
+  const firstFromCol = mapping.nextOfKinName ? getCell(row, mapping.nextOfKinName) : "";
+  const surnameFromCol = mapping.nextOfKinSurname
+    ? getCell(row, mapping.nextOfKinSurname)
+    : "";
+  if (
+    firstFromCol &&
+    surnameFromCol &&
+    mapping.nextOfKinName !== mapping.nextOfKinSurname
+  ) {
+    return { firstName: firstFromCol, surname: surnameFromCol };
+  }
+
+  const combined =
+    (mapping.nextOfKinFullName ? getCell(row, mapping.nextOfKinFullName) : "") ||
+    firstFromCol ||
+    surnameFromCol;
+  const split = splitFullName(combined);
+  return { firstName: split.firstName, surname: split.surname };
+}
+
 function mapRow(
   row: Record<string, string>,
   mapping: ColumnMapping,
@@ -38,21 +80,37 @@ function mapRow(
   const employmentRaw = getCell(row, mapping.employmentStartDate);
   const employmentResult = validateDateFormat(employmentRaw, "Employment start date");
 
+  const { firstName, surname } = resolveName(row, mapping);
+  const nextOfKin = resolveNextOfKin(row, mapping);
+
+  const employerPhoneRaw = getCell(row, mapping.employerPhone);
+  const employerPhoneResult = transformMobile(employerPhoneRaw);
+
+  const nextOfKinPhoneRaw = mapping.nextOfKinPhone
+    ? getCell(row, mapping.nextOfKinPhone)
+    : "";
+  const nextOfKinPhoneResult = nextOfKinPhoneRaw
+    ? transformMobile(nextOfKinPhoneRaw)
+    : undefined;
+
   return {
     rowIndex,
     rowId: buildRowId(row, mapping, rowIndex),
     email: getCell(row, mapping.email),
-    firstName: getCell(row, mapping.firstName),
-    surname: getCell(row, mapping.surname),
+    firstName,
+    surname,
     idNumber: getCell(row, mapping.idNumber),
     mobile: mobileResult.valid ? mobileResult.value : mobileRaw,
     addressLine1: getCell(row, mapping.addressLine1),
     postalCode: getCell(row, mapping.postalCode),
     residencyStartDate: residencyResult.valid ? residencyResult.value : residencyRaw,
-    nextOfKinName: getCell(row, mapping.nextOfKinName),
-    nextOfKinSurname: getCell(row, mapping.nextOfKinSurname),
+    nextOfKinName: nextOfKin.firstName,
+    nextOfKinSurname: nextOfKin.surname,
+    nextOfKinPhone: nextOfKinPhoneResult?.valid
+      ? nextOfKinPhoneResult.value
+      : nextOfKinPhoneRaw || undefined,
     employerName: getCell(row, mapping.employerName),
-    employerPhone: getCell(row, mapping.employerPhone),
+    employerPhone: employerPhoneResult.valid ? employerPhoneResult.value : employerPhoneRaw,
     employerAddress: getCell(row, mapping.employerAddress),
     employerPostalCode: getCell(row, mapping.employerPostalCode),
     employmentStartDate: employmentResult.valid ? employmentResult.value : employmentRaw,
@@ -88,6 +146,14 @@ export function validateApplicant(applicant: ApplicantRecord): string[] {
   );
   if (!employmentResult.valid) {
     issues.push(employmentResult.reason ?? "Invalid employment date");
+  }
+
+  if (!applicant.firstName || !applicant.surname) {
+    issues.push("Could not split first name and surname from the sheet");
+  }
+
+  if (!applicant.nextOfKinName || !applicant.nextOfKinSurname) {
+    issues.push("Could not split next-of-kin first name and surname from the sheet");
   }
 
   return issues;

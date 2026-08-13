@@ -75,6 +75,37 @@ export function validateDateFormat(
   return { value, valid: true, needsManualReview: false };
 }
 
+export interface SplitNameResult {
+  firstName: string;
+  surname: string;
+  valid: boolean;
+  reason?: string;
+}
+
+/** Split a combined "First Last" (or "First Middle Last") cell on the last space. */
+export function splitFullName(raw: string | undefined | null): SplitNameResult {
+  const value = String(raw ?? "").trim().replace(/\s+/g, " ");
+  if (!value) {
+    return { firstName: "", surname: "", valid: false, reason: "Name is empty" };
+  }
+
+  const lastSpace = value.lastIndexOf(" ");
+  if (lastSpace <= 0) {
+    return {
+      firstName: value,
+      surname: "",
+      valid: false,
+      reason: `Could not split first name and surname from "${value}"`,
+    };
+  }
+
+  return {
+    firstName: value.slice(0, lastSpace).trim(),
+    surname: value.slice(lastSpace + 1).trim(),
+    valid: true,
+  };
+}
+
 export function normalizeCompareValue(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }

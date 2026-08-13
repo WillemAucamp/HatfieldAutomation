@@ -16,7 +16,23 @@ npm install
 npm run install-browsers   # downloads Chromium for Playwright
 
 cp .env.example .env
-# Edit .env and set SHEET_CSV_URL to your public sheet CSV export URL
+# SHEET_CSV_URL already points at the live applicant sheet
+```
+
+The default data source is this public Google Sheet:
+
+https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?usp=sharing
+
+CSV export URL (also in `config.json`):
+
+```
+https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/export?format=csv&gid=0
+```
+
+Preview mapped rows without opening a browser:
+
+```bash
+npm run preview
 ```
 
 ### Google Sheet CSV URL
@@ -81,7 +97,7 @@ Environment variables (`.env`):
 
 | Variable | Default | Description |
 |---|---|---|
-| `SHEET_CSV_URL` | — | Public Google Sheet CSV export URL |
+| `SHEET_CSV_URL` | live applicant sheet | Public Google Sheet CSV export URL |
 | `MAPPING_PATH` | `./mapping.json` | Column mapping file |
 | `DRY_RUN` | `false` | Fill only, no navigation past Section 5 |
 | `STRICT_MODE` | `true` | Abort applicant on field lookup/verify failure |
@@ -94,8 +110,9 @@ CLI flags: `--dry-run`, `--strict`, `--no-strict`, `--local-csv=path.csv`
 
 ## Pointing at a different sheet
 
-1. Update `SHEET_CSV_URL` in `.env`.
+1. Update `SHEET_CSV_URL` in `.env` or `config.json`.
 2. Edit `mapping.json` so each field role maps to your sheet's column headers.
+   Combined columns such as `First names + surname` are split on the last space.
 3. Ensure date columns contain pre-formatted `MM DD YYYY` strings (e.g. `08 12 2013`).
 4. Format mobile numbers as text in the sheet, or rely on the zero-pad transform for 9-digit values.
 
@@ -135,6 +152,7 @@ Delete an entry from `processed-rows.json` to re-run a specific applicant.
 | Field | Rule |
 |---|---|
 | Mobile number | Prepend `0` if 9 digits without leading zero; must end up 10 digits |
+| Combined names | Split `First names + surname` / next-of-kin on the last space |
 | Residency / employment dates | Must match `MM DD YYYY` in the sheet; filled verbatim |
 | Postal code | Type value, then select first dropdown match |
 | Province | Always `Gauteng` |

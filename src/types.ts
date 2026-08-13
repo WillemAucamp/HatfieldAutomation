@@ -1,14 +1,18 @@
 export interface ColumnMapping {
   email: string;
-  firstName: string;
-  surname: string;
+  /** Combined "First Last" column; split on the last space when firstName/surname are omitted. */
+  fullName?: string;
+  firstName?: string;
+  surname?: string;
   idNumber: string;
   mobile: string;
   addressLine1: string;
   postalCode: string;
   residencyStartDate: string;
-  nextOfKinName: string;
-  nextOfKinSurname: string;
+  nextOfKinFullName?: string;
+  nextOfKinName?: string;
+  nextOfKinSurname?: string;
+  nextOfKinPhone?: string;
   employerName: string;
   employerPhone: string;
   employerAddress: string;
@@ -35,6 +39,7 @@ export interface ApplicantRecord {
   residencyStartDate: string;
   nextOfKinName: string;
   nextOfKinSurname: string;
+  nextOfKinPhone?: string;
   employerName: string;
   employerPhone: string;
   employerAddress: string;
