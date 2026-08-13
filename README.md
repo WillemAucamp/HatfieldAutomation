@@ -146,7 +146,9 @@ runs/2026-08-12T07-30-00-000Z/
 
 ## Duplicate-run guard
 
-A row that already has a real **Reference Number** (`ZAHTVW…`) in the sheet is never resubmitted. A cell that starts with `error` is **not** treated as submitted — fix the data and re-run to iterate.
+A row whose **Status** cell already has any value (`ZAHTVW…` or `error CODE`) is skipped entirely. Only rows with a blank Status are submitted. Clear Status if you want that row tried again.
+
+A local `ZAHTVW…` in `application-references.json` is also skipped, so a successful submit is not repeated if the sheet has not been updated yet.
 
 ## Submit and write the result back
 
@@ -157,7 +159,7 @@ After Section 5 the live run:
 3. Reads the success popup (`Your Reference Number is : ZAHTVW…`).
 4. Clicks **OK**.
 5. Writes the outcome into the matching Google Sheet row:
-   - **Reference Number** — `ZAHTVW…` on success, or `error CODE` on failure (same column).
+   - **Status** — `ZAHTVW…` on success, or `error CODE` on failure.
    - **Timing** — seconds spent on that row (numeric, so `AVERAGE()` across the column is the mean submit time).
 
 If a row fails (bad sheet data or a form error), the batch **does not stop**. It writes `error …` plus timing, closes the session, and continues with the next row until the sheet is finished.
@@ -187,7 +189,7 @@ SHEET_WEBHOOK_URL=https://script.google.com/macros/s/…/exec
 
 Until one of those is configured, the outcome is still saved locally in `application-references.json` so nothing is lost.
 
-Redeploy the Apps Script web app after updating `apps-script/Code.gs` so it also writes the **Timing** column.
+Redeploy the Apps Script web app after updating `apps-script/Code.gs` so it writes the **Status** and **Timing** columns.
 
 ## Resuming a session
 
@@ -195,7 +197,7 @@ Redeploy the Apps Script web app after updating `apps-script/Code.gs` so it also
 
 ## Data errors (human error in the sheet)
 
-The website rejects values that do not match its format. The script therefore **does not invent or pad invalid data**. It writes `error CODE` into **Reference Number**, writes seconds into **Timing**, and continues with the next row in a new session.
+The website rejects values that do not match its format. The script therefore **does not invent or pad invalid data**. It writes `error CODE` into **Status**, writes seconds into **Timing**, and continues with the next row in a new session.
 
 The only automatic rewrite is the known Google Sheets artefact: a 9-digit mobile with no leading `0` gets `"0"` prepended.
 
@@ -217,7 +219,7 @@ The only automatic rewrite is the known Google Sheets artefact: a 9-digit mobile
 | `FORM_IFRAME_TIMEOUT` | Finance iframe did not load |
 | `SUBMIT_FAILED` | Unclassified runtime failure |
 
-Fix the sheet cell, then re-run. Error codes are written to the **Reference Number** column as `error ID_NOT_13_DIGITS`, and also stored in `run-log.json` / `run-log.csv`.
+Fix the sheet cell, then clear **Status** and re-run. Error codes are written to **Status** as `error ID_NOT_13_DIGITS`, and also stored in `run-log.json` / `run-log.csv`.
 
 Postal code: type the sheet value, then select the first dropdown match. Province is always `Gauteng`.
 

@@ -4,7 +4,7 @@ import {
   classifyRuntimeError,
   durationSeconds,
   formatErrorCell,
-  isErrorCell,
+  isStatusPopulated,
   successfulReferenceFromCell,
 } from "./outcome.js";
 
@@ -30,10 +30,12 @@ describe("successfulReferenceFromCell", () => {
   });
 });
 
-describe("isErrorCell", () => {
-  it("detects the error prefix", () => {
-    assert.equal(isErrorCell("error PERSONAL_NEXT_FAILED"), true);
-    assert.equal(isErrorCell("ZAHTVW0013281422"), false);
+describe("isStatusPopulated", () => {
+  it("treats any non-empty Status cell as already handled", () => {
+    assert.equal(isStatusPopulated("ZAHTVW0013281422"), true);
+    assert.equal(isStatusPopulated("error ID_NOT_13_DIGITS"), true);
+    assert.equal(isStatusPopulated(""), false);
+    assert.equal(isStatusPopulated("   "), false);
   });
 });
 

@@ -64,7 +64,7 @@ export async function writeRowOutcomeToSheet(
 ): Promise<RowOutcomeWrite> {
   let writtenToSheet = false;
   let sheetError: string | undefined;
-  const referenceColumn = mapping.referenceNumber ?? "Reference Number";
+  const statusColumn = mapping.status ?? "Status";
   const timingColumn = mapping.timing ?? "Timing";
 
   if (config.sheetWebhookUrl) {
@@ -74,7 +74,7 @@ export async function writeRowOutcomeToSheet(
         applicant,
         sheetStatus,
         durationSeconds,
-        referenceColumn,
+        statusColumn,
         timingColumn,
         mapping
       );
@@ -90,7 +90,7 @@ export async function writeRowOutcomeToSheet(
         applicant,
         sheetStatus,
         durationSeconds,
-        referenceColumn,
+        statusColumn,
         timingColumn
       );
       writtenToSheet = true;
@@ -118,7 +118,7 @@ async function writeViaWebhook(
   applicant: ApplicantRecord,
   sheetStatus: string,
   durationSeconds: number,
-  referenceColumn: string,
+  statusColumn: string,
   timingColumn: string,
   mapping: ColumnMapping
 ): Promise<void> {
@@ -130,9 +130,11 @@ async function writeViaWebhook(
       rowIndex: applicant.rowIndex,
       email: applicant.email,
       idNumber: applicant.idNumber,
+      status: sheetStatus,
       referenceNumber: sheetStatus,
       timingSeconds: durationSeconds,
-      referenceColumn,
+      statusColumn,
+      referenceColumn: statusColumn,
       timingColumn,
       idColumn: mapping.idNumber,
       emailColumn: mapping.email,
@@ -150,7 +152,7 @@ async function writeViaSheetsApi(
   applicant: ApplicantRecord,
   sheetStatus: string,
   durationSeconds: number,
-  referenceColumn: string,
+  statusColumn: string,
   timingColumn: string
 ): Promise<void> {
   const { google } = await import("googleapis");
@@ -179,7 +181,7 @@ async function writeViaSheetsApi(
   });
   const headers = [...(headerRes.data.values?.[0] ?? [])];
 
-  const refIndex = await ensureHeader(sheets, spreadsheetId, sheetTitle, headers, referenceColumn);
+  const statusIndex = await ensureHeader(sheets, spreadsheetId, sheetTitle, headers, statusColumn);
   const timingIndex = await ensureHeader(sheets, spreadsheetId, sheetTitle, headers, timingColumn);
 
   await sheets.spreadsheets.values.batchUpdate({
@@ -188,7 +190,7 @@ async function writeViaSheetsApi(
       valueInputOption: "RAW",
       data: [
         {
-          range: `'${sheetTitle}'!${columnIndexToLetter(refIndex)}${applicant.rowIndex}`,
+          range: `'${sheetTitle}'!${columnIndexToLetter(statusIndex)}${applicant.rowIndex}`,
           values: [[sheetStatus]],
         },
         {

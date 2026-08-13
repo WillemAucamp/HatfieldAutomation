@@ -11,7 +11,7 @@ import {
   validateDateFormat,
   validateIdNumber,
 } from "./transforms.js";
-import { successfulReferenceFromCell } from "./outcome.js";
+import { successfulReferenceFromCell, isStatusPopulated } from "./outcome.js";
 
 const PROCESSED_COLUMN = "Processed";
 const PROCESSED_LOG_FILE = "processed-rows.json";
@@ -27,6 +27,13 @@ export interface FetchOptions {
 
 function getCell(row: Record<string, string>, columnHeader: string): string {
   return String(row[columnHeader] ?? "").trim();
+}
+
+function readStatusCell(row: Record<string, string>, mapping: ColumnMapping): string {
+  const statusHeader = mapping.status ?? "Status";
+  const fromStatus = getCell(row, statusHeader);
+  if (fromStatus) return fromStatus;
+  return getCell(row, "Reference Number");
 }
 
 function buildRowId(row: Record<string, string>, mapping: ColumnMapping, rowIndex: number): string {
@@ -268,11 +275,7 @@ function mapRow(
     foodExpense: foodResult.value,
     accountHolder: accountResult.value,
     processed: getCell(row, PROCESSED_COLUMN) || undefined,
-    existingReference: successfulReferenceFromCell(
-      mapping.referenceNumber
-        ? getCell(row, mapping.referenceNumber)
-        : getCell(row, "Reference Number")
-    ),
+    existingStatus: readStatusCell(row, mapping) || undefined,
     errors,
   };
 }
@@ -331,9 +334,20 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
     }
 
     const applicant = mapRow(row, options.mapping, rowNumber);
+
+    if (isStatusPopulated(applicant.existingStatus)) {
+      console.log(
+        `Skipping row ${rowNumber}: Status already populated (${applicant.existingStatus})`
+      );
+      continue;
+    }
+
     const localRef = successfulReferenceFromCell(localReferences[applicant.rowId]);
-    if (!applicant.existingReference && localRef) {
-      applicant.existingReference = localRef;
+    if (localRef) {
+      console.log(
+        `Skipping row ${rowNumber} (${applicant.rowId}): already submitted locally (${localRef})`
+      );
+      continue;
     }
 
     if (options.skipProcessed && applicant.processed) {
@@ -355,12 +369,6 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
       for (const err of applicant.errors) {
         console.error(`  [${err.code}] ${err.message}`);
       }
-    }
-
-    if (applicant.existingReference) {
-      console.log(
-        `Row ${rowNumber} (${applicant.rowId}): already has reference ${applicant.existingReference} — will not resubmit`
-      );
     }
 
     applicants.push(applicant);

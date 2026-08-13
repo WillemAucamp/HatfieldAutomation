@@ -82,9 +82,9 @@ async function processApplicant(
     return result;
   }
 
-  if (applicant.existingReference) {
+  if (applicant.existingStatus) {
     console.log(
-      `Row ${applicant.rowIndex} already has reference ${applicant.existingReference} — skipping to avoid a duplicate application.`
+      `Row ${applicant.rowIndex} Status already populated (${applicant.existingStatus}) — skipping.`
     );
     return {
       rowIndex: applicant.rowIndex,
@@ -96,8 +96,8 @@ async function processApplicant(
       screenshotDir,
       startedAt,
       finishedAt: new Date().toISOString(),
-      referenceNumber: applicant.existingReference,
-      sheetStatus: applicant.existingReference,
+      referenceNumber: applicant.existingStatus,
+      sheetStatus: applicant.existingStatus,
       durationSeconds: elapsed(),
       writtenToSheet: true,
     };
@@ -238,12 +238,12 @@ async function persistOutcome(
     result.sheetStatus = write.sheetStatus;
     result.durationSeconds = write.durationSeconds;
     if (!write.writtenToSheet && write.sheetError) {
-      warnings.push(createWarning("referenceNumber", "sheet-write", write.sheetError));
+      warnings.push(createWarning("status", "sheet-write", write.sheetError));
       result.warnings = warnings;
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    warnings.push(createWarning("referenceNumber", "sheet-write", msg));
+    warnings.push(createWarning("status", "sheet-write", msg));
     result.warnings = warnings;
     result.writtenToSheet = false;
     console.error(`Sheet write failed for row ${applicant.rowIndex}; continuing. ${msg}`);

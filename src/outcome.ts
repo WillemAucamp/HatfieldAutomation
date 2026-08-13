@@ -11,7 +11,12 @@ export function isErrorCell(value: string | undefined | null): boolean {
   return /^error\b/i.test(String(value ?? "").trim());
 }
 
-/** Only a real application number counts as already submitted — not `error …`. */
+/** Any non-empty Status cell means the row was already attempted. */
+export function isStatusPopulated(value: string | undefined | null): boolean {
+  return String(value ?? "").trim().length > 0;
+}
+
+/** Only a real application number — used to avoid a duplicate submit from local logs. */
 export function successfulReferenceFromCell(value: string | undefined | null): string | undefined {
   const trimmed = String(value ?? "").trim();
   if (!trimmed || isErrorCell(trimmed)) return undefined;

@@ -6,7 +6,7 @@
  * Copy the web app URL into .env as SHEET_WEBHOOK_URL
  *
  * Writes:
- *   Reference Number — ZAHTVW… on success, or `error CODE` on failure
+ *   Status — ZAHTVW… on success, or `error CODE` on failure
  *   Timing — seconds spent on that row (numeric, so AVERAGE() works)
  */
 
@@ -15,10 +15,11 @@ function doPost(e) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
   const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
 
-  const referenceColumn = data.referenceColumn || "Reference Number";
+  const statusColumn = data.statusColumn || data.referenceColumn || "Status";
   const timingColumn = data.timingColumn || "Timing";
-  const refCol = ensureColumn_(sheet, headers, referenceColumn);
+  const statusCol = ensureColumn_(sheet, headers, statusColumn);
   const timingCol = ensureColumn_(sheet, headers, timingColumn);
+  const statusValue = data.status != null ? data.status : data.referenceNumber;
 
   let row = Number(data.rowIndex) || 0;
   if (!row && data.email) {
@@ -40,8 +41,8 @@ function doPost(e) {
     ).setMimeType(ContentService.MimeType.JSON);
   }
 
-  if (data.referenceNumber !== undefined && data.referenceNumber !== null) {
-    sheet.getRange(row, refCol).setValue(data.referenceNumber);
+  if (statusValue !== undefined && statusValue !== null) {
+    sheet.getRange(row, statusCol).setValue(statusValue);
   }
   if (data.timingSeconds !== undefined && data.timingSeconds !== null && data.timingSeconds !== "") {
     sheet.getRange(row, timingCol).setValue(Number(data.timingSeconds));
@@ -51,7 +52,7 @@ function doPost(e) {
     JSON.stringify({
       ok: true,
       row: row,
-      referenceNumber: data.referenceNumber,
+      status: statusValue,
       timingSeconds: data.timingSeconds,
     })
   ).setMimeType(ContentService.MimeType.JSON);
