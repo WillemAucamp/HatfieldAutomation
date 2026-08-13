@@ -4,8 +4,9 @@ import type { ApplicantRecord, AppConfig, ColumnMapping } from "./types.js";
 
 const LOCAL_REFERENCES = "application-references.json";
 
-export interface ReferenceWriteResult {
-  referenceNumber: string;
+export interface RowOutcomeWrite {
+  sheetStatus: string;
+  durationSeconds: number;
   writtenToSheet: boolean;
   localPath: string;
   sheetError?: string;
@@ -17,14 +18,16 @@ interface LocalRecord {
   email: string;
   idNumber: string;
   applicantName: string;
-  referenceNumber: string;
+  sheetStatus: string;
+  durationSeconds: number;
   writtenToSheet: boolean;
   capturedAt: string;
 }
 
-export function saveReferenceLocally(
+export function saveOutcomeLocally(
   applicant: ApplicantRecord,
-  referenceNumber: string,
+  sheetStatus: string,
+  durationSeconds: number,
   writtenToSheet: boolean
 ): string {
   const path = join(process.cwd(), LOCAL_REFERENCES);
@@ -38,7 +41,8 @@ export function saveReferenceLocally(
     email: applicant.email,
     idNumber: applicant.idNumber,
     applicantName: `${applicant.firstName} ${applicant.surname}`.trim(),
-    referenceNumber,
+    sheetStatus,
+    durationSeconds,
     writtenToSheet,
     capturedAt: new Date().toISOString(),
   };
@@ -51,18 +55,29 @@ export function saveReferenceLocally(
   return path;
 }
 
-export async function writeReferenceToSheet(
+export async function writeRowOutcomeToSheet(
   config: AppConfig,
   mapping: ColumnMapping,
   applicant: ApplicantRecord,
-  referenceNumber: string
-): Promise<ReferenceWriteResult> {
+  sheetStatus: string,
+  durationSeconds: number
+): Promise<RowOutcomeWrite> {
   let writtenToSheet = false;
   let sheetError: string | undefined;
+  const referenceColumn = mapping.referenceNumber ?? "Reference Number";
+  const timingColumn = mapping.timing ?? "Timing";
 
   if (config.sheetWebhookUrl) {
     try {
-      await writeViaWebhook(config.sheetWebhookUrl, applicant, referenceNumber, mapping);
+      await writeViaWebhook(
+        config.sheetWebhookUrl,
+        applicant,
+        sheetStatus,
+        durationSeconds,
+        referenceColumn,
+        timingColumn,
+        mapping
+      );
       writtenToSheet = true;
     } catch (err) {
       sheetError = err instanceof Error ? err.message : String(err);
@@ -70,7 +85,14 @@ export async function writeReferenceToSheet(
     }
   } else if (config.googleServiceAccountFile) {
     try {
-      await writeViaSheetsApi(config, mapping, applicant, referenceNumber);
+      await writeViaSheetsApi(
+        config,
+        applicant,
+        sheetStatus,
+        durationSeconds,
+        referenceColumn,
+        timingColumn
+      );
       writtenToSheet = true;
     } catch (err) {
       sheetError = err instanceof Error ? err.message : String(err);
@@ -82,19 +104,22 @@ export async function writeReferenceToSheet(
     console.warn(`  [sheetWriter] ${sheetError}`);
   }
 
-  const localPath = saveReferenceLocally(applicant, referenceNumber, writtenToSheet);
+  const localPath = saveOutcomeLocally(applicant, sheetStatus, durationSeconds, writtenToSheet);
   console.log(
-    `  [sheetWriter] ${applicant.firstName} ${applicant.surname}: ${referenceNumber}` +
+    `  [sheetWriter] ${applicant.firstName} ${applicant.surname}: ${sheetStatus} (${durationSeconds}s)` +
       (writtenToSheet ? " written to Google Sheet" : ` saved locally at ${localPath}`)
   );
 
-  return { referenceNumber, writtenToSheet, localPath, sheetError };
+  return { sheetStatus, durationSeconds, writtenToSheet, localPath, sheetError };
 }
 
 async function writeViaWebhook(
   url: string,
   applicant: ApplicantRecord,
-  referenceNumber: string,
+  sheetStatus: string,
+  durationSeconds: number,
+  referenceColumn: string,
+  timingColumn: string,
   mapping: ColumnMapping
 ): Promise<void> {
   const response = await fetch(url, {
@@ -105,8 +130,10 @@ async function writeViaWebhook(
       rowIndex: applicant.rowIndex,
       email: applicant.email,
       idNumber: applicant.idNumber,
-      referenceNumber,
-      referenceColumn: mapping.referenceNumber ?? "Reference Number",
+      referenceNumber: sheetStatus,
+      timingSeconds: durationSeconds,
+      referenceColumn,
+      timingColumn,
       idColumn: mapping.idNumber,
       emailColumn: mapping.email,
     }),
@@ -120,9 +147,11 @@ async function writeViaWebhook(
 
 async function writeViaSheetsApi(
   config: AppConfig,
-  mapping: ColumnMapping,
   applicant: ApplicantRecord,
-  referenceNumber: string
+  sheetStatus: string,
+  durationSeconds: number,
+  referenceColumn: string,
+  timingColumn: string
 ): Promise<void> {
   const { google } = await import("googleapis");
   const keyFile = resolve(config.googleServiceAccountFile ?? "");
@@ -148,28 +177,49 @@ async function writeViaSheetsApi(
     spreadsheetId,
     range: `'${sheetTitle}'!1:1`,
   });
-  const headers = headerRes.data.values?.[0] ?? [];
-  const columnName = mapping.referenceNumber ?? "Reference Number";
-  let colIndex = headers.findIndex((h) => String(h).trim() === columnName);
+  const headers = [...(headerRes.data.values?.[0] ?? [])];
 
-  if (colIndex < 0) {
-    colIndex = headers.length;
-    const colLetter = columnIndexToLetter(colIndex);
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: `'${sheetTitle}'!${colLetter}1`,
+  const refIndex = await ensureHeader(sheets, spreadsheetId, sheetTitle, headers, referenceColumn);
+  const timingIndex = await ensureHeader(sheets, spreadsheetId, sheetTitle, headers, timingColumn);
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId,
+    requestBody: {
       valueInputOption: "RAW",
-      requestBody: { values: [[columnName]] },
-    });
-  }
+      data: [
+        {
+          range: `'${sheetTitle}'!${columnIndexToLetter(refIndex)}${applicant.rowIndex}`,
+          values: [[sheetStatus]],
+        },
+        {
+          range: `'${sheetTitle}'!${columnIndexToLetter(timingIndex)}${applicant.rowIndex}`,
+          values: [[durationSeconds]],
+        },
+      ],
+    },
+  });
+}
 
+async function ensureHeader(
+  sheets: any,
+  spreadsheetId: string,
+  sheetTitle: string,
+  headers: string[],
+  columnName: string
+): Promise<number> {
+  let colIndex = headers.findIndex((h) => String(h).trim() === columnName);
+  if (colIndex >= 0) return colIndex;
+
+  colIndex = headers.length;
+  headers.push(columnName);
   const colLetter = columnIndexToLetter(colIndex);
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: `'${sheetTitle}'!${colLetter}${applicant.rowIndex}`,
+    range: `'${sheetTitle}'!${colLetter}1`,
     valueInputOption: "RAW",
-    requestBody: { values: [[referenceNumber]] },
+    requestBody: { values: [[columnName]] },
   });
+  return colIndex;
 }
 
 function columnIndexToLetter(index: number): string {

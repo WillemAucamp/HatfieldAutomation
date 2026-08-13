@@ -11,6 +11,7 @@ import {
   validateDateFormat,
   validateIdNumber,
 } from "./transforms.js";
+import { successfulReferenceFromCell } from "./outcome.js";
 
 const PROCESSED_COLUMN = "Processed";
 const PROCESSED_LOG_FILE = "processed-rows.json";
@@ -267,9 +268,11 @@ function mapRow(
     foodExpense: foodResult.value,
     accountHolder: accountResult.value,
     processed: getCell(row, PROCESSED_COLUMN) || undefined,
-    existingReference: mapping.referenceNumber
-      ? getCell(row, mapping.referenceNumber)
-      : getCell(row, "Reference Number") || undefined,
+    existingReference: successfulReferenceFromCell(
+      mapping.referenceNumber
+        ? getCell(row, mapping.referenceNumber)
+        : getCell(row, "Reference Number")
+    ),
     errors,
   };
 }
@@ -328,7 +331,7 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
     }
 
     const applicant = mapRow(row, options.mapping, rowNumber);
-    const localRef = localReferences[applicant.rowId];
+    const localRef = successfulReferenceFromCell(localReferences[applicant.rowId]);
     if (!applicant.existingReference && localRef) {
       applicant.existingReference = localRef;
     }
@@ -383,11 +386,14 @@ function loadLocalReferences(): Record<string, string> {
     const records = JSON.parse(readFileSync(path, "utf-8")) as Array<{
       rowId?: string;
       referenceNumber?: string;
+      sheetStatus?: string;
     }>;
     const map: Record<string, string> = {};
     for (const record of records) {
-      if (record.rowId && record.referenceNumber) {
-        map[record.rowId] = record.referenceNumber;
+      const status = record.sheetStatus ?? record.referenceNumber;
+      const ref = successfulReferenceFromCell(status);
+      if (record.rowId && ref) {
+        map[record.rowId] = ref;
       }
     }
     return map;

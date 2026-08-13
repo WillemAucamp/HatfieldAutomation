@@ -91,7 +91,7 @@ Fields are located using strategies in priority order:
 
 Every fill is followed by read-back verification. In strict mode, mismatches abort that applicant's run (the batch still continues with the next row). Default is non-strict: log a warning and keep filling.
 
-Each sheet row is a **new browser context**. After submit (or a failure) that session closes and the next row starts clean. Pass `--keep-last-open` to leave only the final applicant's window open.
+Each sheet row is a **new browser context**. After submit **or** a failure that session closes, the outcome is written to the sheet, and the next row starts clean. Pass `--keep-last-open` to leave only the final applicant's window open.
 
 ## Configuration
 
@@ -146,9 +146,9 @@ runs/2026-08-12T07-30-00-000Z/
 
 ## Duplicate-run guard
 
-A row that already has a **Reference Number** in the sheet is never resubmitted.
+A row that already has a real **Reference Number** (`ZAHTVW…`) in the sheet is never resubmitted. A cell that starts with `error` is **not** treated as submitted — fix the data and re-run to iterate.
 
-## Submit and write the reference back
+## Submit and write the result back
 
 After Section 5 the live run:
 
@@ -156,9 +156,13 @@ After Section 5 the live run:
 2. Clicks **FINISH**.
 3. Reads the success popup (`Your Reference Number is : ZAHTVW…`).
 4. Clicks **OK**.
-5. Writes that reference into the matching Google Sheet row, column **Reference Number**.
+5. Writes the outcome into the matching Google Sheet row:
+   - **Reference Number** — `ZAHTVW…` on success, or `error CODE` on failure (same column).
+   - **Timing** — seconds spent on that row (numeric, so `AVERAGE()` across the column is the mean submit time).
 
-Dry-run still stops before Finish.
+If a row fails (bad sheet data or a form error), the batch **does not stop**. It writes `error …` plus timing, closes the session, and continues with the next row until the sheet is finished.
+
+Dry-run still stops before Finish and does not write the sheet.
 
 ### Enable Google Sheet write-back
 
@@ -181,7 +185,9 @@ SHEET_WEBHOOK_URL=https://script.google.com/macros/s/…/exec
 2. Share the sheet with that account as Editor.
 3. Set `GOOGLE_SERVICE_ACCOUNT_FILE=./service-account.json`.
 
-Until one of those is configured, the reference is still saved locally in `application-references.json` so nothing is lost.
+Until one of those is configured, the outcome is still saved locally in `application-references.json` so nothing is lost.
+
+Redeploy the Apps Script web app after updating `apps-script/Code.gs` so it also writes the **Timing** column.
 
 ## Resuming a session
 
@@ -189,7 +195,7 @@ Until one of those is configured, the reference is still saved locally in `appli
 
 ## Data errors (human error in the sheet)
 
-The website rejects values that do not match its format. The script therefore **does not invent or pad invalid data**. It records an error code, skips filling that row, and continues with the next row in a new session.
+The website rejects values that do not match its format. The script therefore **does not invent or pad invalid data**. It writes `error CODE` into **Reference Number**, writes seconds into **Timing**, and continues with the next row in a new session.
 
 The only automatic rewrite is the known Google Sheets artefact: a 9-digit mobile with no leading `0` gets `"0"` prepended.
 
@@ -204,8 +210,14 @@ The only automatic rewrite is the known Google Sheets artefact: a 9-digit mobile
 | `NEXT_OF_KIN_EMPTY` / `NEXT_OF_KIN_MISSING_SURNAME` | Next of kin name missing or incomplete |
 | `RESIDENCY_DATE_FORMAT` / `EMPLOYMENT_DATE_FORMAT` | Date is not `MM DD YYYY` |
 | `ADDRESS_EMPTY` / `POSTAL_EMPTY` / `EMPLOYER_EMPTY` / … | Required field is empty |
+| `PERSONAL_NEXT_FAILED` | Next did not leave Personal Information |
+| `WORK_NEXT_FAILED` | Next did not leave Work & Salary |
+| `FINANCIAL_NEXT_FAILED` | Next did not reach Upload Documents |
+| `FINISH_NO_REFERENCE` | Finish clicked but no `ZAHTVW` popup |
+| `FORM_IFRAME_TIMEOUT` | Finance iframe did not load |
+| `SUBMIT_FAILED` | Unclassified runtime failure |
 
-Fix the sheet cell, then re-run. Error codes are printed to the console and stored in `run-log.json` / `run-log.csv`.
+Fix the sheet cell, then re-run. Error codes are written to the **Reference Number** column as `error ID_NOT_13_DIGITS`, and also stored in `run-log.json` / `run-log.csv`.
 
 Postal code: type the sheet value, then select the first dropdown match. Province is always `Gauteng`.
 

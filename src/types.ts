@@ -25,6 +25,7 @@ export interface ColumnMapping {
   foodExpense: string;
   accountHolder: string;
   referenceNumber?: string;
+  timing?: string;
 }
 
 export interface ApplicantRecord {
@@ -124,6 +125,8 @@ export interface ApplicantRunResult {
   error?: string;
   errorCodes?: string[];
   referenceNumber?: string;
+  sheetStatus?: string;
+  durationSeconds?: number;
   writtenToSheet?: boolean;
 }
 

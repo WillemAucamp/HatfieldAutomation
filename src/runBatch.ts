@@ -6,6 +6,11 @@ import type { FillContext } from "./fieldResolver.js";
 import { clickApplyForFinance } from "./formUtils.js";
 import { RunLogger, createWarning } from "./logger.js";
 import {
+  classifyRuntimeError,
+  durationSeconds,
+  formatErrorCell,
+} from "./outcome.js";
+import {
   goToUploadDocumentsThenSubmit,
   runSection1,
   runSection2,
@@ -13,7 +18,7 @@ import {
   runSection4,
   runSection5,
 } from "./sections/index.js";
-import { writeReferenceToSheet } from "./sheetWriter.js";
+import { writeRowOutcomeToSheet } from "./sheetWriter.js";
 import type {
   ApplicantRecord,
   ApplicantRunResult,
@@ -33,6 +38,7 @@ async function processApplicant(
   isLast: boolean
 ): Promise<ApplicantRunResult> {
   const startedAt = new Date().toISOString();
+  const startedMs = Date.now();
   const applicantName = `${applicant.firstName} ${applicant.surname}`.trim();
   const screenshotDir = logger.applicantDir(applicant.rowIndex, applicantName);
   const warnings: FieldWarning[] = [];
@@ -44,6 +50,8 @@ async function processApplicant(
 
   console.log(`\n=== Processing row ${applicant.rowIndex}: ${applicantName} (fresh session) ===`);
 
+  const elapsed = () => durationSeconds(startedMs);
+
   if (applicant.errors.length > 0) {
     const errorCodes = applicant.errors.map((e) => e.code);
     const error = applicant.errors.map((e) => `[${e.code}] ${e.message}`).join("; ");
@@ -51,9 +59,9 @@ async function processApplicant(
     for (const err of applicant.errors) {
       console.error(`  [${err.code}] ${err.message}`);
     }
-    console.error("Skipping this row (human error in sheet data). Continuing to the next applicant.");
+    console.error("Writing error to the sheet and continuing to the next applicant.");
 
-    return {
+    const result: ApplicantRunResult = {
       rowIndex: applicant.rowIndex,
       rowId: applicant.rowId,
       applicantName: applicantName || "(unnamed)",
@@ -67,7 +75,11 @@ async function processApplicant(
       finishedAt: new Date().toISOString(),
       error,
       errorCodes,
+      sheetStatus: formatErrorCell(errorCodes),
+      durationSeconds: elapsed(),
     };
+    await persistOutcome(config, mapping, applicant, result, warnings);
+    return result;
   }
 
   if (applicant.existingReference) {
@@ -85,6 +97,8 @@ async function processApplicant(
       startedAt,
       finishedAt: new Date().toISOString(),
       referenceNumber: applicant.existingReference,
+      sheetStatus: applicant.existingReference,
+      durationSeconds: elapsed(),
       writtenToSheet: true,
     };
   }
@@ -124,18 +138,6 @@ async function processApplicant(
     if (config.dryRun) {
       status = "dry-run-complete";
       console.log(`[dry-run] Stopped after filling Section 5 for ${applicantName}`);
-    } else {
-      const referenceNumber = await goToUploadDocumentsThenSubmit(ctx);
-      sectionReached = 6;
-      status = "submitted";
-      markRowProcessed(applicant.rowId);
-
-      const write = await writeReferenceToSheet(config, mapping, applicant, referenceNumber);
-      if (!write.writtenToSheet && write.sheetError) {
-        warnings.push(
-          createWarning("referenceNumber", "sheet-write", write.sheetError)
-        );
-      }
 
       const statePath = join(screenshotDir, "storage-state.json");
       await context.storageState({ path: statePath });
@@ -151,16 +153,16 @@ async function processApplicant(
         screenshotDir,
         startedAt,
         finishedAt: new Date().toISOString(),
-        referenceNumber,
-        writtenToSheet: write.writtenToSheet,
+        durationSeconds: elapsed(),
       };
     }
 
-    const statePath = join(screenshotDir, "storage-state.json");
-    await context.storageState({ path: statePath });
-    console.log(`Saved session state to ${statePath}`);
+    const referenceNumber = await goToUploadDocumentsThenSubmit(ctx);
+    sectionReached = 6;
+    status = "submitted";
+    markRowProcessed(applicant.rowId);
 
-    return {
+    const result: ApplicantRunResult = {
       rowIndex: applicant.rowIndex,
       rowId: applicant.rowId,
       applicantName,
@@ -170,18 +172,28 @@ async function processApplicant(
       screenshotDir,
       startedAt,
       finishedAt: new Date().toISOString(),
+      referenceNumber,
+      sheetStatus: referenceNumber,
+      durationSeconds: elapsed(),
     };
+    await persistOutcome(config, mapping, applicant, result, warnings);
+
+    const statePath = join(screenshotDir, "storage-state.json");
+    await context.storageState({ path: statePath });
+    console.log(`Saved session state to ${statePath}`);
+    return result;
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
+    const errorCodes = [classifyRuntimeError(error, sectionReached)];
     console.error(`Failed on row ${applicant.rowIndex} (${applicantName}): ${error}`);
-    console.error("Continuing to the next applicant with a new session.");
+    console.error(`Error code: ${errorCodes[0]}. Continuing to the next applicant with a new session.`);
 
     if (page) {
       const failPath = join(screenshotDir, "failure.png");
       await page.screenshot({ path: failPath, fullPage: true }).catch(() => undefined);
     }
 
-    return {
+    const result: ApplicantRunResult = {
       rowIndex: applicant.rowIndex,
       rowId: applicant.rowId,
       applicantName,
@@ -192,7 +204,12 @@ async function processApplicant(
       startedAt,
       finishedAt: new Date().toISOString(),
       error,
+      errorCodes,
+      sheetStatus: formatErrorCell(errorCodes),
+      durationSeconds: elapsed(),
     };
+    await persistOutcome(config, mapping, applicant, result, warnings);
+    return result;
   } finally {
     const leaveOpen = config.keepLastOpen && isLast && !config.headless;
     if (leaveOpen && context) {
@@ -203,6 +220,33 @@ async function processApplicant(
       await context.close();
       console.log(`Closed session for ${applicantName}`);
     }
+  }
+}
+
+async function persistOutcome(
+  config: AppConfig,
+  mapping: ColumnMapping,
+  applicant: ApplicantRecord,
+  result: ApplicantRunResult,
+  warnings: FieldWarning[]
+): Promise<void> {
+  const sheetStatus = result.sheetStatus ?? formatErrorCell(result.errorCodes ?? ["SUBMIT_FAILED"]);
+  const duration = result.durationSeconds ?? 0;
+  try {
+    const write = await writeRowOutcomeToSheet(config, mapping, applicant, sheetStatus, duration);
+    result.writtenToSheet = write.writtenToSheet;
+    result.sheetStatus = write.sheetStatus;
+    result.durationSeconds = write.durationSeconds;
+    if (!write.writtenToSheet && write.sheetError) {
+      warnings.push(createWarning("referenceNumber", "sheet-write", write.sheetError));
+      result.warnings = warnings;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    warnings.push(createWarning("referenceNumber", "sheet-write", msg));
+    result.warnings = warnings;
+    result.writtenToSheet = false;
+    console.error(`Sheet write failed for row ${applicant.rowIndex}; continuing. ${msg}`);
   }
 }
 
@@ -264,9 +308,10 @@ async function main(): Promise<void> {
       logger.appendResult(result);
       logger.appendCsvSummary(result);
       console.log(
-        `Result for ${result.applicantName}: ${result.status}${
-          result.referenceNumber ? ` ref=${result.referenceNumber}` : ""
-        }${result.errorCodes?.length ? ` [${result.errorCodes.join(", ")}]` : ""} (section ${result.sectionReached})`
+        `Result for ${result.applicantName}: ${result.status}` +
+          `${result.sheetStatus ? ` sheet=${result.sheetStatus}` : ""}` +
+          `${result.durationSeconds !== undefined ? ` ${result.durationSeconds}s` : ""}` +
+          ` (section ${result.sectionReached})`
       );
     }
   } finally {

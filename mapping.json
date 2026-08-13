@@ -19,5 +19,6 @@
   "transportExpense": "Transport cost",
   "foodExpense": "Food cost",
   "accountHolder": "Account holder name and surname (same as client)",
-  "referenceNumber": "Reference Number"
+  "referenceNumber": "Reference Number",
+  "timing": "Timing"
 }
