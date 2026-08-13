@@ -60,7 +60,7 @@ export async function writeRowOutcomeToSheet(
   mapping: ColumnMapping,
   applicant: ApplicantRecord,
   sheetStatus: string,
-  durationSeconds: number
+  durationSeconds?: number
 ): Promise<RowOutcomeWrite> {
   let writtenToSheet = false;
   let sheetError: string | undefined;
@@ -90,7 +90,7 @@ export async function writeRowOutcomeToSheet(
         config,
         applicant,
         sheetStatus,
-        durationSeconds,
+        durationSeconds ?? 0,
         statusColumn,
         timingColumn
       );
@@ -105,49 +105,103 @@ export async function writeRowOutcomeToSheet(
     console.warn(`  [sheetWriter] ${sheetError}`);
   }
 
-  const localPath = saveOutcomeLocally(applicant, sheetStatus, durationSeconds, writtenToSheet);
+  const localPath = saveOutcomeLocally(
+    applicant,
+    sheetStatus,
+    durationSeconds ?? 0,
+    writtenToSheet
+  );
   console.log(
-    `  [sheetWriter] ${applicant.firstName} ${applicant.surname}: ${sheetStatus} (${durationSeconds}s)` +
+    `  [sheetWriter] ${applicant.firstName} ${applicant.surname}: ${sheetStatus} (${durationSeconds ?? "—"}s)` +
       (writtenToSheet ? " written to Google Sheet" : ` saved locally at ${localPath}`)
   );
 
-  return { sheetStatus, durationSeconds, writtenToSheet, localPath, sheetError };
+  return { sheetStatus, durationSeconds: durationSeconds ?? 0, writtenToSheet, localPath, sheetError };
+}
+
+async function postWebhookJson(
+  url: string,
+  payload: Record<string, unknown>
+): Promise<{ ok?: boolean; skipped?: boolean; error?: string }> {
+  // Apps Script web apps 302 to googleusercontent.com. Following that
+  // redirect with POST yields 405; the JSON result must be fetched with GET.
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    redirect: "manual",
+    body: JSON.stringify(payload),
+  });
+
+  if (response.status >= 300 && response.status < 400) {
+    const location = response.headers.get("location");
+    if (location) {
+      try {
+        const followed = await fetch(location, { method: "GET", redirect: "follow" });
+        const body = await followed.text().catch(() => "");
+        if (followed.ok) {
+          return parseWebhookBody(body);
+        }
+      } catch {
+        // doPost already ran on the original POST; confirmation GET is best-effort.
+      }
+    }
+    return { ok: true };
+  }
+
+  const body = await response.text().catch(() => "");
+  if (!response.ok) {
+    throw new Error(`Webhook ${response.status}: ${body.slice(0, 300)}`);
+  }
+  return parseWebhookBody(body);
+}
+
+function parseWebhookBody(body: string): { ok?: boolean; skipped?: boolean; error?: string } {
+  if (!body.trim()) {
+    return { ok: true };
+  }
+  try {
+    return JSON.parse(body) as { ok?: boolean; skipped?: boolean; error?: string };
+  } catch {
+    if (/<!doctype html/i.test(body) || /authorization/i.test(body)) {
+      throw new Error(
+        `Webhook returned HTML instead of JSON. Redeploy the web app with access set to Anyone. Body: ${body.slice(0, 200)}`
+      );
+    }
+    throw new Error(`Webhook returned non-JSON: ${body.slice(0, 300)}`);
+  }
 }
 
 async function writeViaWebhook(
   url: string,
   applicant: ApplicantRecord,
   sheetStatus: string,
-  durationSeconds: number,
+  durationSeconds: number | undefined,
   statusColumn: string,
   timingColumn: string,
   mapping: ColumnMapping,
   sourceSheetId: string
 ): Promise<void> {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    redirect: "follow",
-    body: JSON.stringify({
-      action: "writeStatus",
-      rowIndex: applicant.rowIndex,
-      email: applicant.email,
-      idNumber: applicant.idNumber,
-      status: sheetStatus,
-      referenceNumber: sheetStatus,
-      timingSeconds: durationSeconds,
-      statusColumn,
-      referenceColumn: statusColumn,
-      timingColumn,
-      sourceSheetId,
-      idColumn: mapping.idNumber,
-      emailColumn: mapping.email,
-    }),
-  });
+  const payload: Record<string, unknown> = {
+    action: "writeStatus",
+    rowIndex: applicant.rowIndex,
+    email: applicant.email,
+    idNumber: applicant.idNumber,
+    status: sheetStatus,
+    referenceNumber: sheetStatus,
+    statusColumn,
+    referenceColumn: statusColumn,
+    timingColumn,
+    sourceSheetId,
+    idColumn: mapping.idNumber,
+    emailColumn: mapping.email,
+  };
+  if (durationSeconds !== undefined && durationSeconds !== null) {
+    payload.timingSeconds = durationSeconds;
+  }
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`Webhook ${response.status}: ${body.slice(0, 300)}`);
+  const parsed = await postWebhookJson(url, payload);
+  if (parsed.ok === false) {
+    throw new Error(parsed.error || "Webhook writeStatus returned ok=false");
   }
 }
 
@@ -254,31 +308,16 @@ export async function appendLoadedClient(
   const webhook = config.loadedSheetWebhookUrl || config.sheetWebhookUrl;
   if (webhook) {
     try {
-      const response = await fetch(webhook, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        redirect: "follow",
-        body: JSON.stringify({
-          action: "appendLoaded",
-          name,
-          number,
-          loadedSheetId: config.loadedSheetId,
-          nameColumn: config.loadedNameColumn,
-          numberColumn: config.loadedNumberColumn,
-        }),
+      const parsed = await postWebhookJson(webhook, {
+        action: "appendLoaded",
+        name,
+        number,
+        loadedSheetId: config.loadedSheetId,
+        nameColumn: config.loadedNameColumn,
+        numberColumn: config.loadedNumberColumn,
       });
-      const body = await response.text().catch(() => "");
-      if (!response.ok) {
-        throw new Error(`Webhook ${response.status}: ${body.slice(0, 300)}`);
-      }
-      let parsed: { ok?: boolean; skipped?: boolean; error?: string } = {};
-      try {
-        parsed = JSON.parse(body) as { ok?: boolean; skipped?: boolean; error?: string };
-      } catch {
-        parsed = {};
-      }
       if (parsed.ok === false) {
-        throw new Error(parsed.error || body.slice(0, 300));
+        throw new Error(parsed.error || "Webhook appendLoaded returned ok=false");
       }
       console.log(
         `  [sheetWriter] Loaded-clients sheet: ${name} → ${number}` +
