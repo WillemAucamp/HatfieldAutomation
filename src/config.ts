@@ -15,6 +15,10 @@ interface FileConfig {
   sheetId?: string;
   sheetWebhookUrl?: string;
   googleServiceAccountFile?: string;
+  loadedSheetId?: string;
+  loadedSheetWebhookUrl?: string;
+  loadedNameColumn?: string;
+  loadedNumberColumn?: string;
 }
 
 function loadFileConfig(): FileConfig {
@@ -82,6 +86,19 @@ export function loadConfig(): AppConfig {
     sheetWebhookUrl: process.env.SHEET_WEBHOOK_URL ?? fileConfig.sheetWebhookUrl ?? "",
     googleServiceAccountFile:
       process.env.GOOGLE_SERVICE_ACCOUNT_FILE ?? fileConfig.googleServiceAccountFile ?? "",
+    loadedSheetId:
+      process.env.LOADED_SHEET_ID ||
+      fileConfig.loadedSheetId ||
+      "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM",
+    loadedSheetWebhookUrl:
+      process.env.LOADED_SHEET_WEBHOOK_URL ||
+      fileConfig.loadedSheetWebhookUrl ||
+      process.env.SHEET_WEBHOOK_URL ||
+      fileConfig.sheetWebhookUrl ||
+      "",
+    loadedNameColumn: process.env.LOADED_NAME_COLUMN || fileConfig.loadedNameColumn || "Name",
+    loadedNumberColumn:
+      process.env.LOADED_NUMBER_COLUMN || fileConfig.loadedNumberColumn || "Number",
   };
 }
 

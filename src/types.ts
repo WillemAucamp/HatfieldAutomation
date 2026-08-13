@@ -88,6 +88,10 @@ export interface AppConfig {
   sheetId: string;
   sheetWebhookUrl: string;
   googleServiceAccountFile: string;
+  loadedSheetId: string;
+  loadedSheetWebhookUrl: string;
+  loadedNameColumn: string;
+  loadedNumberColumn: string;
 }
 
 export type FieldStrategy =

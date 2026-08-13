@@ -9,6 +9,7 @@ import {
   classifyRuntimeError,
   durationSeconds,
   formatErrorCell,
+  successfulReferenceFromCell,
 } from "./outcome.js";
 import {
   goToUploadDocumentsThenSubmit,
@@ -18,7 +19,7 @@ import {
   runSection4,
   runSection5,
 } from "./sections/index.js";
-import { writeRowOutcomeToSheet } from "./sheetWriter.js";
+import { appendLoadedClient, writeRowOutcomeToSheet } from "./sheetWriter.js";
 import type {
   ApplicantRecord,
   ApplicantRunResult,
@@ -230,6 +231,19 @@ async function persistOutcome(
     if (!write.writtenToSheet && write.sheetError) {
       warnings.push(createWarning("status", "sheet-write", write.sheetError));
       result.warnings = warnings;
+    }
+
+    const reference = successfulReferenceFromCell(sheetStatus);
+    if (reference) {
+      const loaded = await appendLoadedClient(
+        config,
+        `${applicant.firstName} ${applicant.surname}`.trim(),
+        reference
+      );
+      if (!loaded.written && loaded.error) {
+        warnings.push(createWarning("loaded-clients", "sheet-write", loaded.error));
+        result.warnings = warnings;
+      }
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

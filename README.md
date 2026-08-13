@@ -114,7 +114,7 @@ Environment variables (`.env`):
 | `SCREENSHOTS` | dry-run only | Save before/after step screenshots |
 | `VERIFY_FILLS` | `false` | Read back every field after fill |
 
-CLI flags: `--dry-run`, `--strict`, `--no-strict`, `--skip-processed`, `--keep-last-open`, `--local-csv=path.csv`
+CLI flags: `--dry-run`, `--strict`, `--no-strict`, `--skip-processed`, `--keep-last-open`, `--screenshots`, `--verify`, `--local-csv=path.csv`
 
 ## Pointing at a different sheet
 
@@ -160,21 +160,19 @@ After Section 5 the live run:
 2. Clicks **FINISH**.
 3. Reads the success popup (`Your Reference Number is : ZAHTVW…`).
 4. Clicks **OK**.
-5. Writes the outcome into the matching Google Sheet row:
-   - **Status** — `ZAHTVW…` on success, or `error CODE` on failure.
-   - **Timing** — seconds spent on that row (numeric, so `AVERAGE()` across the column is the mean submit time).
+5. Writes the outcome:
+   - Applicant sheet **Status** — `ZAHTVW…` on success, or `error CODE` on failure; **Timing** — seconds.
+   - Loaded-clients sheet **Name** + **Number** — applicant name and `ZAHTVW…` (successes only).
 
-If a row fails (bad sheet data or a form error), the batch **does not stop**. It writes `error …` plus timing, closes the session, and continues with the next row until the sheet is finished.
+If a row fails (bad sheet data or a form error), the batch **does not stop**. It writes `error …` plus timing on the applicant sheet, skips the loaded-clients row, closes the session, and continues.
 
-Dry-run still stops before Finish and does not write the sheet.
+Dry-run still stops before Finish and does not write either sheet.
 
 ### Enable Google Sheet write-back
 
-CSV export is read-only. To write the reference you need one of:
+CSV export is read-only. One Apps Script webhook can edit **both** spreadsheets (you must be able to edit both):
 
-**Option A — Apps Script webhook (simplest)**
-
-1. Open the sheet → Extensions → Apps Script.
+1. Open [the loaded-clients sheet](https://docs.google.com/spreadsheets/d/1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM/edit) (or the applicant sheet) → Extensions → Apps Script.
 2. Paste `apps-script/Code.gs`.
 3. Deploy → New deployment → Web app. Execute as *Me*, access *Anyone*.
 4. Put the web app URL in `.env`:
@@ -183,15 +181,11 @@ CSV export is read-only. To write the reference you need one of:
 SHEET_WEBHOOK_URL=https://script.google.com/macros/s/…/exec
 ```
 
-**Option B — Google service account**
+Push already-captured references with `npm run sync-loaded`.
 
-1. Create a service account JSON key.
-2. Share the sheet with that account as Editor.
-3. Set `GOOGLE_SERVICE_ACCOUNT_FILE=./service-account.json`.
+**Option B — Google service account:** share **both** sheets with the account as Editor and set `GOOGLE_SERVICE_ACCOUNT_FILE`.
 
-Until one of those is configured, the outcome is still saved locally in `application-references.json` so nothing is lost.
-
-Redeploy the Apps Script web app after updating `apps-script/Code.gs` so it writes the **Status** and **Timing** columns.
+Until that URL is set, outcomes stay in `application-references.json`.
 
 ## Resuming a session
 

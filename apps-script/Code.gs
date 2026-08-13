@@ -1,32 +1,98 @@
 /**
- * Paste this into Extensions → Apps Script on the applicant Google Sheet,
- * then Deploy → New deployment → Web app
- *   - Execute as: Me
- *   - Who has access: Anyone
- * Copy the web app URL into .env as SHEET_WEBHOOK_URL
+ * One webhook for both Google Sheets.
  *
- * Writes:
- *   Status — ZAHTVW… on success, or `error CODE` on failure
- *   Timing — seconds spent on that row (numeric, so AVERAGE() works)
+ * 1. Open EITHER spreadsheet → Extensions → Apps Script
+ * 2. Paste this file
+ * 3. Deploy → New deployment → Web app
+ *      Execute as: Me
+ *      Who has access: Anyone
+ * 4. Put the /exec URL in .env as SHEET_WEBHOOK_URL
+ *
+ * Actions
+ *   appendLoaded — add Name + Number on the loaded-clients sheet
+ *   writeStatus  — write Status + Timing on the applicant source sheet
+ *
+ * The account that deploys this must be able to edit both spreadsheets.
  */
 
+var SOURCE_SHEET_ID = "12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI";
+var LOADED_SHEET_ID = "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM";
+
 function doPost(e) {
-  const data = JSON.parse(e.postData.contents);
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
-  const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  var data = JSON.parse(e.postData.contents);
+  var action = data.action || inferAction_(data);
 
-  const statusColumn = data.statusColumn || data.referenceColumn || "Status";
-  const timingColumn = data.timingColumn || "Timing";
-  const statusCol = ensureColumn_(sheet, headers, statusColumn);
-  const timingCol = ensureColumn_(sheet, headers, timingColumn);
-  const statusValue = data.status != null ? data.status : data.referenceNumber;
+  try {
+    if (action === "appendLoaded") {
+      return json_(appendLoaded_(data));
+    }
+    if (action === "writeStatus") {
+      return json_(writeStatus_(data));
+    }
+    return json_({ ok: false, error: "Unknown action: " + action });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
 
-  let row = Number(data.rowIndex) || 0;
+function inferAction_(data) {
+  if (data.name && (data.number || data.referenceNumber) && data.action !== "writeStatus") {
+    return "appendLoaded";
+  }
+  return "writeStatus";
+}
+
+function appendLoaded_(data) {
+  var ss = SpreadsheetApp.openById(data.loadedSheetId || LOADED_SHEET_ID);
+  var sheet = ss.getSheets()[0];
+  var nameColumn = data.nameColumn || "Name";
+  var numberColumn = data.numberColumn || "Number";
+  var headers = ensureHeaders_(sheet, [nameColumn, numberColumn]);
+  var nameCol = headers.indexOf(nameColumn) + 1;
+  var numberCol = headers.indexOf(numberColumn) + 1;
+
+  var name = String(data.name || "").trim();
+  var number = String(data.number || data.referenceNumber || "").trim();
+  if (!name || !number) {
+    return { ok: false, error: "name and number are required" };
+  }
+
+  var last = Math.max(sheet.getLastRow(), 1);
+  if (last >= 2) {
+    var existing = sheet.getRange(2, numberCol, last - 1, 1).getValues();
+    for (var i = 0; i < existing.length; i++) {
+      if (String(existing[i][0]).trim() === number) {
+        return { ok: true, skipped: true, row: i + 2, number: number };
+      }
+    }
+  }
+
+  var row = last + 1;
+  if (last === 1 && !sheet.getRange(1, nameCol).getValue()) {
+    row = 2;
+  }
+  sheet.getRange(row, nameCol).setValue(name);
+  sheet.getRange(row, numberCol).setValue(number);
+  return { ok: true, row: row, name: name, number: number };
+}
+
+function writeStatus_(data) {
+  var ss = SpreadsheetApp.openById(data.sourceSheetId || SOURCE_SHEET_ID);
+  var sheet = ss.getSheets()[0];
+  var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+
+  var statusColumn = data.statusColumn || data.referenceColumn || "Status";
+  var timingColumn = data.timingColumn || "Timing";
+  var statusCol = ensureColumn_(sheet, headers, statusColumn);
+  var timingCol = ensureColumn_(sheet, headers, timingColumn);
+  var statusValue = data.status != null ? data.status : data.referenceNumber;
+
+  var row = Number(data.rowIndex) || 0;
   if (!row && data.email) {
-    const emailCol = headers.indexOf(data.emailColumn || "Email") + 1;
-    if (emailCol > 0) {
-      const emails = sheet.getRange(2, emailCol, sheet.getLastRow() - 1, 1).getValues();
-      for (let i = 0; i < emails.length; i++) {
+    var emailCol = headers.indexOf(data.emailColumn || "Email") + 1;
+    if (emailCol > 0 && sheet.getLastRow() > 1) {
+      var emails = sheet.getRange(2, emailCol, sheet.getLastRow() - 1, 1).getValues();
+      for (var i = 0; i < emails.length; i++) {
         if (String(emails[i][0]).trim() === String(data.email).trim()) {
           row = i + 2;
           break;
@@ -36,9 +102,7 @@ function doPost(e) {
   }
 
   if (!row) {
-    return ContentService.createTextOutput(
-      JSON.stringify({ ok: false, error: "Could not match sheet row" })
-    ).setMimeType(ContentService.MimeType.JSON);
+    return { ok: false, error: "Could not match source sheet row" };
   }
 
   if (statusValue !== undefined && statusValue !== null) {
@@ -48,22 +112,30 @@ function doPost(e) {
     sheet.getRange(row, timingCol).setValue(Number(data.timingSeconds));
   }
 
-  return ContentService.createTextOutput(
-    JSON.stringify({
-      ok: true,
-      row: row,
-      status: statusValue,
-      timingSeconds: data.timingSeconds,
-    })
-  ).setMimeType(ContentService.MimeType.JSON);
+  return { ok: true, row: row, status: statusValue, timingSeconds: data.timingSeconds };
+}
+
+function ensureHeaders_(sheet, names) {
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  for (var i = 0; i < names.length; i++) {
+    ensureColumn_(sheet, headers, names[i]);
+  }
+  return headers;
 }
 
 function ensureColumn_(sheet, headers, name) {
-  let col = headers.indexOf(name) + 1;
+  var col = headers.indexOf(name) + 1;
   if (col === 0) {
     col = headers.length + 1;
     sheet.getRange(1, col).setValue(name);
     headers[col - 1] = name;
   }
   return col;
+}
+
+function json_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
+    ContentService.MimeType.JSON
+  );
 }

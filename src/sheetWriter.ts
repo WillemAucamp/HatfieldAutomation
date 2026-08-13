@@ -76,7 +76,8 @@ export async function writeRowOutcomeToSheet(
         durationSeconds,
         statusColumn,
         timingColumn,
-        mapping
+        mapping,
+        config.sheetId
       );
       writtenToSheet = true;
     } catch (err) {
@@ -120,13 +121,15 @@ async function writeViaWebhook(
   durationSeconds: number,
   statusColumn: string,
   timingColumn: string,
-  mapping: ColumnMapping
+  mapping: ColumnMapping,
+  sourceSheetId: string
 ): Promise<void> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     redirect: "follow",
     body: JSON.stringify({
+      action: "writeStatus",
       rowIndex: applicant.rowIndex,
       email: applicant.email,
       idNumber: applicant.idNumber,
@@ -136,6 +139,7 @@ async function writeViaWebhook(
       statusColumn,
       referenceColumn: statusColumn,
       timingColumn,
+      sourceSheetId,
       idColumn: mapping.idNumber,
       emailColumn: mapping.email,
     }),
@@ -233,4 +237,150 @@ function columnIndexToLetter(index: number): string {
     n = Math.floor((n - 1) / 26);
   }
   return letter;
+}
+
+export interface LoadedClientWrite {
+  written: boolean;
+  skipped?: boolean;
+  error?: string;
+}
+
+/** Append Name + Number to the loaded-clients spreadsheet after a successful submit. */
+export async function appendLoadedClient(
+  config: AppConfig,
+  name: string,
+  number: string
+): Promise<LoadedClientWrite> {
+  const webhook = config.loadedSheetWebhookUrl || config.sheetWebhookUrl;
+  if (webhook) {
+    try {
+      const response = await fetch(webhook, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        redirect: "follow",
+        body: JSON.stringify({
+          action: "appendLoaded",
+          name,
+          number,
+          loadedSheetId: config.loadedSheetId,
+          nameColumn: config.loadedNameColumn,
+          numberColumn: config.loadedNumberColumn,
+        }),
+      });
+      const body = await response.text().catch(() => "");
+      if (!response.ok) {
+        throw new Error(`Webhook ${response.status}: ${body.slice(0, 300)}`);
+      }
+      let parsed: { ok?: boolean; skipped?: boolean; error?: string } = {};
+      try {
+        parsed = JSON.parse(body) as { ok?: boolean; skipped?: boolean; error?: string };
+      } catch {
+        parsed = {};
+      }
+      if (parsed.ok === false) {
+        throw new Error(parsed.error || body.slice(0, 300));
+      }
+      console.log(
+        `  [sheetWriter] Loaded-clients sheet: ${name} → ${number}` +
+          (parsed.skipped ? " (already present)" : "")
+      );
+      return { written: true, skipped: parsed.skipped };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      console.error(`  [sheetWriter] Loaded-clients webhook failed: ${error}`);
+      return { written: false, error };
+    }
+  }
+
+  if (config.googleServiceAccountFile) {
+    try {
+      await appendLoadedViaSheetsApi(config, name, number);
+      console.log(`  [sheetWriter] Loaded-clients sheet: ${name} → ${number}`);
+      return { written: true };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      console.error(`  [sheetWriter] Loaded-clients Sheets API failed: ${error}`);
+      return { written: false, error };
+    }
+  }
+
+  const error =
+    "No sheet write credentials. Set SHEET_WEBHOOK_URL (Apps Script on either sheet) or GOOGLE_SERVICE_ACCOUNT_FILE.";
+  console.warn(`  [sheetWriter] ${error}`);
+  return { written: false, error };
+}
+
+async function appendLoadedViaSheetsApi(
+  config: AppConfig,
+  name: string,
+  number: string
+): Promise<void> {
+  const { google } = await import("googleapis");
+  const keyFile = resolve(config.googleServiceAccountFile ?? "");
+  if (!existsSync(keyFile)) {
+    throw new Error(`Service account file not found: ${keyFile}`);
+  }
+  const spreadsheetId = config.loadedSheetId;
+  if (!spreadsheetId) throw new Error("LOADED_SHEET_ID is not set");
+
+  const auth = new google.auth.GoogleAuth({
+    keyFile,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+  const sheets = google.sheets({ version: "v4", auth });
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const sheetTitle = meta.data.sheets?.[0]?.properties?.title;
+  if (!sheetTitle) throw new Error("Could not read the loaded-clients worksheet title");
+
+  const headerRes = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${sheetTitle}'!1:1`,
+  });
+  const headers = [...(headerRes.data.values?.[0] ?? [])];
+  const nameIndex = await ensureHeader(
+    sheets,
+    spreadsheetId,
+    sheetTitle,
+    headers,
+    config.loadedNameColumn
+  );
+  const numberIndex = await ensureHeader(
+    sheets,
+    spreadsheetId,
+    sheetTitle,
+    headers,
+    config.loadedNumberColumn
+  );
+
+  const numberCol = columnIndexToLetter(numberIndex);
+  const existing = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${sheetTitle}'!${numberCol}2:${numberCol}`,
+  });
+  const already = (existing.data.values ?? []).some(
+    (row) => String(row[0] ?? "").trim() === number
+  );
+  if (already) return;
+
+  const rowRes = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${sheetTitle}'!A:A`,
+  });
+  const nextRow = Math.max((rowRes.data.values ?? []).length, 1) + 1;
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      valueInputOption: "RAW",
+      data: [
+        {
+          range: `'${sheetTitle}'!${columnIndexToLetter(nameIndex)}${nextRow}`,
+          values: [[name]],
+        },
+        {
+          range: `'${sheetTitle}'!${columnIndexToLetter(numberIndex)}${nextRow}`,
+          values: [[number]],
+        },
+      ],
+    },
+  });
 }
