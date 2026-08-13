@@ -157,12 +157,22 @@ async function findByFuzzy(form: FormScope, target: FieldTarget): Promise<Locato
 
 async function findBySemanticHints(form: FormScope, target: FieldTarget): Promise<Locator | null> {
   for (const id of target.ids ?? []) {
-    const byIdLocator = byId(form, id);
-    if ((await byIdLocator.count()) > 0) return byIdLocator.first();
+    const exact = byId(form, id);
+    if ((await exact.count()) > 0) return exact.first();
+    const suffix = id.replace(/^\d+_/, "");
+    if (suffix && suffix !== id) {
+      const bySuffix = form.locator(`[id$="${suffix}"]`);
+      if ((await bySuffix.count()) > 0) return bySuffix.first();
+    }
   }
   for (const name of target.names ?? []) {
     const byName = form.locator(`[name="${name}"]`);
     if ((await byName.count()) > 0) return byName.first();
+    const suffix = name.replace(/^\d+_/, "");
+    if (suffix && suffix !== name) {
+      const bySuffix = form.locator(`[name$="${suffix}"]`);
+      if ((await bySuffix.count()) > 0) return bySuffix.first();
+    }
   }
   return null;
 }
@@ -178,16 +188,16 @@ export async function resolveField(
   // so walking all labels/roles on hidden steps is slow and noisy.
   if (hasSemantic) {
     strategies.push({ name: "semantic", fn: () => findBySemanticHints(form, target) });
-  }
-  strategies.push(
-    { name: "role", fn: () => findByRole(form, target) },
-    { name: "label", fn: () => findByLabel(form, target) },
-    { name: "placeholder", fn: () => findByPlaceholder(form, target) },
-    { name: "fieldset", fn: () => findByFieldset(form, target) },
-    { name: "fuzzy", fn: () => findByFuzzy(form, target) }
-  );
-  if (!hasSemantic) {
-    strategies.push({ name: "semantic", fn: () => findBySemanticHints(form, target) });
+    strategies.push({ name: "role", fn: () => findByRole(form, target) });
+  } else {
+    strategies.push(
+      { name: "role", fn: () => findByRole(form, target) },
+      { name: "label", fn: () => findByLabel(form, target) },
+      { name: "placeholder", fn: () => findByPlaceholder(form, target) },
+      { name: "fieldset", fn: () => findByFieldset(form, target) },
+      { name: "fuzzy", fn: () => findByFuzzy(form, target) },
+      { name: "semantic", fn: () => findBySemanticHints(form, target) }
+    );
   }
 
   for (const { name, fn } of strategies) {
