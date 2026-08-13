@@ -42,14 +42,18 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     ids: ["txtClientLastName"],
   }, data.surname);
 
+  // Name entry recreates identity controls with a new numeric prefix (71_IdType → 72_IdType).
+  await new Promise((r) => setTimeout(r, 750));
+  await waitForSelectorVisible(form, '[id$="_IdType"], [id$="_IdNumber"]');
+
   await fillField(ctx, {
     name: "ID type",
     section: SECTION,
     labels: ["ID type", "Identity type", "Identification type"],
     role: "combobox",
     type: "select",
-    names: ["71_IdType"],
-    ids: ["71_IdType"],
+    names: ["_IdType", "IdType"],
+    ids: ["_IdType", "IdType"],
   }, "RSA");
 
   await fillField(ctx, {
@@ -58,8 +62,8 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     labels: ["ID number", "Identity number", "Identification number"],
     role: "textbox",
     type: "text",
-    names: ["71_IdNumber"],
-    ids: ["71_IdNumber"],
+    names: ["_IdNumber", "IdNumber"],
+    ids: ["_IdNumber", "IdNumber"],
   }, data.idNumber);
 
   await fillField(ctx, {
@@ -71,6 +75,16 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     names: ["clientEducationLevel"],
     ids: ["ddlClientEducationLevel"],
   }, "Matric certificate");
+
+  await fillField(ctx, {
+    name: "Citizenship country",
+    section: SECTION,
+    labels: ["Country of Citizenship", "Citizenship", "Nationality"],
+    role: "combobox",
+    type: "select",
+    names: ["clientCitizenshipCountryId"],
+    ids: ["ddlClientCitizenshipCountryId"],
+  }, "South Africa");
 
   await fillField(ctx, {
     name: "Mobile number",

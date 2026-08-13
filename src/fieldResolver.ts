@@ -190,6 +190,7 @@ export async function resolveField(
   if (hasSemantic) {
     strategies.push({ name: "semantic", fn: () => findBySemanticHints(form, target) });
     strategies.push({ name: "role", fn: () => findByRole(form, target) });
+    strategies.push({ name: "label", fn: () => findByLabel(form, target) });
   } else {
     strategies.push(
       { name: "role", fn: () => findByRole(form, target) },
@@ -360,21 +361,31 @@ async function fillPostalCode(
   value: string,
   config: AppConfig
 ): Promise<void> {
-  await fillTextInput(locator, value, config);
+  await locator.waitFor({ state: "visible", timeout: 15000 });
+  await locator.scrollIntoViewIfNeeded();
+  await locator.click({ timeout: 10000 });
+  await locator.fill("");
+  await locator.pressSequentially(value, { delay: 40 });
   await randomDelay(config);
 
-  const dropdownOption = form.getByRole("option").first();
-  const listItem = form.locator("[role='listbox'] li, .autocomplete-item, .dropdown-item").first();
+  const page = locator.page();
+  const optionSelectors = [
+    form.getByRole("option").first(),
+    form.locator("[role='listbox'] li, .autocomplete-item, .dropdown-item, .tt-suggestion, .ui-menu-item").first(),
+    page.getByRole("option").first(),
+    page.locator("[role='listbox'] li, .autocomplete-item, .dropdown-item, .tt-suggestion, .ui-menu-item").first(),
+  ];
 
-  if (await dropdownOption.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await dropdownOption.click();
-  } else if (await listItem.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await listItem.click();
-  } else {
-    const keyboard = "mainFrame" in form ? form.keyboard : form.page().keyboard;
-    await keyboard.press("ArrowDown");
-    await keyboard.press("Enter");
+  for (const option of optionSelectors) {
+    if (await option.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await option.click();
+      await randomDelay(config);
+      return;
+    }
   }
+
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
   await randomDelay(config);
 }
 
