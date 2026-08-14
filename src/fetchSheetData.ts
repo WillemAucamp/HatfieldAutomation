@@ -223,6 +223,20 @@ function mapRow(
   );
   pushError(errors, employerPostalResult, "employerPostalCode", employerPostalRaw);
 
+  const provinceRaw = mapping.province ? getCell(row, mapping.province) : getCell(row, "Province");
+  const provinceResult = requireText(provinceRaw, "PROVINCE_EMPTY", "Province is empty");
+  pushError(errors, provinceResult, "province", provinceRaw);
+
+  const employerProvinceRaw = mapping.employerProvince
+    ? getCell(row, mapping.employerProvince)
+    : getCell(row, "Employer province (online search)");
+  const employerProvinceResult = requireText(
+    employerProvinceRaw,
+    "EMPLOYER_PROVINCE_EMPTY",
+    "Employer province is empty"
+  );
+  pushError(errors, employerProvinceResult, "employerProvince", employerProvinceRaw);
+
   const grossRaw = getCell(row, mapping.grossMonthly);
   const grossResult = requireAmount(grossRaw, "GROSS_EMPTY", "Gross monthly salary");
   pushError(errors, grossResult, "grossMonthly", grossRaw);
@@ -275,6 +289,7 @@ function mapRow(
     mobile: mobileResult.valid ? mobileResult.value : mobileRaw,
     addressLine1: addressResult.value,
     postalCode: postalResult.value,
+    province: provinceResult.value || "Gauteng",
     residencyStartDate: residencyResult.value,
     nextOfKinName: nextOfKin.firstName,
     nextOfKinSurname: nextOfKin.surname,
@@ -283,6 +298,7 @@ function mapRow(
     employerPhone: employerPhoneResult.valid ? employerPhoneResult.value : employerPhoneRaw,
     employerAddress: employerAddressResult.value,
     employerPostalCode: employerPostalResult.value,
+    employerProvince: employerProvinceResult.value || provinceResult.value || "Gauteng",
     employmentStartDate: employmentResult.value,
     grossMonthly: grossResult.value,
     nettSalary: nettResult.value,

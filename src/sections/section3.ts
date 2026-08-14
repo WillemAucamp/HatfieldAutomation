@@ -115,16 +115,6 @@ export async function runSection3(ctx: FillContext): Promise<void> {
   }, data.addressLine1);
 
   await fillField(ctx, {
-    name: "Postal code",
-    section: SECTION,
-    labels: ["Postal code", "Post code", "Zip code"],
-    role: "textbox",
-    type: "postal",
-    names: ["clientPhysicalAddress"],
-    ids: ["clientPhysicalAddress_value"],
-  }, data.postalCode);
-
-  await fillField(ctx, {
     name: "Province",
     section: SECTION,
     labels: ["Province"],
@@ -132,7 +122,18 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientPhysicalAddressProvince"],
     ids: ["clientPhysicalAddressDdlClientProvince"],
-  }, "Gauteng");
+  }, data.province || "Gauteng");
+
+  await fillField(ctx, {
+    name: "Postal code",
+    section: SECTION,
+    labels: ["Postal code", "Post code", "Zip code"],
+    role: "textbox",
+    type: "postal",
+    postalHint: data.addressLine1,
+    names: ["clientPhysicalAddress"],
+    ids: ["clientPhysicalAddress_value"],
+  }, data.postalCode);
 
   await fillField(ctx, {
     name: "Date started living here",

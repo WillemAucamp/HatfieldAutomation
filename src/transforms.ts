@@ -47,6 +47,18 @@ export function transformMobile(raw: string | number | undefined | null): Transf
   return { value: digits, valid: true };
 }
 
+/** Search terms for angucomplete postal lookup — code alone often fails outside Gauteng. */
+export function postalSearchNeedles(postalCode: string, addressLine = ""): string[] {
+  const code = String(postalCode ?? "").trim();
+  const needles = [code];
+  const townMatch = String(addressLine).match(/\b([A-Za-z][A-Za-z\s-]+?)\s+\d{4}\s*$/);
+  if (townMatch) {
+    const town = townMatch[1].trim().split(/\s+/).pop() ?? townMatch[1].trim();
+    needles.push(`${code} ${town}`, `${town}, ${code}`, town);
+  }
+  return [...new Set(needles.filter(Boolean))];
+}
+
 /**
  * RSA ID numbers must be exactly 13 digits. Short/long/empty values are treated
  * as human error — the website will reject them, so we do not invent digits.

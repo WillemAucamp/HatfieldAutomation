@@ -2,7 +2,7 @@ import Fuse from "fuse.js";
 import type { Frame, Locator, Page } from "playwright";
 import type { ApplicantRecord, AppConfig, FieldStrategy, FieldWarning } from "./types.js";
 import { matchSelectOption, type FormScope } from "./formUtils.js";
-import { valuesMatch } from "./transforms.js";
+import { postalSearchNeedles, valuesMatch } from "./transforms.js";
 import { createWarning } from "./logger.js";
 import { randomDelay } from "./utils.js";
 
@@ -14,6 +14,8 @@ export interface FieldTarget {
   synonyms?: string[];
   role?: "textbox" | "combobox" | "radio" | "checkbox" | "spinbutton";
   type?: "text" | "select" | "radio" | "checkbox" | "postal";
+  /** Address line used to build richer postal autocomplete search terms. */
+  postalHint?: string;
   /** Optional stable name/id hints (used after label strategies) */
   names?: string[];
   ids?: string[];
@@ -353,22 +355,35 @@ async function fillPostalCode(
   form: FormScope,
   locator: Locator,
   value: string,
-  config: AppConfig
+  config: AppConfig,
+  addressHint = ""
 ): Promise<void> {
   await locator.waitFor({ state: "visible", timeout: 15000 });
   await locator.scrollIntoViewIfNeeded();
-  await locator.click({ timeout: 10000 });
-  await locator.fill("");
-  await locator.pressSequentially(value, { delay: 0 });
 
-  const row = form
-    .locator(".angucomplete-holder")
-    .filter({ has: locator })
-    .locator(".angucomplete-row")
-    .first();
-  await row.waitFor({ state: "visible", timeout: 10000 });
-  await row.click();
-  console.log("  [fieldResolver] Picked first postal autocomplete option");
+  const needles = postalSearchNeedles(value, addressHint);
+  for (const needle of needles) {
+    await locator.click({ timeout: 10000 });
+    await locator.fill("");
+    await locator.pressSequentially(needle, { delay: 40 });
+    await randomDelay(config);
+
+    const row = form
+      .locator(".angucomplete-holder")
+      .filter({ has: locator })
+      .locator(".angucomplete-row")
+      .first();
+    try {
+      await row.waitFor({ state: "visible", timeout: 8000 });
+      await row.click();
+      console.log(`  [fieldResolver] Picked postal autocomplete for "${needle}"`);
+      return;
+    } catch {
+      // Try the next search term.
+    }
+  }
+
+  throw new Error(`No postal autocomplete match for ${needles.join(" / ")}`);
 }
 
 export async function fillField(
@@ -424,7 +439,7 @@ export async function fillField(
         }
         break;
       case "postal":
-        await fillPostalCode(form, locator, value, config);
+        await fillPostalCode(form, locator, value, config, target.postalHint);
         break;
       default:
         await fillTextInput(locator, value, config);
@@ -452,7 +467,7 @@ export async function fillField(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     warnings.push(createWarning(target.name, target.section, msg));
-    if (config.strictMode) throw err;
+    if (config.strictMode || fieldType === "postal") throw err;
     return false;
   }
 }

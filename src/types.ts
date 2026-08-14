@@ -8,6 +8,7 @@ export interface ColumnMapping {
   mobile: string;
   addressLine1: string;
   postalCode: string;
+  province?: string;
   residencyStartDate: string;
   nextOfKinFullName?: string;
   nextOfKinName?: string;
@@ -17,6 +18,7 @@ export interface ColumnMapping {
   employerPhone: string;
   employerAddress: string;
   employerPostalCode: string;
+  employerProvince?: string;
   employmentStartDate: string;
   grossMonthly: string;
   nettSalary: string;
@@ -41,6 +43,7 @@ export interface ApplicantRecord {
   mobile: string;
   addressLine1: string;
   postalCode: string;
+  province: string;
   residencyStartDate: string;
   nextOfKinName: string;
   nextOfKinSurname: string;
@@ -49,6 +52,7 @@ export interface ApplicantRecord {
   employerPhone: string;
   employerAddress: string;
   employerPostalCode: string;
+  employerProvince: string;
   employmentStartDate: string;
   grossMonthly: string;
   nettSalary: string;
