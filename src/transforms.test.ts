@@ -7,6 +7,12 @@ describe("expandSelectNeedles", () => {
     assert.deepEqual(expandSelectNeedles("FNB"), ["FNB", "FIRSTRAND", "FIRST NATIONAL"]);
   });
 
+  it("maps Standardbank (one word) to Standard Bank search terms", () => {
+    const terms = expandSelectNeedles("Standardbank").map((t) => t.toLowerCase());
+    assert.ok(terms.includes("standard bank"));
+    assert.ok(terms.includes("standard"));
+  });
+
   it("maps Cheque/Current to current then cheque", () => {
     const terms = expandSelectNeedles("Cheque/Current").map((t) => t.toLowerCase());
     assert.ok(terms.includes("current"));

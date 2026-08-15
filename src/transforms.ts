@@ -226,7 +226,10 @@ export function expandSelectNeedles(raw: string): string[] {
     { keys: ["fnb", "first national", "firstrand"], terms: ["FIRSTRAND", "FIRST NATIONAL", "FNB"] },
     { keys: ["capitec"], terms: ["CAPITEC"] },
     { keys: ["nedbank"], terms: ["NEDBANK"] },
-    { keys: ["standard bank", "standard"], terms: ["STANDARD BANK", "STANDARD"] },
+    {
+      keys: ["standard bank", "standardbank", "standard"],
+      terms: ["STANDARD BANK", "STANDARD"],
+    },
     { keys: ["absa"], terms: ["ABSA"] },
     { keys: ["african bank"], terms: ["AFRICAN BANK"] },
     { keys: ["discovery"], terms: ["DISCOVERY"] },
