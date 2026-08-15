@@ -23,10 +23,10 @@ The default data source is this public Google Sheet:
 
 https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?usp=sharing
 
-CSV export URL (also in `config.json`):
+CSV URL (gviz; also in `config.json` — `/export` often 502s, and the fetcher retries/falls back):
 
 ```
-https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/export?format=csv&gid=0
+https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/gviz/tq?tqx=out:csv&gid=0
 ```
 
 Preview mapped rows without opening a browser:
@@ -40,9 +40,11 @@ npm run preview
 For a public sheet, use one of these formats:
 
 ```
+https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&gid={GID}
 https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}
-https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}
 ```
+
+Prefer **gviz**. `fetchSheetCsv` retries on 502/503 and falls back between gviz and export.
 
 Ensure the sheet column headers match `mapping.json` (or update that file to match your headers).
 
@@ -57,6 +59,10 @@ npm run dev
 
 # Process specific rows only (1-based, comma-separated)
 ROW_FILTER=2,3 npm run dev
+
+# Retry rows that already have Status (clears Status, then live-runs)
+npm run retry -- 18
+npm run retry -- 12 15
 
 # Headless mode
 HEADLESS=true npm run dev
@@ -99,7 +105,7 @@ Environment variables (`.env`):
 
 | Variable | Default | Description |
 |---|---|---|
-| `SHEET_CSV_URL` | live applicant sheet | Public Google Sheet CSV export URL |
+| `SHEET_CSV_URL` | live applicant sheet (gviz) | Public Google Sheet CSV URL (gviz preferred) |
 | `MAPPING_PATH` | `./mapping.json` | Column mapping file |
 | `DRY_RUN` | `false` | Fill only, no navigation past Section 5 |
 | `STRICT_MODE` | `false` | Abort that applicant on field lookup/verify failure |
@@ -116,6 +122,8 @@ Environment variables (`.env`):
 | `VERIFY_FILLS` | `false` | Read back every field after fill |
 
 CLI flags: `--dry-run`, `--strict`, `--no-strict`, `--skip-processed`, `--keep-last-open`, `--screenshots`, `--verify`, `--local-csv=path.csv`
+
+Retry helper: `npm run retry -- <row> [row...]` clears **Status** via the Apps Script webhook, drops matching local outcome records, then runs `dev` for those rows only.
 
 ## Pointing at a different sheet
 
@@ -214,13 +222,14 @@ The only automatic rewrite is the known Google Sheets artefact: a 9-digit mobile
 | `PERSONAL_NEXT_FAILED` | Next did not leave Personal Information |
 | `WORK_NEXT_FAILED` | Next did not leave Work & Salary |
 | `FINANCIAL_NEXT_FAILED` | Next did not reach Upload Documents |
+| `DROPDOWN_OPTION_MISSING` | Bank/account type (or other select) had no matching option — fails immediately |
 | `FINISH_NO_REFERENCE` | Finish clicked but no `ZAHTVW` popup |
 | `FORM_IFRAME_TIMEOUT` | Finance iframe did not load |
 | `SUBMIT_FAILED` | Unclassified runtime failure |
 
-Fix the sheet cell, then clear **Status** and re-run. Error codes are written to **Status** as `error ID_NOT_13_DIGITS`, and also stored in `run-log.json` / `run-log.csv`.
+Fix the sheet cell, then clear **Status** and re-run (`npm run retry -- <row>`). Error codes are written to **Status** as `error ID_NOT_13_DIGITS`, and also stored in `run-log.json` / `run-log.csv`.
 
-Postal code: type the sheet value, then select the first dropdown match. Province is always `Gauteng`. **Bank** and **Account type** come from the sheet (`Bank name`, `Account type`); nicknames such as FNB are matched to the live dropdown (e.g. Firstrand).
+Postal code: type the sheet value (and town from the address if needed), then select the first dropdown match. **Province** comes from the sheet. **Bank** and **Account type** come from the sheet (`Bank name`, `Account type`); nicknames such as FNB / Standardbank are matched to the live dropdown.
 
 ## Development
 

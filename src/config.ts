@@ -2,11 +2,9 @@ import { config as dotenvConfig } from "dotenv";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { AppConfig, ColumnMapping } from "./types.js";
+import { DEFAULT_SHEET_CSV_URL, DEFAULT_SHEET_ID, extractSheetId } from "./sheetCsv.js";
 
 dotenvConfig();
-
-const DEFAULT_SHEET_CSV_URL =
-  "https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/export?format=csv&gid=0";
 
 interface FileConfig {
   sheetCsvUrl?: string;
@@ -82,7 +80,8 @@ export function loadConfig(): AppConfig {
       fileConfig.sheetId ||
       extractSheetId(
         process.env.SHEET_CSV_URL || fileConfig.sheetCsvUrl || DEFAULT_SHEET_CSV_URL
-      ),
+      ) ||
+      DEFAULT_SHEET_ID,
     sheetWebhookUrl: process.env.SHEET_WEBHOOK_URL ?? fileConfig.sheetWebhookUrl ?? "",
     googleServiceAccountFile:
       process.env.GOOGLE_SERVICE_ACCOUNT_FILE ?? fileConfig.googleServiceAccountFile ?? "",
@@ -100,11 +99,6 @@ export function loadConfig(): AppConfig {
     loadedNumberColumn:
       process.env.LOADED_NUMBER_COLUMN || fileConfig.loadedNumberColumn || "Number",
   };
-}
-
-function extractSheetId(url: string): string {
-  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  return match?.[1] ?? "";
 }
 
 export function loadColumnMapping(mappingPath: string): ColumnMapping {

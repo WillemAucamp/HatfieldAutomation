@@ -119,6 +119,47 @@ export async function writeRowOutcomeToSheet(
   return { sheetStatus, durationSeconds: durationSeconds ?? 0, writtenToSheet, localPath, sheetError };
 }
 
+/** Clear Status (and optionally Timing) so a row can be retried. */
+export async function clearRowStatus(
+  config: AppConfig,
+  mapping: ColumnMapping,
+  rowIndex: number,
+  email = ""
+): Promise<void> {
+  const webhook = config.sheetWebhookUrl;
+  if (!webhook) {
+    throw new Error("SHEET_WEBHOOK_URL is required to clear Status before retry");
+  }
+  const statusColumn = mapping.status ?? "Status";
+  const timingColumn = mapping.timing ?? "Timing";
+  const parsed = await postWebhookJson(webhook, {
+    action: "writeStatus",
+    rowIndex,
+    email,
+    status: "",
+    timingSeconds: "",
+    statusColumn,
+    timingColumn,
+    sourceSheetId: config.sheetId,
+    emailColumn: mapping.email,
+  });
+  if (parsed.ok === false) {
+    throw new Error(parsed.error || `Failed to clear Status on row ${rowIndex}`);
+  }
+}
+
+/** Drop local outcome records so a retry is not skipped by a prior successful reference. */
+export function removeLocalOutcomesForRows(rowIndexes: number[]): number {
+  const path = join(process.cwd(), LOCAL_REFERENCES);
+  if (!existsSync(path) || rowIndexes.length === 0) return 0;
+  const existing = JSON.parse(readFileSync(path, "utf-8")) as Array<{ rowIndex?: number }>;
+  const drop = new Set(rowIndexes);
+  const kept = existing.filter((r) => !drop.has(Number(r.rowIndex)));
+  const removed = existing.length - kept.length;
+  writeFileSync(path, JSON.stringify(kept, null, 2) + "\n");
+  return removed;
+}
+
 async function postWebhookJson(
   url: string,
   payload: Record<string, unknown>

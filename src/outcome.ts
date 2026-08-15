@@ -38,6 +38,7 @@ export function classifyRuntimeError(error: string, sectionReached: number): str
   if (/apply for finance/i.test(text)) return "APPLY_CLICK_FAILED";
   if (/Finish was clicked but no application reference/i.test(text)) return "FINISH_NO_REFERENCE";
   if (/angucomplete-row/i.test(text)) return "POSTAL_AUTOCOMPLETE_FAILED";
+  if (/No postal autocomplete match/i.test(text)) return "POSTAL_AUTOCOMPLETE_FAILED";
   if (/No (dropdown )?option matching/i.test(text)) return "DROPDOWN_OPTION_MISSING";
   if (/Field not found after all lookup strategies/i.test(text)) return "FIELD_NOT_FOUND";
   if (/Strict mode:/i.test(text)) return "STRICT_VERIFY_FAILED";

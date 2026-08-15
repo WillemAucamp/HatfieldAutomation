@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { join } from "node:path";
 import { loadConfig, loadColumnMapping } from "./config.js";
@@ -254,7 +255,7 @@ async function persistOutcome(
   }
 }
 
-async function main(): Promise<void> {
+export async function runBatchMain(): Promise<void> {
   const config = loadConfig();
 
   const localCsvArg = process.argv.find((a) => a.startsWith("--local-csv"));
@@ -330,7 +331,9 @@ async function main(): Promise<void> {
   console.log(`\nBatch complete. Processed ${applicants.length} row(s). Log: ${logger.getRunDir()}`);
 }
 
-main().catch((err) => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  runBatchMain().catch((err) => {
+    console.error("Fatal error:", err);
+    process.exit(1);
+  });
+}

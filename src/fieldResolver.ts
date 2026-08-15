@@ -467,7 +467,7 @@ export async function fillField(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     warnings.push(createWarning(target.name, target.section, msg));
-    if (config.strictMode || fieldType === "postal") throw err;
+    if (config.strictMode || fieldType === "postal" || fieldType === "select") throw err;
     return false;
   }
 }

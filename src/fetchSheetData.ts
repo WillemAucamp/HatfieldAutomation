@@ -12,6 +12,7 @@ import {
   validateIdNumber,
 } from "./transforms.js";
 import { successfulReferenceFromCell, isStatusPopulated } from "./outcome.js";
+import { fetchSheetCsv } from "./sheetCsv.js";
 
 const PROCESSED_COLUMN = "Processed";
 const PROCESSED_LOG_FILE = "processed-rows.json";
@@ -324,11 +325,7 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
   if (options.localCsvPath && existsSync(options.localCsvPath)) {
     csvText = readFileSync(options.localCsvPath, "utf-8");
   } else if (options.csvUrl) {
-    const response = await fetch(options.csvUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch sheet CSV: ${response.status} ${response.statusText}`);
-    }
-    csvText = await response.text();
+    csvText = await fetchSheetCsv(options.csvUrl);
   } else {
     throw new Error("Either SHEET_CSV_URL or a local CSV path must be provided");
   }
