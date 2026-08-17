@@ -1,4 +1,6 @@
 export interface ColumnMapping {
+  /** Row number column (A); row 2 = 1. Maintained automatically before batch runs. */
+  nr?: string;
   email: string;
   /** Combined "First Last" column; split on the last space when firstName/surname are omitted. */
   fullName?: string;

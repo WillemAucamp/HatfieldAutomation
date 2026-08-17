@@ -9,8 +9,9 @@
  * 4. Put the /exec URL in .env as SHEET_WEBHOOK_URL
  *
  * Actions
- *   appendLoaded — add/update Name + cellphone on the loaded-clients sheet
- *   writeStatus  — write Status + Timing on the applicant source sheet
+ *   appendLoaded  — add/update Name + cellphone on the loaded-clients sheet
+ *   writeStatus   — write Status + Timing on the applicant source sheet
+ *   renumberRows  — fill column A with 1, 2, 3… (row 2 = 1; row 1 = header)
  *
  * The account that deploys this must be able to edit both spreadsheets.
  */
@@ -28,6 +29,9 @@ function doPost(e) {
     }
     if (action === "writeStatus") {
       return json_(writeStatus_(data));
+    }
+    if (action === "renumberRows") {
+      return json_(renumberRows_(data));
     }
     return json_({ ok: false, error: "Unknown action: " + action });
   } catch (err) {
@@ -142,6 +146,31 @@ function ensureHeaders_(sheet, names) {
     ensureColumn_(sheet, headers, names[i]);
   }
   return headers;
+}
+
+function renumberRows_(data) {
+  var ss = SpreadsheetApp.openById(data.sourceSheetId || SOURCE_SHEET_ID);
+  var sheet = ss.getSheets()[0];
+  var nrColumn = data.nrColumn || "NR";
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var nrCol = ensureColumn_(sheet, headers, nrColumn);
+  if (nrCol !== 1) {
+    return { ok: false, error: "NR column must be column A (found column " + nrCol + ")" };
+  }
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return { ok: true, count: 0, message: "No data rows to number" };
+  }
+
+  var count = lastRow - 1;
+  var values = [];
+  for (var i = 1; i <= count; i++) {
+    values.push([i]);
+  }
+  sheet.getRange(2, 1, lastRow, 1).setValues(values);
+  return { ok: true, count: count, firstRow: 2, lastRow: lastRow };
 }
 
 function ensureColumn_(sheet, headers, name) {

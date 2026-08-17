@@ -163,7 +163,7 @@ export function removeLocalOutcomesForRows(rowIndexes: number[]): number {
 async function postWebhookJson(
   url: string,
   payload: Record<string, unknown>
-): Promise<{ ok?: boolean; skipped?: boolean; updated?: boolean; error?: string; row?: number }> {
+): Promise<{ ok?: boolean; skipped?: boolean; updated?: boolean; error?: string; row?: number; count?: number }> {
   // Apps Script web apps 302 to googleusercontent.com. Following that
   // redirect with POST yields 405; the JSON result must be fetched with GET.
   const response = await fetch(url, {
@@ -202,6 +202,7 @@ function parseWebhookBody(body: string): {
   updated?: boolean;
   error?: string;
   row?: number;
+  count?: number;
 } {
   if (!body.trim()) {
     return { ok: true };
@@ -213,6 +214,7 @@ function parseWebhookBody(body: string): {
       updated?: boolean;
       error?: string;
       row?: number;
+      count?: number;
     };
   } catch {
     if (/<!doctype html/i.test(body) || /authorization/i.test(body)) {
@@ -377,6 +379,113 @@ export interface LoadedClientWrite {
   skipped?: boolean;
   updated?: boolean;
   error?: string;
+}
+
+export interface RenumberRowsResult {
+  ok: boolean;
+  count?: number;
+  error?: string;
+}
+
+/** Fill column A (NR) with 1, 2, 3… — row 2 = 1, row 1 = header. */
+export async function renumberSheetRows(
+  config: AppConfig,
+  mapping: ColumnMapping
+): Promise<RenumberRowsResult> {
+  const nrColumn = mapping.nr ?? "NR";
+
+  if (config.sheetWebhookUrl) {
+    try {
+      const parsed = await postWebhookJson(config.sheetWebhookUrl, {
+        action: "renumberRows",
+        sourceSheetId: config.sheetId,
+        nrColumn,
+      });
+      if (parsed.ok === false) {
+        const error = parsed.error || "Webhook renumberRows returned ok=false";
+        console.warn(`  [sheetWriter] Renumber NR failed: ${error}`);
+        return { ok: false, error };
+      }
+      const count = typeof parsed.count === "number" ? parsed.count : undefined;
+      console.log(
+        `  [sheetWriter] NR column renumbered${count != null ? ` (${count} row(s), 1 on row 2)` : ""}`
+      );
+      return { ok: true, count };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      console.warn(`  [sheetWriter] Renumber NR failed: ${error}`);
+      return { ok: false, error };
+    }
+  }
+
+  if (config.googleServiceAccountFile) {
+    try {
+      const count = await renumberViaSheetsApi(config, nrColumn);
+      console.log(`  [sheetWriter] NR column renumbered (${count} row(s), 1 on row 2)`);
+      return { ok: true, count };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      console.warn(`  [sheetWriter] Renumber NR failed: ${error}`);
+      return { ok: false, error };
+    }
+  }
+
+  const error =
+    "No sheet write credentials. Set SHEET_WEBHOOK_URL (Apps Script) or GOOGLE_SERVICE_ACCOUNT_FILE.";
+  console.warn(`  [sheetWriter] ${error}`);
+  return { ok: false, error };
+}
+
+async function renumberViaSheetsApi(config: AppConfig, nrColumn: string): Promise<number> {
+  const { google } = await import("googleapis");
+  const keyFile = resolve(config.googleServiceAccountFile ?? "");
+  if (!existsSync(keyFile)) {
+    throw new Error(`Service account file not found: ${keyFile}`);
+  }
+  const spreadsheetId = config.sheetId;
+  if (!spreadsheetId) {
+    throw new Error("SHEET_ID is not set");
+  }
+
+  const auth = new google.auth.GoogleAuth({
+    keyFile,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+  const sheets = google.sheets({ version: "v4", auth });
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const sheetTitle = meta.data.sheets?.[0]?.properties?.title;
+  if (!sheetTitle) throw new Error("Could not read the first worksheet title");
+
+  const headerRes = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${sheetTitle}'!1:1`,
+  });
+  const headers = [...(headerRes.data.values?.[0] ?? [])];
+  if (headers[0]?.trim() !== nrColumn) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `'${sheetTitle}'!A1`,
+      valueInputOption: "RAW",
+      requestBody: { values: [[nrColumn]] },
+    });
+  }
+
+  const dataRes = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${sheetTitle}'!A:Z`,
+  });
+  const lastRow = (dataRes.data.values ?? []).length;
+  if (lastRow < 2) return 0;
+
+  const count = lastRow - 1;
+  const values = Array.from({ length: count }, (_, i) => [i + 1]);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${sheetTitle}'!A2:A${lastRow}`,
+    valueInputOption: "RAW",
+    requestBody: { values },
+  });
+  return count;
 }
 
 /** Upsert Name + cellphone on the loaded-clients spreadsheet after a successful submit. */

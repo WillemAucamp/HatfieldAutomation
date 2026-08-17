@@ -20,7 +20,7 @@ import {
   runSection4,
   runSection5,
 } from "./sections/index.js";
-import { appendLoadedClient, writeRowOutcomeToSheet } from "./sheetWriter.js";
+import { appendLoadedClient, renumberSheetRows, writeRowOutcomeToSheet } from "./sheetWriter.js";
 import type {
   ApplicantRecord,
   ApplicantRunResult,
@@ -274,6 +274,11 @@ export async function runBatchMain(): Promise<void> {
   }
 
   const mapping = loadColumnMapping(config.mappingPath);
+
+  const renumber = await renumberSheetRows(config, mapping);
+  if (!renumber.ok) {
+    console.warn(`Could not renumber NR column: ${renumber.error ?? "unknown error"}`);
+  }
 
   console.log(`Fetching applicant data${config.dryRun ? " (DRY RUN)" : ""}...`);
   const applicants = await fetchSheetData({
