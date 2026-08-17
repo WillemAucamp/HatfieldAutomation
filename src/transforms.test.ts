@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandSelectNeedles, valuesMatch } from "./transforms.js";
+import { expandSelectNeedles, splitNextOfKinName, valuesMatch } from "./transforms.js";
 
 describe("expandSelectNeedles", () => {
   it("maps FNB to Firstrand search terms", () => {
@@ -32,5 +32,28 @@ describe("valuesMatch bank aliases", () => {
 
   it("treats Capitec as matching CAPITEC BANK LIMITED", () => {
     assert.equal(valuesMatch("Capitec", "CAPITEC BANK LIMITED"), true);
+  });
+});
+
+describe("splitNextOfKinName", () => {
+  it("duplicates a single given name as the surname", () => {
+    assert.deepEqual(splitNextOfKinName("Phuluso"), {
+      firstName: "Phuluso",
+      surname: "Phuluso",
+      valid: true,
+    });
+  });
+
+  it("still splits a two-word next of kin name", () => {
+    assert.deepEqual(splitNextOfKinName("Phuluso Nevombe"), {
+      firstName: "Phuluso",
+      surname: "Nevombe",
+      valid: true,
+    });
+  });
+
+  it("still rejects an empty next of kin name", () => {
+    assert.equal(splitNextOfKinName("").valid, false);
+    assert.equal(splitNextOfKinName("").code, "NEXT_OF_KIN_EMPTY");
   });
 });

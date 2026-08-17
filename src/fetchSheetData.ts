@@ -7,6 +7,7 @@ import {
   requireEmail,
   requireText,
   splitFullName,
+  splitNextOfKinName,
   transformMobile,
   validateDateFormat,
   validateIdNumber,
@@ -98,15 +99,11 @@ function resolveNextOfKin(
   const surnameFromCol = mapping.nextOfKinSurname
     ? getCell(row, mapping.nextOfKinSurname)
     : "";
-  if (
-    firstFromCol &&
-    surnameFromCol &&
-    mapping.nextOfKinName !== mapping.nextOfKinSurname
-  ) {
+  if (firstFromCol && mapping.nextOfKinName !== mapping.nextOfKinSurname) {
     return {
       firstName: firstFromCol,
-      surname: surnameFromCol,
-      original: `${firstFromCol} ${surnameFromCol}`,
+      surname: surnameFromCol || firstFromCol,
+      original: `${firstFromCol} ${surnameFromCol || firstFromCol}`.trim(),
     };
   }
 
@@ -114,12 +111,7 @@ function resolveNextOfKin(
     (mapping.nextOfKinFullName ? getCell(row, mapping.nextOfKinFullName) : "") ||
     firstFromCol ||
     surnameFromCol;
-  const split = splitFullName(
-    combined,
-    "NEXT_OF_KIN_EMPTY",
-    "NEXT_OF_KIN_MISSING_SURNAME",
-    "Next of kin name"
-  );
+  const split = splitNextOfKinName(combined);
   return {
     firstName: split.firstName,
     surname: split.surname,

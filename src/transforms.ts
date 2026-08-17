@@ -169,6 +169,23 @@ export function splitFullName(
   };
 }
 
+/**
+ * Next of kin must still have a first name. If the sheet only has one word,
+ * reuse it as the surname so the form can be submitted.
+ */
+export function splitNextOfKinName(raw: string | undefined | null): SplitNameResult {
+  const split = splitFullName(
+    raw,
+    "NEXT_OF_KIN_EMPTY",
+    "NEXT_OF_KIN_MISSING_SURNAME",
+    "Next of kin name"
+  );
+  if (!split.valid && split.code === "NEXT_OF_KIN_MISSING_SURNAME" && split.firstName) {
+    return { firstName: split.firstName, surname: split.firstName, valid: true };
+  }
+  return split;
+}
+
 export function requireText(
   raw: string | undefined | null,
   code: string,

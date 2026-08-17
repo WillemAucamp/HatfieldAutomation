@@ -214,7 +214,7 @@ The only automatic rewrite is the known Google Sheets artefact: a 9-digit mobile
 | `MOBILE_EMPTY` | Mobile number is empty |
 | `EMAIL_EMPTY` / `EMAIL_INVALID` | Missing or malformed email |
 | `NAME_EMPTY` / `NAME_MISSING_SURNAME` | Applicant name missing or not "First Last" |
-| `NEXT_OF_KIN_EMPTY` / `NEXT_OF_KIN_MISSING_SURNAME` | Next of kin name missing or incomplete |
+| `NEXT_OF_KIN_EMPTY` | Next of kin name is empty. A single given name is duplicated as the surname. |
 | `RESIDENCY_DATE_FORMAT` / `EMPLOYMENT_DATE_FORMAT` | Date is not `MM DD YYYY` |
 | `ACCOUNT_HOLDER_EMPTY` | Account holder is empty |
 | `BANK_EMPTY` | Bank name cell is empty |
