@@ -6,6 +6,7 @@ import {
   requireAmount,
   requireEmail,
   requireText,
+  restorePostalCode,
   splitFullName,
   splitNextOfKinName,
   transformMobile,
@@ -159,6 +160,7 @@ function mapRow(
   const postalRaw = getCell(row, mapping.postalCode);
   const postalResult = requireText(postalRaw, "POSTAL_EMPTY", "Postal code is empty");
   pushError(errors, postalResult, "postalCode", postalRaw);
+  if (postalResult.valid) postalResult.value = restorePostalCode(postalResult.value);
 
   const residencyRaw = getCell(row, mapping.residencyStartDate);
   const residencyResult = validateDateFormat(
@@ -215,6 +217,9 @@ function mapRow(
     "Employer postal code is empty"
   );
   pushError(errors, employerPostalResult, "employerPostalCode", employerPostalRaw);
+  if (employerPostalResult.valid) {
+    employerPostalResult.value = restorePostalCode(employerPostalResult.value);
+  }
 
   const provinceRaw = mapping.province ? getCell(row, mapping.province) : getCell(row, "Province");
   const provinceResult = requireText(provinceRaw, "PROVINCE_EMPTY", "Province is empty");

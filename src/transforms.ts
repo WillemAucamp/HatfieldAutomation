@@ -48,13 +48,29 @@ export function transformMobile(raw: string | number | undefined | null): Transf
 }
 
 /** Search terms for angucomplete postal lookup — code alone often fails outside Gauteng. */
+export function restorePostalCode(raw: string | number | undefined | null): string {
+  const original = String(raw ?? "").trim();
+  const digits = digitsOnly(raw);
+  // Sheets strips leading zeros from numeric postal cells (0300 → 300).
+  if (digits.length > 0 && digits.length < 4) {
+    return digits.padStart(4, "0");
+  }
+  return original || digits;
+}
+
 export function postalSearchNeedles(postalCode: string, addressLine = ""): string[] {
-  const code = String(postalCode ?? "").trim();
+  const code = restorePostalCode(postalCode);
   const needles = [code];
-  const townMatch = String(addressLine).match(/\b([A-Za-z][A-Za-z\s-]+?)\s+\d{4}\s*$/);
-  if (townMatch) {
-    const town = townMatch[1].trim().split(/\s+/).pop() ?? townMatch[1].trim();
+  const address = String(addressLine ?? "").trim();
+  const townAtEnd = address.match(/\b([A-Za-z][A-Za-z\s-]+?)\s+\d{4}\s*$/);
+  if (townAtEnd) {
+    const town = townAtEnd[1].trim().split(/\s+/).pop() ?? townAtEnd[1].trim();
     needles.push(`${code} ${town}`, `${town}, ${code}`, town);
+  } else {
+    const words = address.match(/[A-Za-z][A-Za-z-]+/g) ?? [];
+    for (const word of words.slice(-2).reverse()) {
+      needles.push(`${code} ${word}`, word);
+    }
   }
   return [...new Set(needles.filter(Boolean))];
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandSelectNeedles, splitNextOfKinName, valuesMatch } from "./transforms.js";
+import { expandSelectNeedles, restorePostalCode, splitNextOfKinName, valuesMatch } from "./transforms.js";
 
 describe("expandSelectNeedles", () => {
   it("maps FNB to Firstrand search terms", () => {
@@ -55,5 +55,16 @@ describe("splitNextOfKinName", () => {
   it("still rejects an empty next of kin name", () => {
     assert.equal(splitNextOfKinName("").valid, false);
     assert.equal(splitNextOfKinName("").code, "NEXT_OF_KIN_EMPTY");
+  });
+});
+
+describe("restorePostalCode", () => {
+  it("pads a 3-digit Sheets-stripped code to 4 digits", () => {
+    assert.equal(restorePostalCode("300"), "0300");
+    assert.equal(restorePostalCode(300), "0300");
+  });
+
+  it("leaves a 4-digit code unchanged", () => {
+    assert.equal(restorePostalCode("1685"), "1685");
   });
 });
