@@ -1,6 +1,6 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
-import { clickNext, screenshotSection, waitForSelectorVisible } from "../formUtils.js";
+import { clickNext, screenshotSection, syncAddressFromPostal, waitForSelectorVisible } from "../formUtils.js";
 
 const SECTION = "section4";
 
@@ -62,16 +62,6 @@ export async function runSection4(ctx: FillContext): Promise<void> {
   }, data.employerPhone);
 
   await fillField(ctx, {
-    name: "Work address line 1",
-    section: SECTION,
-    labels: ["Address line 1", "Work address", "Employer address"],
-    role: "textbox",
-    type: "text",
-    names: ["clientEmpAddressAddressLine1"],
-    ids: ["clientEmpAddressTxtClientAddressLine1"],
-  }, data.employerAddress);
-
-  await fillField(ctx, {
     name: "Work province",
     section: SECTION,
     labels: ["Province"],
@@ -92,6 +82,21 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     names: ["clientEmpAddress"],
     ids: ["clientEmpAddress_value"],
   }, data.employerPostalCode);
+
+  const workAddressLine = await syncAddressFromPostal(
+    form,
+    "clientEmpAddress_value",
+    data.employerAddress
+  );
+  await fillField(ctx, {
+    name: "Work address line 1",
+    section: SECTION,
+    labels: ["Address line 1", "Work address", "Employer address"],
+    role: "textbox",
+    type: "text",
+    names: ["clientEmpAddressAddressLine1"],
+    ids: ["clientEmpAddressTxtClientAddressLine1"],
+  }, workAddressLine);
 
   await waitForSelectorVisible(form, 'input[id*="empAddressStartDate"]');
   await fillField(ctx, {

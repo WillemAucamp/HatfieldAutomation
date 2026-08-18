@@ -1,6 +1,6 @@
 import type { Frame, Locator, Page } from "playwright";
 import type { AppConfig } from "./types.js";
-import { expandSelectNeedles } from "./transforms.js";
+import { expandSelectNeedles, normalizeAddressLine } from "./transforms.js";
 import { randomDelay } from "./utils.js";
 
 const FORM_FRAME_PATTERN = /seritisolutions/i;
@@ -71,6 +71,22 @@ export async function clickNext(form: FormScope, config: AppConfig): Promise<voi
   const next = form.locator("button:visible").filter({ hasText: /^next$/i }).first();
   await next.waitFor({ state: "visible", timeout: 15000 });
   await next.click();
+}
+
+/** After postal autocomplete, derive a short address line from the selected suburb. */
+export async function syncAddressFromPostal(
+  form: FormScope,
+  postalFieldIdSuffix: string,
+  fallback: string
+): Promise<string> {
+  const postal = await form
+    .locator(`[id$="${postalFieldIdSuffix}"]`)
+    .filter({ visible: true })
+    .first()
+    .inputValue()
+    .catch(() => "");
+  const suburb = postal.split(",")[0]?.trim();
+  return suburb || normalizeAddressLine(fallback);
 }
 
 export async function screenshotSection(

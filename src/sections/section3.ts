@@ -1,20 +1,8 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
-import { clickNext, screenshotSection, waitForSelectorVisible, type FormScope } from "../formUtils.js";
-import { normalizeAddressLine } from "../transforms.js";
+import { clickNext, screenshotSection, syncAddressFromPostal, waitForSelectorVisible } from "../formUtils.js";
 
 const SECTION = "section3";
-
-async function syncAddressFromPostal(form: FormScope, fallback: string): Promise<string> {
-  const postal = await form
-    .locator('[id$="clientPhysicalAddress_value"]')
-    .filter({ visible: true })
-    .first()
-    .inputValue()
-    .catch(() => "");
-  const suburb = postal.split(",")[0]?.trim();
-  return suburb || normalizeAddressLine(fallback);
-}
 
 export async function runSection3(ctx: FillContext): Promise<void> {
   const { page, form, config } = ctx;
@@ -138,7 +126,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     ids: ["clientPhysicalAddress_value"],
   }, data.postalCode);
 
-  const addressLine = await syncAddressFromPostal(form, data.addressLine1);
+  const addressLine = await syncAddressFromPostal(form, "clientPhysicalAddress_value", data.addressLine1);
   await fillField(ctx, {
     name: "Address line 1",
     section: SECTION,
