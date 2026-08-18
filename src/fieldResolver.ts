@@ -377,6 +377,7 @@ async function fillDateInput(locator: Locator, value: string, config: AppConfig)
   if (!finalValue.trim()) {
     throw new Error(`Date field did not accept "${formatted}" (from "${value}")`);
   }
+  console.log(`  [fieldResolver] Set date to "${finalValue}"`);
 }
 
 async function fillPostalCode(

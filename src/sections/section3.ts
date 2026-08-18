@@ -136,23 +136,6 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     ids: ["clientPhysicalAddress_value"],
   }, data.postalCode);
 
-  await waitForSelectorVisible(form, '[id$="txtClientPhysicalAddressDate"]');
-
-  await fillField(ctx, {
-    name: "Date started living here",
-    section: SECTION,
-    labels: [
-      "Date started living here",
-      "Living here since",
-      "Residency start",
-      "When did you start living",
-    ],
-    role: "textbox",
-    type: "date",
-    names: ["clientPhysicalAddressDate"],
-    ids: ["txtClientPhysicalAddressDate"],
-  }, data.residencyStartDate);
-
   await fillField(ctx, {
     name: "Residential status",
     section: SECTION,
@@ -214,6 +197,22 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     names: ["relativeRelation"],
     ids: ["ddlRelativeRelation"],
   }, "Sibling");
+
+  await waitForSelectorVisible(form, '[id$="txtClientPhysicalAddressDate"]');
+  await fillField(ctx, {
+    name: "Date started living here",
+    section: SECTION,
+    labels: [
+      "Date started living here",
+      "Living here since",
+      "Residency start",
+      "When did you start living",
+    ],
+    role: "textbox",
+    type: "date",
+    names: ["clientPhysicalAddressDate"],
+    ids: ["txtClientPhysicalAddressDate"],
+  }, data.residencyStartDate);
 
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 
