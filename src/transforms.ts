@@ -152,6 +152,13 @@ export function postalSearchNeedles(
   return [...new Set(needles.filter(Boolean))];
 }
 
+/** Shorten noisy military-base addresses so they pass suburb/postal validation. */
+export function normalizeAddressLine(address: string): string {
+  const trimmed = String(address ?? "").trim();
+  if (/thaba\s+tshwane/i.test(trimmed)) return "Thaba Tshwane Military Base";
+  return trimmed;
+}
+
 const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** Convert sheet dates (`MM DD YYYY`) to the finance form date-picker display (`DD Mon YYYY`). */

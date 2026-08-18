@@ -1,6 +1,7 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
 import { clickNext, screenshotSection, waitForSelectorVisible } from "../formUtils.js";
+import { normalizeAddressLine } from "../transforms.js";
 
 const SECTION = "section3";
 
@@ -112,7 +113,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "text",
     names: ["clientPhysicalAddressAddressLine1"],
     ids: ["clientPhysicalAddressTxtClientAddressLine1"],
-  }, data.addressLine1);
+  }, normalizeAddressLine(data.addressLine1));
 
   await fillField(ctx, {
     name: "Province",
@@ -213,6 +214,12 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     names: ["clientPhysicalAddressDate"],
     ids: ["txtClientPhysicalAddressDate"],
   }, data.residencyStartDate);
+
+  const dateLocator = form.locator('[id$="txtClientPhysicalAddressDate"]').filter({ visible: true }).first();
+  const dateValue = await dateLocator.inputValue().catch(() => "");
+  if (!dateValue.trim()) {
+    throw new Error(`Residency date empty before Next (expected ${data.residencyStartDate})`);
+  }
 
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 
