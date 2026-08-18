@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandSelectNeedles, formatDateForForm, postalSearchNeedles, restorePostalCode, splitNextOfKinName, valuesMatch } from "./transforms.js";
+import { expandSelectNeedles, fixIdCheckDigit, formatDateForForm, isValidSaIdChecksum, postalSearchNeedles, restorePostalCode, splitNextOfKinName, validateIdNumber, valuesMatch } from "./transforms.js";
 
 describe("expandSelectNeedles", () => {
   it("maps FNB to Firstrand search terms", () => {
@@ -66,6 +66,14 @@ describe("restorePostalCode", () => {
 
   it("leaves a 4-digit code unchanged", () => {
     assert.equal(restorePostalCode("1685"), "1685");
+  });
+});
+
+describe("validateIdNumber checksum", () => {
+  it("fixes a wrong check digit when the first 12 digits are valid", () => {
+    assert.equal(fixIdCheckDigit("9301255297089"), "9301255297081");
+    assert.equal(validateIdNumber("9301255297089").value, "9301255297081");
+    assert.equal(validateIdNumber("9301255297089").valid, true);
   });
 });
 

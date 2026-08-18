@@ -172,7 +172,34 @@ export function formatDateForForm(raw: string | undefined | null): string {
 /**
  * RSA ID numbers must be exactly 13 digits. Short/long/empty values are treated
  * as human error — the website will reject them, so we do not invent digits.
+ * When the first 12 digits are fine but the check digit is wrong, we fix only
+ * that last digit (common spreadsheet typo).
  */
+export function isValidSaIdChecksum(digits: string): boolean {
+  if (digits.length !== 13) return false;
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    let digit = Number(digits[i]);
+    if (i % 2 === 0) {
+      digit *= 2;
+      if (digit > 9) digit = Math.floor(digit / 10) + (digit % 10);
+    }
+    sum += digit;
+  }
+  const check = (10 - (sum % 10)) % 10;
+  return check === Number(digits[12]);
+}
+
+export function fixIdCheckDigit(digits: string): string | null {
+  if (digits.length !== 13 || isValidSaIdChecksum(digits)) return null;
+  const base = digits.slice(0, 12);
+  for (let check = 0; check <= 9; check++) {
+    const candidate = `${base}${check}`;
+    if (isValidSaIdChecksum(candidate)) return candidate;
+  }
+  return null;
+}
+
 export function validateIdNumber(raw: string | number | undefined | null): TransformResult {
   const original = String(raw ?? "").trim();
   let source = original;
@@ -198,6 +225,19 @@ export function validateIdNumber(raw: string | number | undefined | null): Trans
       valid: false,
       code: "ID_NOT_13_DIGITS",
       message: `ID number is not 13 digits (got ${digits.length}: "${original}")`,
+    };
+  }
+
+  if (!isValidSaIdChecksum(digits)) {
+    const fixed = fixIdCheckDigit(digits);
+    if (fixed) {
+      return { value: fixed, valid: true };
+    }
+    return {
+      value: original,
+      valid: false,
+      code: "ID_INVALID_CHECKSUM",
+      message: `ID number failed RSA checksum: "${original}"`,
     };
   }
 
