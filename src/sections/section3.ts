@@ -137,15 +137,21 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     ids: ["clientPhysicalAddress_value"],
   }, data.postalCode);
 
+  await waitForSelectorVisible(form, '[id$="txtClientPhysicalAddressDate"]');
   await fillField(ctx, {
-    name: "Residential status",
+    name: "Date started living here",
     section: SECTION,
-    labels: ["Residential status", "Residential Status"],
-    role: "combobox",
-    type: "select",
-    names: ["clientBondResidentialStatus"],
-    ids: ["ddlClientBond_ResidentialStatus"],
-  }, "Tenant");
+    labels: [
+      "Date started living here",
+      "Living here since",
+      "Residency start",
+      "When did you start living",
+    ],
+    role: "textbox",
+    type: "date",
+    names: ["clientPhysicalAddressDate"],
+    ids: ["txtClientPhysicalAddressDate"],
+  }, data.residencyStartDate);
 
   await fillField(ctx, {
     name: "Marital status",
@@ -198,28 +204,6 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     names: ["relativeRelation"],
     ids: ["ddlRelativeRelation"],
   }, "Sibling");
-
-  await waitForSelectorVisible(form, '[id$="txtClientPhysicalAddressDate"]');
-  await fillField(ctx, {
-    name: "Date started living here",
-    section: SECTION,
-    labels: [
-      "Date started living here",
-      "Living here since",
-      "Residency start",
-      "When did you start living",
-    ],
-    role: "textbox",
-    type: "date",
-    names: ["clientPhysicalAddressDate"],
-    ids: ["txtClientPhysicalAddressDate"],
-  }, data.residencyStartDate);
-
-  const dateLocator = form.locator('[id$="txtClientPhysicalAddressDate"]').filter({ visible: true }).first();
-  const dateValue = await dateLocator.inputValue().catch(() => "");
-  if (!dateValue.trim()) {
-    throw new Error(`Residency date empty before Next (expected ${data.residencyStartDate})`);
-  }
 
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 

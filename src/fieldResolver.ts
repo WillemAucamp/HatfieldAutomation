@@ -355,35 +355,8 @@ async function selectRadioInGroup(
 
 async function fillDateInput(locator: Locator, value: string, config: AppConfig): Promise<void> {
   const formatted = formatDateForForm(value);
-  await locator.waitFor({ state: "visible", timeout: 15000 });
-  await locator.scrollIntoViewIfNeeded();
-  await locator.click();
-  await locator.fill("");
-  await locator.evaluate((el, val) => {
-    const input = el as HTMLInputElement;
-    input.value = val;
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    input.dispatchEvent(new Event("blur", { bubbles: true }));
-    const win = window as Window & { angular?: { element: (el: Element) => { data: (key: string) => { $setViewValue: (v: string) => void; $render: () => void } | undefined } } };
-    const ng = win.angular;
-    if (ng) {
-      const ctrl = ng.element(el).data("$ngModelController");
-      ctrl?.$setViewValue(val);
-      ctrl?.$render();
-    }
-  }, formatted);
-  await randomDelay(config);
-  await locator.press("Tab").catch(() => undefined);
-  await randomDelay(config);
-
-  let finalValue = await locator.inputValue().catch(() => "");
-  if (!finalValue.trim()) {
-    await locator.fill(formatted);
-    await locator.press("Tab");
-    await randomDelay(config);
-    finalValue = await locator.inputValue().catch(() => "");
-  }
+  await fillTextInput(locator, formatted, config);
+  const finalValue = await locator.inputValue().catch(() => "");
   if (!finalValue.trim()) {
     throw new Error(`Date field did not accept "${formatted}" (from "${value}")`);
   }
