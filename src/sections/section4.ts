@@ -93,11 +93,17 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     ids: ["clientEmpAddress_value"],
   }, data.employerPostalCode);
 
-  await waitForSelectorVisible(form, '[id*="empAddressStartDate"]');
+  await waitForSelectorVisible(form, 'input[id*="empAddressStartDate"]');
   await fillField(ctx, {
     name: "Employment start date",
     section: SECTION,
-    labels: ["Employment start date", "Employed since", "Start date", "Date started employment"],
+    labels: [
+      "When did you start working here",
+      "Employment start date",
+      "Employed since",
+      "Start date",
+      "Date started employment",
+    ],
     role: "textbox",
     type: "date",
     names: ["employerStartDate"],

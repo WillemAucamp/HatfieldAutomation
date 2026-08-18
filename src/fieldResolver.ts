@@ -241,6 +241,9 @@ async function verifyFill(
   if (fieldType === "radio" || fieldType === "checkbox") {
     return actual === "checked";
   }
+  if (fieldType === "date") {
+    return valuesMatch(formatDateForForm(expected), actual) || valuesMatch(expected, actual);
+  }
   return valuesMatch(expected, actual);
 }
 
@@ -353,11 +356,54 @@ async function selectRadioInGroup(
   await randomDelay(config);
 }
 
+async function resolveDateLocator(
+  form: FormScope,
+  target: FieldTarget,
+  fallback: Locator
+): Promise<Locator> {
+  const idHint = target.ids?.[0];
+  if (idHint) {
+    const inputById = form.locator(`input[id*="${idHint}"]`).filter({ visible: true });
+    if ((await inputById.count()) > 0) return inputById.first();
+    const anyById = form.locator(`[id*="${idHint}"]`).filter({ visible: true });
+    if ((await anyById.count()) > 0) return anyById.first();
+  }
+  return fallback;
+}
+
+async function readDateValue(locator: Locator): Promise<string> {
+  return (await locator.inputValue().catch(() => "")).trim();
+}
+
 async function fillDateInput(locator: Locator, value: string, config: AppConfig): Promise<void> {
   const formatted = formatDateForForm(value);
-  await fillTextInput(locator, formatted, config);
-  const finalValue = await locator.inputValue().catch(() => "");
-  if (!finalValue.trim()) {
+  await locator.waitFor({ state: "visible", timeout: 15000 });
+  await locator.scrollIntoViewIfNeeded();
+
+  const typeDate = async (): Promise<string> => {
+    await locator.click({ timeout: 10000 });
+    await locator.fill("");
+    await locator.pressSequentially(formatted, { delay: 35 });
+    await locator.evaluate((el) => {
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      el.dispatchEvent(new Event("blur", { bubbles: true }));
+    });
+    await randomDelay(config);
+    return readDateValue(locator);
+  };
+
+  let finalValue = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    finalValue = await typeDate();
+    if (finalValue) break;
+    await fillTextInput(locator, formatted, config);
+    finalValue = await readDateValue(locator);
+    if (finalValue) break;
+    await randomDelay(config);
+  }
+
+  if (!finalValue) {
     throw new Error(`Date field did not accept "${formatted}" (from "${value}")`);
   }
   console.log(`  [fieldResolver] Set date to "${finalValue}"`);
@@ -445,6 +491,7 @@ export async function fillField(
   }
 
   const fieldType = target.type ?? "text";
+  let activeLocator = locator;
 
   try {
     switch (fieldType) {
@@ -472,11 +519,8 @@ export async function fillField(
         await fillPostalCode(form, locator, value, config, target.postalHint, target.postalProvince);
         break;
       case "date": {
-        const idHint = target.ids?.[0];
-        const dateLocator = idHint
-          ? form.locator(`[id*="${idHint}"]`).filter({ visible: true }).first()
-          : locator;
-        await fillDateInput(dateLocator, value, config);
+        activeLocator = await resolveDateLocator(form, target, locator);
+        await fillDateInput(activeLocator, value, config);
         break;
       }
       default:
@@ -486,9 +530,9 @@ export async function fillField(
     const shouldVerify =
       !options?.skipVerify && fieldType !== "radio" && (config.verifyFills || config.strictMode);
     if (shouldVerify) {
-      const verified = await verifyFill(locator, value, fieldType);
+      const verified = await verifyFill(activeLocator, value, fieldType);
       if (!verified) {
-        const actual = await readFieldValue(locator);
+        const actual = await readFieldValue(activeLocator);
         const msg = `Read-back mismatch for "${target.name}": expected "${value}", got "${actual}" (strategy: ${strategy})`;
         console.warn(`  [verify] ${msg}`);
         warnings.push(createWarning(target.name, target.section, msg));
