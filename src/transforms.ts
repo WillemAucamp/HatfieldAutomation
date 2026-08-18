@@ -177,8 +177,18 @@ export function formatDateForForm(raw: string | undefined | null): string {
 }
 
 /**
+ * Google Sheets may strip a leading 0 from numeric ID cells (0104205209083 → 104205209083).
+ * Only that known artefact is corrected: 12 digits → prepend 0.
+ */
+export function restoreIdNumber(raw: string | number | undefined | null): string {
+  const digits = digitsOnly(raw);
+  if (digits.length === 12) return `0${digits}`;
+  return digits || String(raw ?? "").trim();
+}
+
+/**
  * RSA ID numbers must be exactly 13 digits. Short/long/empty values are treated
- * as human error — the website will reject them, so we do not invent digits.
+ * as human error — except a single leading zero stripped by Sheets (12 digits).
  */
 export function validateIdNumber(raw: string | number | undefined | null): TransformResult {
   const original = String(raw ?? "").trim();
@@ -188,7 +198,10 @@ export function validateIdNumber(raw: string | number | undefined | null): Trans
     if (Number.isFinite(n)) source = n.toFixed(0);
   }
 
-  const digits = digitsOnly(source);
+  let digits = digitsOnly(source);
+  if (digits.length === 12) {
+    digits = restoreIdNumber(digits);
+  }
 
   if (digits.length === 0) {
     return {
@@ -204,7 +217,7 @@ export function validateIdNumber(raw: string | number | undefined | null): Trans
       value: original,
       valid: false,
       code: "ID_NOT_13_DIGITS",
-      message: `ID number is not 13 digits (got ${digits.length}: "${original}")`,
+      message: `ID number is not 13 digits (got ${digitsOnly(source).length}: "${original}")`,
     };
   }
 

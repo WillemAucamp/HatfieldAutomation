@@ -204,11 +204,15 @@ Until that URL is set, outcomes stay in `application-references.json`.
 
 The website rejects values that do not match its format. The script therefore **does not invent or pad invalid data**. It writes `error CODE` into **Status**, writes seconds into **Timing**, and continues with the next row in a new session.
 
-The only automatic rewrite is the known Google Sheets artefact: a 9-digit mobile with no leading `0` gets `"0"` prepended.
+The only automatic rewrites are known Google Sheets artefacts:
+
+- Mobile: a 9-digit number with no leading `0` gets `"0"` prepended.
+- RSA ID: a 12-digit value gets a leading `0` prepended (Sheets drops the first digit when the ID starts with `0`).
+- Postal code: values shorter than 4 digits are zero-padded (e.g. `300` → `0300`).
 
 | Code | Meaning |
 |---|---|
-| `ID_NOT_13_DIGITS` | RSA ID is not exactly 13 digits |
+| `ID_NOT_13_DIGITS` | RSA ID is not exactly 13 digits (after optional leading-0 restore) |
 | `ID_EMPTY` | ID number cell is empty |
 | `MOBILE_NOT_10_DIGITS` | Mobile is not 10 digits starting with 0 (after optional leading-0 restore) |
 | `MOBILE_EMPTY` | Mobile number is empty |

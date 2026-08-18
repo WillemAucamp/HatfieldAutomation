@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandSelectNeedles, formatDateForForm, postalSearchNeedles, restorePostalCode, splitNextOfKinName, valuesMatch } from "./transforms.js";
+import { expandSelectNeedles, formatDateForForm, postalSearchNeedles, restoreIdNumber, restorePostalCode, splitNextOfKinName, validateIdNumber, valuesMatch } from "./transforms.js";
 
 describe("expandSelectNeedles", () => {
   it("maps FNB to Firstrand search terms", () => {
@@ -66,6 +66,30 @@ describe("restorePostalCode", () => {
 
   it("leaves a 4-digit code unchanged", () => {
     assert.equal(restorePostalCode("1685"), "1685");
+  });
+});
+
+describe("restoreIdNumber", () => {
+  it("prepends 0 when Sheets strips the leading digit from a 13-digit RSA ID", () => {
+    assert.equal(restoreIdNumber("104205209083"), "0104205209083");
+    assert.equal(restoreIdNumber(104205209083), "0104205209083");
+  });
+
+  it("leaves a 13-digit ID unchanged", () => {
+    assert.equal(restoreIdNumber("9301255297080"), "9301255297080");
+  });
+});
+
+describe("validateIdNumber", () => {
+  it("accepts a 12-digit ID after restoring the stripped leading zero", () => {
+    const result = validateIdNumber("104205209083");
+    assert.equal(result.valid, true);
+    assert.equal(result.value, "0104205209083");
+  });
+
+  it("still rejects IDs that are not 12 or 13 digits", () => {
+    assert.equal(validateIdNumber("12345").valid, false);
+    assert.equal(validateIdNumber("12345").code, "ID_NOT_13_DIGITS");
   });
 });
 
