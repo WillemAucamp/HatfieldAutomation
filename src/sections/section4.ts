@@ -93,6 +93,7 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     ids: ["clientEmpAddress_value"],
   }, data.employerPostalCode);
 
+  await waitForSelectorVisible(form, '[id*="empAddressStartDate"]');
   await fillField(ctx, {
     name: "Employment start date",
     section: SECTION,

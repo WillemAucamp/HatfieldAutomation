@@ -472,10 +472,10 @@ export async function fillField(
         await fillPostalCode(form, locator, value, config, target.postalHint, target.postalProvince);
         break;
       case "date": {
-        const dateLocator =
-          target.ids?.[0]
-            ? form.locator(`[id$="${target.ids[0]}"]`).filter({ visible: true }).first()
-            : locator;
+        const idHint = target.ids?.[0];
+        const dateLocator = idHint
+          ? form.locator(`[id*="${idHint}"]`).filter({ visible: true }).first()
+          : locator;
         await fillDateInput(dateLocator, value, config);
         break;
       }

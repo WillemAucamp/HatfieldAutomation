@@ -149,7 +149,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     ids: ["clientPhysicalAddressTxtClientAddressLine1"],
   }, addressLine);
 
-  await waitForSelectorVisible(form, '[id$="txtClientPhysicalAddressDate"]');
+  await waitForSelectorVisible(form, '[id*="txtClientPhysicalAddressDate"]');
   await fillField(ctx, {
     name: "Date started living here",
     section: SECTION,
