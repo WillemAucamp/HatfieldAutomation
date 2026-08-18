@@ -2,7 +2,7 @@ import Fuse from "fuse.js";
 import type { Frame, Locator, Page } from "playwright";
 import type { ApplicantRecord, AppConfig, FieldStrategy, FieldWarning } from "./types.js";
 import { matchSelectOption, type FormScope } from "./formUtils.js";
-import { postalSearchNeedles, valuesMatch } from "./transforms.js";
+import { postalSearchNeedles, restorePostalCode, valuesMatch } from "./transforms.js";
 import { createWarning } from "./logger.js";
 import { randomDelay } from "./utils.js";
 
@@ -364,8 +364,10 @@ async function fillPostalCode(
   await locator.waitFor({ state: "visible", timeout: 15000 });
   await locator.scrollIntoViewIfNeeded();
 
-  const expectedCode = postalSearchNeedles(value, "", provinceHint)[0] ?? value;
+  const expectedCode = restorePostalCode(value);
   const needles = postalSearchNeedles(value, addressHint, provinceHint);
+  const codeDigits = expectedCode.replace(/\D/g, "");
+
   for (const needle of needles) {
     await locator.click({ timeout: 10000 });
     await locator.fill("");
@@ -382,8 +384,15 @@ async function fillPostalCode(
       await row.click();
       await randomDelay(config);
       const selected = (await locator.inputValue().catch(() => "")).replace(/\D/g, "");
-      if (selected.includes(expectedCode.replace(/\D/g, ""))) {
-        console.log(`  [fieldResolver] Picked postal autocomplete for "${needle}"`);
+      const codeNeedle = needle === expectedCode || needle.startsWith(`${expectedCode} `);
+      if (selected.length >= 4 && (selected.includes(codeDigits) || !codeNeedle)) {
+        if (!selected.includes(codeDigits) && !codeNeedle) {
+          console.log(
+            `  [fieldResolver] Picked postal ${selected} via place search "${needle}" (sheet had ${expectedCode})`
+          );
+        } else {
+          console.log(`  [fieldResolver] Picked postal autocomplete for "${needle}"`);
+        }
         return;
       }
       console.log(
