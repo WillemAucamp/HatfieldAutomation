@@ -131,6 +131,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     role: "textbox",
     type: "postal",
     postalHint: data.addressLine1,
+    postalProvince: data.province,
     names: ["clientPhysicalAddress"],
     ids: ["clientPhysicalAddress_value"],
   }, data.postalCode);

@@ -16,6 +16,8 @@ export interface FieldTarget {
   type?: "text" | "select" | "radio" | "checkbox" | "postal";
   /** Address line used to build richer postal autocomplete search terms. */
   postalHint?: string;
+  /** Province hint for postal autocomplete (e.g. Gauteng → Pretoria). */
+  postalProvince?: string;
   /** Optional stable name/id hints (used after label strategies) */
   names?: string[];
   ids?: string[];
@@ -356,12 +358,14 @@ async function fillPostalCode(
   locator: Locator,
   value: string,
   config: AppConfig,
-  addressHint = ""
+  addressHint = "",
+  provinceHint = ""
 ): Promise<void> {
   await locator.waitFor({ state: "visible", timeout: 15000 });
   await locator.scrollIntoViewIfNeeded();
 
-  const needles = postalSearchNeedles(value, addressHint);
+  const expectedCode = postalSearchNeedles(value, "", provinceHint)[0] ?? value;
+  const needles = postalSearchNeedles(value, addressHint, provinceHint);
   for (const needle of needles) {
     await locator.click({ timeout: 10000 });
     await locator.fill("");
@@ -376,8 +380,15 @@ async function fillPostalCode(
     try {
       await row.waitFor({ state: "visible", timeout: 8000 });
       await row.click();
-      console.log(`  [fieldResolver] Picked postal autocomplete for "${needle}"`);
-      return;
+      await randomDelay(config);
+      const selected = (await locator.inputValue().catch(() => "")).replace(/\D/g, "");
+      if (selected.includes(expectedCode.replace(/\D/g, ""))) {
+        console.log(`  [fieldResolver] Picked postal autocomplete for "${needle}"`);
+        return;
+      }
+      console.log(
+        `  [fieldResolver] Postal autocomplete for "${needle}" did not lock code ${expectedCode} (got "${selected}") — trying next term`
+      );
     } catch {
       // Try the next search term.
     }
@@ -439,7 +450,7 @@ export async function fillField(
         }
         break;
       case "postal":
-        await fillPostalCode(form, locator, value, config, target.postalHint);
+        await fillPostalCode(form, locator, value, config, target.postalHint, target.postalProvince);
         break;
       default:
         await fillTextInput(locator, value, config);

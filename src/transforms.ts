@@ -47,7 +47,6 @@ export function transformMobile(raw: string | number | undefined | null): Transf
   return { value: digits, valid: true };
 }
 
-/** Search terms for angucomplete postal lookup — code alone often fails outside Gauteng. */
 export function restorePostalCode(raw: string | number | undefined | null): string {
   const original = String(raw ?? "").trim();
   const digits = digitsOnly(raw);
@@ -58,20 +57,98 @@ export function restorePostalCode(raw: string | number | undefined | null): stri
   return original || digits;
 }
 
-export function postalSearchNeedles(postalCode: string, addressLine = ""): string[] {
+/** Words that are not useful for postal suburb/town autocomplete search. */
+const NON_PLACE_WORDS = new Set([
+  "base",
+  "house",
+  "street",
+  "road",
+  "avenue",
+  "drive",
+  "lane",
+  "court",
+  "crescent",
+  "training",
+  "formation",
+  "services",
+  "military",
+  "samhs",
+  "pty",
+  "ltd",
+  "ext",
+  "intermodal",
+  "deep",
+  "city",
+  "online",
+  "search",
+  "unknown",
+  "area",
+  "number",
+  "no",
+]);
+
+const PROVINCE_CITY_HINTS: Record<string, string[]> = {
+  gauteng: ["Pretoria", "Johannesburg", "Tshwane", "Sandton", "Midrand"],
+  mpumalanga: ["Nelspruit", "Witbank", "Mbombela", "Hendrina", "Middelburg"],
+  "western cape": ["Cape Town", "Kuilsriver", "Bellville", "Parow"],
+  "kwazulu-natal": ["Durban", "Pietermaritzburg"],
+  "free state": ["Bloemfontein"],
+  "north west": ["Rustenburg", "Mahikeng"],
+  limpopo: ["Polokwane"],
+  "eastern cape": ["Port Elizabeth", "Gqeberha"],
+  "northern cape": ["Kimberley"],
+};
+
+function placeTokensFromAddress(address: string): string[] {
+  const tokens: string[] = [];
+
+  if (/thaba\s+tshwane/i.test(address)) {
+    tokens.push("Thaba Tshwane", "Tshwane", "Pretoria");
+  }
+
+  const multiWord = address.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g) ?? [];
+  for (const phrase of multiWord) {
+    tokens.push(phrase);
+    const parts = phrase.split(/\s+/);
+    if (parts.length > 1) tokens.push(parts[parts.length - 1]!);
+  }
+
+  const words = address.match(/[A-Za-z][A-Za-z-]+/g) ?? [];
+  for (const word of words) {
+    const lower = word.toLowerCase();
+    if (word.length >= 4 && !NON_PLACE_WORDS.has(lower)) {
+      tokens.push(word);
+    }
+  }
+
+  return [...new Set(tokens)];
+}
+
+/** Search terms for angucomplete postal lookup — code alone often fails outside Gauteng. */
+export function postalSearchNeedles(
+  postalCode: string,
+  addressLine = "",
+  province = ""
+): string[] {
   const code = restorePostalCode(postalCode);
-  const needles = [code];
+  const needles: string[] = [code];
   const address = String(addressLine ?? "").trim();
+
   const townAtEnd = address.match(/\b([A-Za-z][A-Za-z\s-]+?)\s+\d{4}\s*$/);
   if (townAtEnd) {
     const town = townAtEnd[1].trim().split(/\s+/).pop() ?? townAtEnd[1].trim();
     needles.push(`${code} ${town}`, `${town}, ${code}`, town);
-  } else {
-    const words = address.match(/[A-Za-z][A-Za-z-]+/g) ?? [];
-    for (const word of words.slice(-2).reverse()) {
-      needles.push(`${code} ${word}`, word);
-    }
   }
+
+  for (const token of placeTokensFromAddress(address)) {
+    needles.push(`${code} ${token}`, token);
+  }
+
+  const cities = PROVINCE_CITY_HINTS[province.trim().toLowerCase()] ?? [];
+  for (const city of cities) {
+    needles.push(`${code} ${city}`);
+  }
+
   return [...new Set(needles.filter(Boolean))];
 }
 

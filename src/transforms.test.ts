@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandSelectNeedles, restorePostalCode, splitNextOfKinName, valuesMatch } from "./transforms.js";
+import { expandSelectNeedles, postalSearchNeedles, restorePostalCode, splitNextOfKinName, valuesMatch } from "./transforms.js";
 
 describe("expandSelectNeedles", () => {
   it("maps FNB to Firstrand search terms", () => {
@@ -66,5 +66,21 @@ describe("restorePostalCode", () => {
 
   it("leaves a 4-digit code unchanged", () => {
     assert.equal(restorePostalCode("1685"), "1685");
+  });
+});
+
+describe("postalSearchNeedles", () => {
+  it("uses place names for military-base addresses instead of 'base'", () => {
+    const addr = "SAMHS training formation Thaba Tshwane military base";
+    const needles = postalSearchNeedles("143", addr, "Gauteng");
+    assert.ok(needles.includes("0143"));
+    assert.ok(needles.includes("0143 Tshwane"));
+    assert.ok(!needles.includes("base"));
+    assert.ok(!needles.includes("0143 base"));
+  });
+
+  it("still extracts town before a trailing postal code in the address", () => {
+    const needles = postalSearchNeedles("7580", "18 sunridge street wesbank kuilsriver 7580", "Western Cape");
+    assert.ok(needles.some((n) => /7580/i.test(n) && /kuilsriver/i.test(n)));
   });
 });
