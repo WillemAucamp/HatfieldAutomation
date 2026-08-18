@@ -2,7 +2,7 @@ import Fuse from "fuse.js";
 import type { Frame, Locator, Page } from "playwright";
 import type { ApplicantRecord, AppConfig, FieldStrategy, FieldWarning } from "./types.js";
 import { matchSelectOption, type FormScope } from "./formUtils.js";
-import { postalSearchNeedles, restorePostalCode, valuesMatch } from "./transforms.js";
+import { formatDateForForm, postalSearchNeedles, restorePostalCode, valuesMatch } from "./transforms.js";
 import { createWarning } from "./logger.js";
 import { randomDelay } from "./utils.js";
 
@@ -13,7 +13,7 @@ export interface FieldTarget {
   labels: string[];
   synonyms?: string[];
   role?: "textbox" | "combobox" | "radio" | "checkbox" | "spinbutton";
-  type?: "text" | "select" | "radio" | "checkbox" | "postal";
+  type?: "text" | "select" | "radio" | "checkbox" | "postal" | "date";
   /** Address line used to build richer postal autocomplete search terms. */
   postalHint?: string;
   /** Province hint for postal autocomplete (e.g. Gauteng → Pretoria). */
@@ -353,6 +353,32 @@ async function selectRadioInGroup(
   await randomDelay(config);
 }
 
+async function fillDateInput(locator: Locator, value: string, config: AppConfig): Promise<void> {
+  const formatted = formatDateForForm(value);
+  await locator.waitFor({ state: "visible", timeout: 15000 });
+  await locator.scrollIntoViewIfNeeded();
+  await locator.click();
+  await locator.fill("");
+  await locator.evaluate((el, val) => {
+    const input = el as HTMLInputElement;
+    input.value = val;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new Event("blur", { bubbles: true }));
+  }, formatted);
+  await randomDelay(config);
+  const readBack = await locator.inputValue().catch(() => "");
+  if (!readBack.trim()) {
+    await locator.fill(formatted);
+    await locator.press("Tab");
+    await randomDelay(config);
+  }
+  const finalValue = await locator.inputValue().catch(() => "");
+  if (!finalValue.trim()) {
+    throw new Error(`Date field did not accept "${formatted}" (from "${value}")`);
+  }
+}
+
 async function fillPostalCode(
   form: FormScope,
   locator: Locator,
@@ -461,6 +487,14 @@ export async function fillField(
       case "postal":
         await fillPostalCode(form, locator, value, config, target.postalHint, target.postalProvince);
         break;
+      case "date": {
+        const dateLocator =
+          target.ids?.[0]
+            ? form.locator(`[id$="${target.ids[0]}"]`).filter({ visible: true }).first()
+            : locator;
+        await fillDateInput(dateLocator, value, config);
+        break;
+      }
       default:
         await fillTextInput(locator, value, config);
     }

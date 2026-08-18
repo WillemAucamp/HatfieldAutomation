@@ -98,7 +98,7 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     section: SECTION,
     labels: ["Employment start date", "Employed since", "Start date", "Date started employment"],
     role: "textbox",
-    type: "text",
+    type: "date",
     names: ["employerStartDate"],
     ids: ["empAddressStartDate"],
   }, data.employmentStartDate);

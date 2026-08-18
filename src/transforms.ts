@@ -152,6 +152,23 @@ export function postalSearchNeedles(
   return [...new Set(needles.filter(Boolean))];
 }
 
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Convert sheet dates (`MM DD YYYY`) to the finance form date-picker display (`DD Mon YYYY`). */
+export function formatDateForForm(raw: string | undefined | null): string {
+  const trimmed = String(raw ?? "").trim();
+  const spaced = trimmed.match(/^(\d{2})\s+(\d{2})\s+(\d{4})$/);
+  if (spaced) {
+    const month = Number(spaced[1]);
+    const day = Number(spaced[2]);
+    const year = spaced[3];
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${String(day).padStart(2, "0")} ${MONTH_ABBR[month - 1]} ${year}`;
+    }
+  }
+  return trimmed;
+}
+
 /**
  * RSA ID numbers must be exactly 13 digits. Short/long/empty values are treated
  * as human error — the website will reject them, so we do not invent digits.

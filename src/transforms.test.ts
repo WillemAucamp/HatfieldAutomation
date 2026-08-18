@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandSelectNeedles, postalSearchNeedles, restorePostalCode, splitNextOfKinName, valuesMatch } from "./transforms.js";
+import { expandSelectNeedles, formatDateForForm, postalSearchNeedles, restorePostalCode, splitNextOfKinName, valuesMatch } from "./transforms.js";
 
 describe("expandSelectNeedles", () => {
   it("maps FNB to Firstrand search terms", () => {
@@ -66,6 +66,13 @@ describe("restorePostalCode", () => {
 
   it("leaves a 4-digit code unchanged", () => {
     assert.equal(restorePostalCode("1685"), "1685");
+  });
+});
+
+describe("formatDateForForm", () => {
+  it("converts MM DD YYYY sheet dates to DD Mon YYYY", () => {
+    assert.equal(formatDateForForm("08 18 2011"), "18 Aug 2011");
+    assert.equal(formatDateForForm("02 18 2015"), "18 Feb 2015");
   });
 });
 
