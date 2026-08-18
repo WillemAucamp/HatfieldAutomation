@@ -1,9 +1,20 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
-import { clickNext, screenshotSection, waitForSelectorVisible } from "../formUtils.js";
+import { clickNext, screenshotSection, waitForSelectorVisible, type FormScope } from "../formUtils.js";
 import { normalizeAddressLine } from "../transforms.js";
 
 const SECTION = "section3";
+
+async function syncAddressFromPostal(form: FormScope, fallback: string): Promise<string> {
+  const postal = await form
+    .locator('[id$="clientPhysicalAddress_value"]')
+    .filter({ visible: true })
+    .first()
+    .inputValue()
+    .catch(() => "");
+  const suburb = postal.split(",")[0]?.trim();
+  return suburb || normalizeAddressLine(fallback);
+}
 
 export async function runSection3(ctx: FillContext): Promise<void> {
   const { page, form, config } = ctx;
@@ -106,16 +117,6 @@ export async function runSection3(ctx: FillContext): Promise<void> {
   }, "No");
 
   await fillField(ctx, {
-    name: "Address line 1",
-    section: SECTION,
-    labels: ["Address line 1", "Address", "Street address", "Residential address"],
-    role: "textbox",
-    type: "text",
-    names: ["clientPhysicalAddressAddressLine1"],
-    ids: ["clientPhysicalAddressTxtClientAddressLine1"],
-  }, normalizeAddressLine(data.addressLine1));
-
-  await fillField(ctx, {
     name: "Province",
     section: SECTION,
     labels: ["Province"],
@@ -136,6 +137,17 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     names: ["clientPhysicalAddress"],
     ids: ["clientPhysicalAddress_value"],
   }, data.postalCode);
+
+  const addressLine = await syncAddressFromPostal(form, data.addressLine1);
+  await fillField(ctx, {
+    name: "Address line 1",
+    section: SECTION,
+    labels: ["Address line 1", "Address", "Street address", "Residential address"],
+    role: "textbox",
+    type: "text",
+    names: ["clientPhysicalAddressAddressLine1"],
+    ids: ["clientPhysicalAddressTxtClientAddressLine1"],
+  }, addressLine);
 
   await waitForSelectorVisible(form, '[id$="txtClientPhysicalAddressDate"]');
   await fillField(ctx, {
