@@ -32,20 +32,27 @@ export async function runSection1(ctx: FillContext): Promise<void> {
   let clicked = false;
   for (const re of applicantTypePatterns) {
     const label = form.locator("label").filter({ hasText: re }).first();
-    if ((await label.count()) === 0) continue;
-    if (!(await label.isVisible().catch(() => false))) continue;
-    await label.scrollIntoViewIfNeeded().catch(() => undefined);
-    await label.click({ timeout: 15000 }).catch(() => undefined);
-    clicked = true;
-    break;
+    try {
+      // The applicant-type control can appear slightly late depending on network timing.
+      await label.waitFor({ state: "visible", timeout: 15000 });
+      await label.scrollIntoViewIfNeeded().catch(() => undefined);
+      await label.click({ timeout: 15000 });
+      clicked = true;
+      break;
+    } catch {
+      // Try next pattern
+    }
   }
   if (!clicked) {
     // As a fallback, try clicking a radio by accessible name.
     const radio = form.getByRole("radio", { name: /Private Individual|Private|Individual/i }).first();
-    if ((await radio.count()) > 0) {
+    try {
+      await radio.waitFor({ state: "visible", timeout: 15000 });
       await radio.scrollIntoViewIfNeeded().catch(() => undefined);
       await radio.click({ timeout: 15000 });
       clicked = true;
+    } catch {
+      // ignore
     }
   }
   if (!clicked) {
