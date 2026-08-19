@@ -208,26 +208,35 @@ export async function matchSelectOption(
   locator: Locator,
   value: string
 ): Promise<{ value: string; text: string }> {
+  const normalizeSelectText = (s: string): string =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+      .replace(/\s+/g, " ");
+
   const options = await locator.evaluate((el) =>
     Array.from((el as HTMLSelectElement).options).map((opt) => ({
       value: opt.value,
       text: opt.text.trim(),
     }))
   );
-  const usable = options.filter((opt) => opt.text && opt.text !== "......");
-  const needles = expandSelectNeedles(value).map((n) => n.toLowerCase());
+  const usable = options
+    .filter((opt) => opt.text && opt.text !== "......")
+    .map((opt) => ({ ...opt, textNorm: normalizeSelectText(opt.text) }));
+  const needles = expandSelectNeedles(value).map((n) => normalizeSelectText(n));
 
   for (const needle of needles) {
-    const exact = usable.find((opt) => opt.text.toLowerCase() === needle);
+    const exact = usable.find((opt) => opt.textNorm === needle);
     if (exact) return exact;
   }
   for (const needle of needles) {
-    const partial = usable.find((opt) => opt.text.toLowerCase().includes(needle));
+    const partial = usable.find((opt) => opt.textNorm.includes(needle));
     if (partial) return partial;
   }
   for (const needle of needles) {
     const reverse = usable.find(
-      (opt) => needle.includes(opt.text.toLowerCase()) && opt.text.length >= 4
+      (opt) => needle.includes(opt.textNorm) && opt.textNorm.length >= 4
     );
     if (reverse) return reverse;
   }
