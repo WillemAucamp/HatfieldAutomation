@@ -14,10 +14,43 @@ export async function runSection1(ctx: FillContext): Promise<void> {
   const { page, form, config } = ctx;
   const data = ctx.applicant;
 
+  // Cookie banners can cover/obscure the first step controls.
+  await page
+    .getByRole("button", { name: /got it|accept|accept cookies/i })
+    .first()
+    .click({ timeout: 5000 })
+    .catch(() => undefined);
+
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before", config);
 
   // Sub-step 1: Applicant type (radio-style label click)
-  await form.locator("label").filter({ hasText: /Private Individual/i }).first().click();
+  const applicantTypePatterns: RegExp[] = [
+    /Private Individual/i,
+    /Private/i,
+    /Individual/i,
+  ];
+  let clicked = false;
+  for (const re of applicantTypePatterns) {
+    const label = form.locator("label").filter({ hasText: re }).first();
+    if ((await label.count()) === 0) continue;
+    if (!(await label.isVisible().catch(() => false))) continue;
+    await label.scrollIntoViewIfNeeded().catch(() => undefined);
+    await label.click({ timeout: 15000 }).catch(() => undefined);
+    clicked = true;
+    break;
+  }
+  if (!clicked) {
+    // As a fallback, try clicking a radio by accessible name.
+    const radio = form.getByRole("radio", { name: /Private Individual|Private|Individual/i }).first();
+    if ((await radio.count()) > 0) {
+      await radio.scrollIntoViewIfNeeded().catch(() => undefined);
+      await radio.click({ timeout: 15000 });
+      clicked = true;
+    }
+  }
+  if (!clicked) {
+    throw new Error('Applicant type selector not found (expected "Private Individual").');
+  }
 
   if (!config.dryRun) {
     await clickNext(form, config);
