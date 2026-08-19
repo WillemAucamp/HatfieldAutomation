@@ -64,6 +64,16 @@ export async function runSection1(ctx: FillContext): Promise<void> {
         // ignore
       }
     }
+  if (!clicked) {
+    // Last-resort: click the first visible radio control on the page.
+    // Some form variants may not expose stable accessible names.
+    const anyRadios = form.getByRole("radio").filter({ visible: true });
+    if ((await anyRadios.count()) > 0) {
+      await anyRadios.first().scrollIntoViewIfNeeded().catch(() => undefined);
+      await anyRadios.first().click({ timeout: 15000 });
+      clicked = true;
+    }
+  }
     if (!clicked) {
       throw new Error('Applicant type selector not found (expected "Private Individual").');
     }
