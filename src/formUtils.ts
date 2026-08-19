@@ -22,6 +22,13 @@ export async function clickApplyForFinance(page: Page, config: AppConfig): Promi
   const applyLink = page.getByRole("link", { name: /apply for finance/i }).first();
   const applyButton = page.getByRole("button", { name: /apply for finance/i }).first();
 
+  // Cookie banners may block the click transition into the form.
+  await page
+    .getByRole("button", { name: /got it|accept|accept cookies/i })
+    .first()
+    .click({ timeout: 5000 })
+    .catch(() => undefined);
+
   // Sometimes the initial click doesn't transition into the actual application form.
   // Retry a few times and only return once the applicant type control is visible in-frame.
   let lastFrame: Frame | undefined;
