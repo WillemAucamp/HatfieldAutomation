@@ -22,16 +22,50 @@ export async function clickApplyForFinance(page: Page, config: AppConfig): Promi
   const applyLink = page.getByRole("link", { name: /apply for finance/i }).first();
   const applyButton = page.getByRole("button", { name: /apply for finance/i }).first();
 
-  if (await applyLink.isVisible({ timeout: 5000 }).catch(() => false)) {
-    await applyLink.click();
-  } else if (await applyButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await applyButton.click();
-  } else {
-    await page.getByText(/apply for finance/i).first().click();
+  // Sometimes the initial click doesn't transition into the actual application form.
+  // Retry a few times and only return once the applicant type control is visible in-frame.
+  let lastFrame: Frame | undefined;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    if (await applyLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await applyLink.click().catch(() => undefined);
+    } else if (await applyButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await applyButton.click().catch(() => undefined);
+    } else {
+      await page.getByText(/apply for finance/i).first().click().catch(() => undefined);
+    }
+
+    await randomDelay(config);
+    try {
+      lastFrame = await waitForFormFrame(page);
+    } catch (e) {
+      // If the iframe didn't appear, try the next click attempt.
+      continue;
+    }
+
+    const applicantTypeLabel = lastFrame
+      .locator("label")
+      .filter({ hasText: /Private Individual|Private|Individual/i })
+      .first();
+    const applicantTypeRadio = lastFrame
+      .getByRole("radio", { name: /Private Individual|Private|Individual/i })
+      .first();
+
+    if (
+      (await applicantTypeLabel.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false)) ||
+      (await applicantTypeRadio
+        .waitFor({ state: "visible", timeout: 5000 })
+        .then(() => true)
+        .catch(() => false))
+    ) {
+      return lastFrame;
+    }
   }
 
-  await randomDelay(config);
-  return waitForFormFrame(page);
+  if (!lastFrame) {
+    // Final fallback (will throw if iframe never loads)
+    return waitForFormFrame(page);
+  }
+  return lastFrame;
 }
 
 export async function waitForHeading(form: FormScope, pattern: RegExp, timeoutMs = 20000): Promise<void> {
