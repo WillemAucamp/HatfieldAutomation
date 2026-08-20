@@ -149,12 +149,30 @@ export async function clearRowStatus(
 }
 
 /** Drop local outcome records so a retry is not skipped by a prior successful reference. */
-export function removeLocalOutcomesForRows(rowIndexes: number[]): number {
+export function removeLocalOutcomesForRows(rowIndexes: number[], rowIds: string[] = []): number {
   const path = join(process.cwd(), LOCAL_REFERENCES);
-  if (!existsSync(path) || rowIndexes.length === 0) return 0;
-  const existing = JSON.parse(readFileSync(path, "utf-8")) as Array<{ rowIndex?: number }>;
-  const drop = new Set(rowIndexes);
-  const kept = existing.filter((r) => !drop.has(Number(r.rowIndex)));
+  if (!existsSync(path) || (rowIndexes.length === 0 && rowIds.length === 0)) return 0;
+  const existing = JSON.parse(readFileSync(path, "utf-8")) as Array<{
+    rowIndex?: number;
+    rowId?: string;
+  }>;
+  const dropRows = new Set(rowIndexes);
+  const dropIds = new Set(rowIds.filter(Boolean));
+  const kept = existing.filter(
+    (r) => !dropRows.has(Number(r.rowIndex)) && !(r.rowId && dropIds.has(r.rowId))
+  );
+  const removed = existing.length - kept.length;
+  writeFileSync(path, JSON.stringify(kept, null, 2) + "\n");
+  return removed;
+}
+
+/** Remove IDs from processed-rows.json so a forced retry is not skipped locally. */
+export function removeProcessedRowIds(rowIds: string[]): number {
+  const path = join(process.cwd(), "processed-rows.json");
+  if (!existsSync(path) || rowIds.length === 0) return 0;
+  const drop = new Set(rowIds.filter(Boolean));
+  const existing = JSON.parse(readFileSync(path, "utf-8")) as string[];
+  const kept = existing.filter((id) => !drop.has(id));
   const removed = existing.length - kept.length;
   writeFileSync(path, JSON.stringify(kept, null, 2) + "\n");
   return removed;

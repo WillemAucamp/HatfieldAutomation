@@ -8,7 +8,11 @@
  */
 import { loadColumnMapping, loadConfig } from "./config.js";
 import { fetchSheetData } from "./fetchSheetData.js";
-import { clearRowStatus, removeLocalOutcomesForRows } from "./sheetWriter.js";
+import {
+  clearRowStatus,
+  removeLocalOutcomesForRows,
+  removeProcessedRowIds,
+} from "./sheetWriter.js";
 
 function parseRowArgs(argv: string[]): number[] {
   const rows: number[] = [];
@@ -58,9 +62,17 @@ async function main(): Promise<void> {
     await clearRowStatus(config, mapping, rowIndex, email);
   }
 
-  const removed = removeLocalOutcomesForRows(rows);
+  const rowIds = applicants
+    .filter((a) => rows.includes(a.rowIndex))
+    .map((a) => a.rowId)
+    .filter(Boolean);
+  const removed = removeLocalOutcomesForRows(rows, rowIds);
   if (removed > 0) {
     console.log(`  Removed ${removed} local outcome record(s).`);
+  }
+  const clearedIds = removeProcessedRowIds(rowIds);
+  if (clearedIds > 0) {
+    console.log(`  Cleared ${clearedIds} ID(s) from processed-rows.json.`);
   }
 
   process.env.ROW_FILTER = rows.join(",");
