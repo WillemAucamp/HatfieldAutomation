@@ -72,11 +72,35 @@ function resolveName(
     return { firstName: firstFromCol, surname: surnameFromCol, original: `${firstFromCol} ${surnameFromCol}` };
   }
 
-  const combined =
+  const primary =
     (mapping.fullName ? getCell(row, mapping.fullName) : "") ||
     firstFromCol ||
     surnameFromCol;
-  const split = splitFullName(combined, "NAME_EMPTY", "NAME_MISSING_SURNAME", "Applicant name");
+  // Sheet often has both "First names + surname" and a separate "Full name" column.
+  // Prefer the mapped column, but fall back to "Full name" when it lacks a surname.
+  const fullNameFallback = getCell(row, "Full name");
+  const candidates = [primary, fullNameFallback].filter(
+    (v, i, arr) => Boolean(v) && arr.indexOf(v) === i
+  );
+
+  let combined = primary;
+  let split = splitFullName(combined, "NAME_EMPTY", "NAME_MISSING_SURNAME", "Applicant name");
+  for (const candidate of candidates) {
+    const attempt = splitFullName(
+      candidate,
+      "NAME_EMPTY",
+      "NAME_MISSING_SURNAME",
+      "Applicant name"
+    );
+    if (attempt.valid) {
+      combined = candidate;
+      split = attempt;
+      break;
+    }
+    combined = candidate;
+    split = attempt;
+  }
+
   return {
     firstName: split.firstName,
     surname: split.surname,
