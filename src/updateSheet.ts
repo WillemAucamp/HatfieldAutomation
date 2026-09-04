@@ -6,6 +6,7 @@
  *   npm run sheet-update -- --a1 F2=Approved --a1 H2="note"
  *   npm run sheet-update -- --append Name="Jane Doe" Number=0821234567 Status=Pending
  *   npm run sheet-update -- --row 5 --set Status=Declined
+ *   npm run sheet-update -- --insert-column-after C --header "Email sent" --dropdown Yes,No
  *
  * Defaults to the money / loaded-clients spreadsheet tab gid=2126384446.
  */
@@ -31,6 +32,10 @@ function parseArgs(argv: string[]) {
   let set: Record<string, string> | undefined;
   let append: Record<string, string> | undefined;
   let row: number | undefined;
+  let insertAfter: string | undefined;
+  let insertHeader: string | undefined;
+  let dropdown: string | undefined;
+  let validationColumn: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -60,6 +65,14 @@ function parseArgs(argv: string[]) {
       updates.push({ a1: key, value });
     } else if (arg === "--row") {
       row = Number(argv[++i]);
+    } else if (arg === "--insert-column-after") {
+      insertAfter = argv[++i];
+    } else if (arg === "--header") {
+      insertHeader = argv[++i];
+    } else if (arg === "--dropdown" || arg === "--validation") {
+      dropdown = argv[++i];
+    } else if (arg === "--data-validation-column") {
+      validationColumn = argv[++i];
     } else if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -79,6 +92,25 @@ function parseArgs(argv: string[]) {
   if (append) payload.append = append;
   if (updates.length) payload.updates = updates;
 
+  if (insertAfter) {
+    payload.insertColumn = {
+      after: insertAfter,
+      ...(insertHeader ? { header: insertHeader } : {}),
+      ...(dropdown ? { validation: dropdown.split(",").map((s) => s.trim()).filter(Boolean) } : {}),
+    };
+  } else if (validationColumn && dropdown) {
+    payload.dataValidation = {
+      column: validationColumn,
+      options: dropdown.split(",").map((s) => s.trim()).filter(Boolean),
+    };
+  } else if (dropdown && insertHeader) {
+    // Apply dropdown to an existing named column (no insert).
+    payload.dataValidation = {
+      column: insertHeader,
+      options: dropdown.split(",").map((s) => s.trim()).filter(Boolean),
+    };
+  }
+
   return payload;
 }
 
@@ -90,12 +122,15 @@ Examples:
   npm run sheet-update -- --a1 F2=Approved --a1 H2=note
   npm run sheet-update -- --row 5 --set Status=Declined Comment=ok
   npm run sheet-update -- --append Name="Jane Doe" Number=0821234567 Status=Pending
+  npm run sheet-update -- --insert-column-after C --header "Email sent" --dropdown Yes,No
+  npm run sheet-update -- --data-validation-column "Email sent" --dropdown Yes,No
 
 Defaults:
   spreadsheet ${DEFAULT_SPREADSHEET_ID}
   gid         ${DEFAULT_GID}
 
-Requires Apps Script redeploy with the updateSheet action.`);
+Requires Apps Script redeploy with the updateSheet action
+(including insertColumn / dataValidation support).`);
 }
 
 async function postWebhook(
@@ -124,7 +159,14 @@ async function postWebhook(
 
 async function main(): Promise<void> {
   const payload = parseArgs(process.argv.slice(2));
-  if (!payload.find && !payload.set && !payload.append && !payload.updates) {
+  if (
+    !payload.find &&
+    !payload.set &&
+    !payload.append &&
+    !payload.updates &&
+    !payload.insertColumn &&
+    !payload.dataValidation
+  ) {
     printHelp();
     process.exit(1);
   }

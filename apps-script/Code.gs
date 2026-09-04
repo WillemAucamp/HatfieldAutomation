@@ -13,6 +13,7 @@
  *   writeStatus   — write Status + Timing on the applicant source sheet
  *   renumberRows  — fill column A with 1, 2, 3… (row 2 = 1; row 1 = header)
  *   updateSheet   — arbitrary cell updates on any spreadsheet/tab
+ *                   (also insertColumn + dataValidation dropdowns)
  *
  * The account that deploys this must be able to edit both spreadsheets.
  */
@@ -200,6 +201,12 @@ function ensureColumn_(sheet, headers, name) {
  *
  *   { action: "updateSheet", spreadsheetId: "...", sheetId: 2126384446,
  *     append: { Name: "Jane Doe", Number: "0821234567", Status: "Pending" } }
+ *
+ *   { action: "updateSheet", spreadsheetId: "...", sheetGid: 2126384446,
+ *     insertColumn: { after: "C", header: "Email sent", validation: ["Yes", "No"] } }
+ *
+ *   { action: "updateSheet", spreadsheetId: "...", sheetGid: 2126384446,
+ *     dataValidation: { column: "Email sent", options: ["Yes", "No"] } }
  */
 function updateSheet_(data) {
   var spreadsheetId =
@@ -211,6 +218,17 @@ function updateSheet_(data) {
   var sheet = resolveSheet_(ss, data);
   var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
   var written = [];
+
+  if (data.insertColumn && typeof data.insertColumn === "object") {
+    var insertResult = insertColumn_(sheet, headers, data.insertColumn);
+    written.push(insertResult);
+    headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  }
+
+  if (data.dataValidation && typeof data.dataValidation === "object") {
+    var dvResult = applyDataValidation_(sheet, headers, data.dataValidation);
+    written.push(dvResult);
+  }
 
   if (data.append && typeof data.append === "object") {
     var row = sheet.getLastRow() + 1;
@@ -290,7 +308,8 @@ function updateSheet_(data) {
   if (written.length === 0) {
     return {
       ok: false,
-      error: "Nothing to write. Provide updates[], or find+set, or append.",
+      error:
+        "Nothing to write. Provide updates[], find+set, append, insertColumn, or dataValidation.",
     };
   }
 
@@ -302,6 +321,121 @@ function updateSheet_(data) {
     count: written.length,
     written: written,
   };
+}
+
+/**
+ * Insert a column after a given letter/index, optionally set header + dropdown.
+ * Idempotent when header already exists: skips insert, refreshes validation.
+ */
+function insertColumn_(sheet, headers, spec) {
+  var header = spec.header != null ? String(spec.header) : "";
+  var existingCol = header ? headers.indexOf(header) + 1 : 0;
+  var newCol = existingCol;
+  var inserted = false;
+
+  if (!newCol) {
+    var afterIndex = 0;
+    if (spec.afterIndex != null) afterIndex = Number(spec.afterIndex);
+    else if (spec.afterColumnIndex != null) afterIndex = Number(spec.afterColumnIndex);
+    else if (spec.after != null || spec.afterColumn != null || spec.afterCol != null) {
+      afterIndex = columnLetterToIndex_(spec.after || spec.afterColumn || spec.afterCol);
+    } else if (spec.before != null || spec.beforeColumn != null || spec.beforeCol != null) {
+      afterIndex = columnLetterToIndex_(spec.before || spec.beforeColumn || spec.beforeCol) - 1;
+    }
+    if (!afterIndex || afterIndex < 0) {
+      throw new Error("insertColumn needs after/afterIndex (e.g. after: \"C\")");
+    }
+    sheet.insertColumnAfter(afterIndex);
+    newCol = afterIndex + 1;
+    inserted = true;
+    if (header) {
+      sheet.getRange(1, newCol).setValue(header);
+    }
+  } else if (header) {
+    sheet.getRange(1, newCol).setValue(header);
+  }
+
+  var options = normalizeValidationOptions_(spec.validation || spec.dropdown || spec.options);
+  var validationRows = null;
+  if (options && options.length) {
+    validationRows = setColumnValidation_(sheet, newCol, options, spec);
+  }
+
+  return {
+    op: "insertColumn",
+    inserted: inserted,
+    columnIndex: newCol,
+    column: columnIndexToLetter_(newCol),
+    header: header || null,
+    validation: options,
+    validationRows: validationRows,
+  };
+}
+
+function applyDataValidation_(sheet, headers, spec) {
+  var colNum = 0;
+  if (spec.columnIndex) colNum = Number(spec.columnIndex);
+  else if (spec.col) colNum = columnLetterToIndex_(spec.col);
+  else if (spec.column || spec.header) {
+    colNum = headers.indexOf(spec.column || spec.header) + 1;
+    if (!colNum) {
+      throw new Error("dataValidation column not found: " + (spec.column || spec.header));
+    }
+  }
+  if (!colNum) {
+    throw new Error("dataValidation needs column/header/col/columnIndex");
+  }
+  var options = normalizeValidationOptions_(spec.options || spec.validation || spec.dropdown);
+  if (!options || !options.length) {
+    throw new Error("dataValidation needs options (e.g. [\"Yes\",\"No\"])");
+  }
+  var validationRows = setColumnValidation_(sheet, colNum, options, spec);
+  return {
+    op: "dataValidation",
+    columnIndex: colNum,
+    column: columnIndexToLetter_(colNum),
+    validation: options,
+    validationRows: validationRows,
+  };
+}
+
+function normalizeValidationOptions_(raw) {
+  if (raw == null || raw === "") return null;
+  if (Object.prototype.toString.call(raw) === "[object Array]") {
+    return raw.map(function (v) {
+      return String(v);
+    });
+  }
+  return String(raw)
+    .split(",")
+    .map(function (s) {
+      return s.trim();
+    })
+    .filter(Boolean);
+}
+
+function setColumnValidation_(sheet, colNum, options, spec) {
+  var lastRow = sheet.getLastRow();
+  var fromRow = Number(spec.fromRow) || 2;
+  var toRow = Number(spec.toRow) || Math.max(lastRow, Number(spec.validationRows) || 2000);
+  if (toRow < fromRow) toRow = fromRow;
+  var rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(options, true)
+    .setAllowInvalid(false)
+    .build();
+  sheet.getRange(fromRow, colNum, toRow, colNum).setDataValidation(rule);
+  return { fromRow: fromRow, toRow: toRow };
+}
+
+function columnIndexToLetter_(index) {
+  var n = Number(index) || 0;
+  var s = "";
+  while (n > 0) {
+    var rem = (n - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
 }
 
 function resolveSheet_(ss, data) {
