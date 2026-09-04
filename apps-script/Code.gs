@@ -12,6 +12,7 @@
  *   appendLoaded  — add/update Name + cellphone on the loaded-clients sheet
  *   writeStatus   — write Status + Timing on the applicant source sheet
  *   renumberRows  — fill column A with 1, 2, 3… (row 2 = 1; row 1 = header)
+ *   updateSheet   — arbitrary cell updates on any spreadsheet/tab
  *
  * The account that deploys this must be able to edit both spreadsheets.
  */
@@ -32,6 +33,9 @@ function doPost(e) {
     }
     if (action === "renumberRows") {
       return json_(renumberRows_(data));
+    }
+    if (action === "updateSheet") {
+      return json_(updateSheet_(data));
     }
     return json_({ ok: false, error: "Unknown action: " + action });
   } catch (err) {
@@ -181,6 +185,155 @@ function ensureColumn_(sheet, headers, name) {
     headers[col - 1] = name;
   }
   return col;
+}
+
+/**
+ * Arbitrary sheet edits.
+ *
+ * Payload examples:
+ *   { action: "updateSheet", spreadsheetId: "...", sheetId: 2126384446,
+ *     updates: [{ a1: "F2", value: "Approved" }, { row: 3, column: "Comment", value: "OK" }] }
+ *
+ *   { action: "updateSheet", spreadsheetId: "...", sheetId: 2126384446,
+ *     find: { column: "Name", equals: "Thapelo Nyathi" },
+ *     set: { Status: "Approved", Comment: "Loaded" } }
+ *
+ *   { action: "updateSheet", spreadsheetId: "...", sheetId: 2126384446,
+ *     append: { Name: "Jane Doe", Number: "0821234567", Status: "Pending" } }
+ */
+function updateSheet_(data) {
+  var spreadsheetId =
+    data.spreadsheetId ||
+    data.workbookId ||
+    LOADED_SHEET_ID;
+
+  var ss = SpreadsheetApp.openById(spreadsheetId);
+  var sheet = resolveSheet_(ss, data);
+  var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  var written = [];
+
+  if (data.append && typeof data.append === "object") {
+    var row = sheet.getLastRow() + 1;
+    if (row < 2) row = 2;
+    var appendKeys = Object.keys(data.append);
+    for (var a = 0; a < appendKeys.length; a++) {
+      var aKey = appendKeys[a];
+      var aCol = ensureColumn_(sheet, headers, aKey);
+      var aVal = data.append[aKey];
+      if (isPhoneColumn_(aKey)) writePhone_(sheet, row, aCol, aVal);
+      else sheet.getRange(row, aCol).setValue(aVal);
+      written.push({ row: row, column: aKey, value: aVal });
+    }
+  }
+
+  if (data.find && data.set && typeof data.set === "object") {
+    var findColName = data.find.column || data.find.header || "Name";
+    var findVal = String(data.find.equals != null ? data.find.equals : data.find.value || "").trim();
+    var findCol = headers.indexOf(findColName) + 1;
+    if (findCol === 0) {
+      return { ok: false, error: "Find column not found: " + findColName };
+    }
+    var last = sheet.getLastRow();
+    if (last < 2) {
+      return { ok: false, error: "No data rows to search" };
+    }
+    var cells = sheet.getRange(2, findCol, last - 1, 1).getValues();
+    var matchedRow = 0;
+    for (var i = 0; i < cells.length; i++) {
+      if (String(cells[i][0]).trim().toLowerCase() === findVal.toLowerCase()) {
+        matchedRow = i + 2;
+        break;
+      }
+    }
+    if (!matchedRow) {
+      return { ok: false, error: "No row matched " + findColName + "=" + findVal };
+    }
+    var setKeys = Object.keys(data.set);
+    for (var s = 0; s < setKeys.length; s++) {
+      var sKey = setKeys[s];
+      var sCol = ensureColumn_(sheet, headers, sKey);
+      var sVal = data.set[sKey];
+      if (isPhoneColumn_(sKey)) writePhone_(sheet, matchedRow, sCol, sVal);
+      else sheet.getRange(matchedRow, sCol).setValue(sVal);
+      written.push({ row: matchedRow, column: sKey, value: sVal });
+    }
+  }
+
+  var updates = data.updates || data.cells || [];
+  for (var u = 0; u < updates.length; u++) {
+    var item = updates[u];
+    if (item.a1) {
+      sheet.getRange(String(item.a1)).setValue(item.value);
+      written.push({ a1: item.a1, value: item.value });
+      continue;
+    }
+    var rowNum = Number(item.row) || 0;
+    if (!rowNum) {
+      return { ok: false, error: "updates[] item needs a1 or row" };
+    }
+    var colNum = 0;
+    if (item.columnIndex) colNum = Number(item.columnIndex);
+    else if (item.column || item.header) {
+      colNum = ensureColumn_(sheet, headers, item.column || item.header);
+    } else if (item.col) {
+      colNum = columnLetterToIndex_(item.col);
+    }
+    if (!colNum) {
+      return { ok: false, error: "updates[] item needs column/header/col/columnIndex" };
+    }
+    var val = item.value;
+    if (item.column && isPhoneColumn_(item.column)) writePhone_(sheet, rowNum, colNum, val);
+    else sheet.getRange(rowNum, colNum).setValue(val);
+    written.push({ row: rowNum, column: item.column || item.header || item.col || colNum, value: val });
+  }
+
+  if (written.length === 0) {
+    return {
+      ok: false,
+      error: "Nothing to write. Provide updates[], or find+set, or append.",
+    };
+  }
+
+  return {
+    ok: true,
+    spreadsheetId: spreadsheetId,
+    sheetName: sheet.getName(),
+    sheetId: sheet.getSheetId(),
+    count: written.length,
+    written: written,
+  };
+}
+
+function resolveSheet_(ss, data) {
+  var gid = data.sheetGid != null ? Number(data.sheetGid) : data.gid != null ? Number(data.gid) : null;
+  // Common mistake: callers put the tab gid in sheetId. Prefer explicit spreadsheetId.
+  if (gid == null && data.sheetId != null && data.spreadsheetId) {
+    gid = Number(data.sheetId);
+  }
+  if (gid != null && !isNaN(gid)) {
+    var byId = ss.getSheetById(gid);
+    if (byId) return byId;
+    throw new Error("No sheet with gid " + gid);
+  }
+  if (data.sheetName) {
+    var byName = ss.getSheetByName(String(data.sheetName));
+    if (byName) return byName;
+    throw new Error("No sheet named " + data.sheetName);
+  }
+  return ss.getSheets()[0];
+}
+
+function isPhoneColumn_(name) {
+  return /number|phone|mobile|cell/i.test(String(name || ""));
+}
+
+function columnLetterToIndex_(letter) {
+  var s = String(letter || "").toUpperCase().replace(/[^A-Z]/g, "");
+  var n = 0;
+  for (var i = 0; i < s.length; i++) {
+    n = n * 26 + (s.charCodeAt(i) - 64);
+  }
+  return n;
 }
 
 function json_(obj) {

@@ -12,6 +12,7 @@
     "retry": "tsx src/retryRows.ts",
     "renumber-rows": "tsx src/renumberRows.ts",
     "sync-loaded": "tsx src/syncLoadedSheet.ts",
+    "sheet-update": "tsx src/updateSheet.ts",
     "test": "tsx --test src/outcome.test.ts src/transforms.test.ts src/sheetCsv.test.ts",
     "install-browsers": "playwright install chromium"
   },
