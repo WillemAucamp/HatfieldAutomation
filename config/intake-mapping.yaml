@@ -8,7 +8,12 @@ intake:
 
 destination:
   spreadsheet_id: 12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI
+  spreadsheet_url: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?gid=0#gid=0
+  gid: 0
+  headers_file: config/output-sheet-headers.tsv
   loaded_clients_spreadsheet_id: 1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM
+  # LLM / writer must emit exactly this many cells, in this order, one row, no extra columns.
+  column_count: 35
 
 # Exact Form question titles as they appear in the intake sheet (newlines collapsed to spaces).
 intake_columns:
@@ -61,8 +66,9 @@ intake_headers:
   id_number: ID Number
   consent: "Thank you for the above info provided, looking forward to getting you the best possible deal Are you okay with us processing your information for this finance application, Do we have your permission to apply on your behalf to see what is the best possible deal?"
 
-# Destination sheet column order (Melrose loader + original LLM TSV prompt).
+# Exact live output-sheet header row (gid=0). Order is the contract.
 destination_columns:
+  - NR
   - Full name
   - Email
   - Title
@@ -95,9 +101,16 @@ destination_columns:
   - Account type (AI—most likely option based on bank)
   - Account holder name and surname (same as client)
   - Client cellphone number (add again at the end)
+  - Status
+  - Timing
 
 # copy = pass through (normalise only). infer = LLM / search / standing prompt rules.
+# writer = filled by the sheet writer / Melrose loader, not by Gemini.
 field_map:
+  - destination: NR
+    mode: writer
+    notes: Next integer after the last data row (row 2 = 1). Do not let the LLM invent NR.
+
   - destination: Full name
     source: name_and_surname
     mode: copy
@@ -244,6 +257,14 @@ field_map:
     mode: copy
     notes: Same value as Mobile number.
 
+  - destination: Status
+    mode: writer
+    notes: Leave blank on insert. Melrose loader writes ZAHTVW… or error here; blank means "not loaded yet".
+
+  - destination: Timing
+    mode: writer
+    notes: Leave blank on insert. Melrose loader writes elapsed seconds after a successful load.
+
 passthrough_not_on_destination:
   - timestamp
   - vehicle_interest
@@ -251,8 +272,11 @@ passthrough_not_on_destination:
   - gender
 
 rules:
+  - Output must be exactly 35 columns in destination_columns order. No extra headings, notes, or columns.
+  - LLM fills columns 2–33 only. Writer sets NR; Status and Timing stay empty so the Melrose loader picks the row up.
   - Never invent ID numbers or salary figures.
   - Never output Gender on the destination sheet.
   - Dates must be MM DD YYYY.
   - If a value cannot be determined, output Unknown (expenses default to 0).
   - Do not load a row when consent is not given.
+  - Single-line cells only (no line breaks inside addresses or names).
