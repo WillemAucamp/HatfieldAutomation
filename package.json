@@ -9,11 +9,13 @@
     "start": "node dist/runBatch.js",
     "dev": "tsx src/runBatch.ts",
     "dry-run": "tsx src/runBatch.ts --dry-run",
+    "ingest": "tsx src/watchIntake.ts --once --skip-load",
+    "watch": "tsx src/watchIntake.ts",
     "retry": "tsx src/retryRows.ts",
     "renumber-rows": "tsx src/renumberRows.ts",
     "sync-loaded": "tsx src/syncLoadedSheet.ts",
     "sheet-update": "tsx src/updateSheet.ts",
-    "test": "tsx --test src/outcome.test.ts src/transforms.test.ts src/sheetCsv.test.ts",
+    "test": "tsx --test src/outcome.test.ts src/transforms.test.ts src/sheetCsv.test.ts src/intake/gemini.test.ts src/intake/headers.test.ts src/intake/row.test.ts src/intake/mapping.test.ts",
     "install-browsers": "playwright install chromium"
   },
   "engines": {
@@ -24,7 +26,8 @@
     "fuse.js": "^7.5.0",
     "googleapis": "^174.0.1",
     "papaparse": "^5.5.4",
-    "playwright": "^1.62.1"
+    "playwright": "^1.62.1",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

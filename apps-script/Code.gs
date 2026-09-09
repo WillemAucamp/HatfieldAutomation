@@ -14,12 +14,16 @@
  *   renumberRows  — fill column A with 1, 2, 3… (row 2 = 1; row 1 = header)
  *   updateSheet   — arbitrary cell updates on any spreadsheet/tab
  *                   (also insertColumn + dataValidation dropdowns)
+ *   readSheet     — read rows (used for Google Form intake)
+ *   appendApplicant — append a formatted finance row on the automation sheet
  *
- * The account that deploys this must be able to edit both spreadsheets.
+ * The account that deploys this must be able to edit the intake Form sheet
+ * AND the automation / loaded-clients sheets.
  */
 
 var SOURCE_SHEET_ID = "12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI";
 var LOADED_SHEET_ID = "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM";
+var INTAKE_SHEET_ID = "1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M";
 
 function doPost(e) {
   var data = JSON.parse(e.postData.contents);
@@ -37,6 +41,12 @@ function doPost(e) {
     }
     if (action === "updateSheet") {
       return json_(updateSheet_(data));
+    }
+    if (action === "readSheet") {
+      return json_(readSheet_(data));
+    }
+    if (action === "appendApplicant") {
+      return json_(appendApplicant_(data));
     }
     return json_({ ok: false, error: "Unknown action: " + action });
   } catch (err) {
@@ -468,6 +478,117 @@ function columnLetterToIndex_(letter) {
     n = n * 26 + (s.charCodeAt(i) - 64);
   }
   return n;
+}
+
+function isIdColumn_(name) {
+  return /id number/i.test(String(name || ""));
+}
+
+function writePlain_(sheet, row, col, name, value) {
+  var text = value == null ? "" : String(value);
+  if (isPhoneColumn_(name) || isIdColumn_(name)) {
+    sheet.getRange(row, col).setNumberFormat("@").setValue(text);
+    return;
+  }
+  sheet.getRange(row, col).setValue(value);
+}
+
+/**
+ * Read a sheet as header → value records.
+ * { action: "readSheet", spreadsheetId, unprocessedOnly: true,
+ *   statusColumn: "Enrichment Status", processableStatuses: ["", "new", "retry"] }
+ */
+function readSheet_(data) {
+  var spreadsheetId = data.spreadsheetId || data.intakeSheetId || INTAKE_SHEET_ID;
+  var ss = SpreadsheetApp.openById(spreadsheetId);
+  var sheet = resolveSheet_(ss, data);
+  var statusColumn = data.statusColumn != null ? String(data.statusColumn) : "";
+  var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  if (statusColumn) {
+    ensureColumn_(sheet, headers, statusColumn);
+    headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  }
+  var lastRow = sheet.getLastRow();
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var rows = [];
+  var processable = (data.processableStatuses || ["", "new", "retry"]).map(function (s) {
+    return String(s).trim().toLowerCase();
+  });
+  var statusIdx = statusColumn ? headers.indexOf(statusColumn) : -1;
+  if (lastRow >= 2) {
+    var values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    for (var i = 0; i < values.length; i++) {
+      var status = statusIdx >= 0 ? String(values[i][statusIdx] || "").trim().toLowerCase() : "";
+      if (data.unprocessedOnly && processable.indexOf(status) === -1) continue;
+      var record = {};
+      for (var c = 0; c < headers.length; c++) {
+        var h = String(headers[c] || "");
+        if (!h) continue;
+        var cell = values[i][c];
+        if (cell instanceof Date) {
+          record[h] = Utilities.formatDate(cell, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+        } else {
+          record[h] = cell == null ? "" : String(cell);
+        }
+      }
+      rows.push({ rowIndex: i + 2, status: status, values: record });
+    }
+  }
+  return {
+    ok: true,
+    spreadsheetId: spreadsheetId,
+    sheetName: sheet.getName(),
+    headers: headers.map(function (h) {
+      return String(h || "");
+    }),
+    rows: rows,
+  };
+}
+
+/**
+ * Append one formatted applicant row to the automation sheet.
+ * Assigns the next NR and leaves Status/Timing empty unless provided.
+ */
+function appendApplicant_(data) {
+  var ss = SpreadsheetApp.openById(data.spreadsheetId || data.sourceSheetId || SOURCE_SHEET_ID);
+  var sheet = resolveSheet_(ss, data);
+  var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  var nrColumn = data.nrColumn || "NR";
+  var statusColumn = data.statusColumn || "Status";
+  var timingColumn = data.timingColumn || "Timing";
+  var nrCol = ensureColumn_(sheet, headers, nrColumn);
+  ensureColumn_(sheet, headers, statusColumn);
+  ensureColumn_(sheet, headers, timingColumn);
+
+  var lastRow = sheet.getLastRow();
+  var nextNr = 1;
+  if (lastRow >= 2) {
+    var nrs = sheet.getRange(2, nrCol, lastRow - 1, 1).getValues();
+    for (var i = 0; i < nrs.length; i++) {
+      var n = Number(nrs[i][0]);
+      if (!isNaN(n) && n >= nextNr) nextNr = n + 1;
+    }
+  }
+
+  var values = data.values || data.append || {};
+  values[nrColumn] = values[nrColumn] != null && values[nrColumn] !== "" ? values[nrColumn] : nextNr;
+  if (values[statusColumn] == null) values[statusColumn] = "";
+  if (values[timingColumn] == null) values[timingColumn] = "";
+
+  var row = Math.max(lastRow + 1, 2);
+  var keys = Object.keys(values);
+  for (var k = 0; k < keys.length; k++) {
+    var key = keys[k];
+    var col = ensureColumn_(sheet, headers, key);
+    writePlain_(sheet, row, col, key, values[key]);
+  }
+  return {
+    ok: true,
+    row: row,
+    nr: values[nrColumn],
+    spreadsheetId: ss.getId(),
+    sheetName: sheet.getName(),
+  };
 }
 
 function json_(obj) {

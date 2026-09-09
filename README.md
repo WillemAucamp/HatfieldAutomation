@@ -1,6 +1,31 @@
 # VW Melrose Finance Application Auto-Filler
 
-Browser automation that reads applicant data from a public Google Sheet and fills the [VW Melrose finance application](https://vwmelrose.hatfieldgroup.co.za/finance) through Section 5, stopping before document upload for manual completion.
+When a client submits the Google Form, this repo can now:
+
+1. Read the new **intake** row
+2. Send it to **Gemini** with the standing finance prompt (fresh call every time)
+3. Append one row to the **automation sheet** in the live 35-column layout (`NR` … `Status` `Timing`)
+4. Run the existing Playwright loader against those new blank-Status rows on [VW Melrose finance](https://vwmelrose.hatfieldgroup.co.za/finance)
+
+## 24/7 watch
+
+1. Redeploy `apps-script/Code.gs` as a web app (Execute as: Me, Who has access: Anyone). The script owner must be able to **edit the Form intake sheet** as well as the automation sheet.
+2. Copy `.env.example` to `.env`. Set `GEMINI_API_KEY` and `SHEET_WEBHOOK_URL`.
+3. Install and leave the watcher running (or use the GitHub Action after merging to `main`):
+
+```bash
+npm install
+npm run install-browsers
+npm test
+npm run watch                 # poll intake forever; load Melrose when a row is appended
+npm run ingest                # one-shot Gemini append only (no browser)
+npm run watch -- --once       # one poll, then load any new rows
+```
+
+Intake sheet: https://docs.google.com/spreadsheets/d/1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M  
+Automation sheet: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?gid=0#gid=0
+
+Processed Form rows are marked in **Enrichment Status**. The loader still skips any automation row whose **Status** is already filled.
 
 ## Stack
 

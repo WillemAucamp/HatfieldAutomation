@@ -178,10 +178,10 @@ export function removeProcessedRowIds(rowIds: string[]): number {
   return removed;
 }
 
-async function postWebhookJson(
+export async function postWebhookJson(
   url: string,
   payload: Record<string, unknown>
-): Promise<{ ok?: boolean; skipped?: boolean; updated?: boolean; error?: string; row?: number; count?: number }> {
+): Promise<Record<string, unknown> & { ok?: boolean; skipped?: boolean; updated?: boolean; error?: string; row?: number; count?: number; nr?: number; rows?: unknown[]; headers?: string[] }> {
   // Apps Script web apps 302 to googleusercontent.com. Following that
   // redirect with POST yields 405; the JSON result must be fetched with GET.
   const response = await fetch(url, {
@@ -214,25 +214,27 @@ async function postWebhookJson(
   return parseWebhookBody(body);
 }
 
-function parseWebhookBody(body: string): {
+function parseWebhookBody(body: string): Record<string, unknown> & {
   ok?: boolean;
   skipped?: boolean;
   updated?: boolean;
   error?: string;
   row?: number;
   count?: number;
+  nr?: number;
 } {
   if (!body.trim()) {
     return { ok: true };
   }
   try {
-    return JSON.parse(body) as {
+    return JSON.parse(body) as Record<string, unknown> & {
       ok?: boolean;
       skipped?: boolean;
       updated?: boolean;
       error?: string;
       row?: number;
       count?: number;
+      nr?: number;
     };
   } catch {
     if (/<!doctype html/i.test(body) || /authorization/i.test(body)) {

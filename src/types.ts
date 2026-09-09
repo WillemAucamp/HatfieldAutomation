@@ -98,6 +98,13 @@ export interface AppConfig {
   loadedSheetWebhookUrl: string;
   loadedNameColumn: string;
   loadedNumberColumn: string;
+  geminiApiKey: string;
+  geminiModel: string;
+  intakeSpreadsheetId: string;
+  intakeStatusColumn: string;
+  intakeMappingPath: string;
+  pollSeconds: number;
+  autoLoad: boolean;
 }
 
 export type FieldStrategy =

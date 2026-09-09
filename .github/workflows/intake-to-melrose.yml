@@ -1,0 +1,29 @@
+name: Intake to Melrose
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ingest-and-load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Enrich new Form rows and load Melrose
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
+          SHEET_CSV_URL: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/gviz/tq?tqx=out:csv&gid=0
+          SHEET_ID: 12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI
+          INTAKE_SPREADSHEET_ID: 1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M
+          HEADLESS: "true"
+          AUTO_LOAD: "true"
+        run: npm run watch -- --once

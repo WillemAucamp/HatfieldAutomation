@@ -98,6 +98,14 @@ export function loadConfig(): AppConfig {
     loadedNameColumn: process.env.LOADED_NAME_COLUMN || fileConfig.loadedNameColumn || "Name",
     loadedNumberColumn:
       process.env.LOADED_NUMBER_COLUMN || fileConfig.loadedNumberColumn || "Number",
+    geminiApiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "",
+    geminiModel: process.env.GEMINI_MODEL || "gemini-3.6-flash",
+    intakeSpreadsheetId:
+      process.env.INTAKE_SPREADSHEET_ID || "1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M",
+    intakeStatusColumn: process.env.INTAKE_STATUS_COLUMN || "Enrichment Status",
+    intakeMappingPath: process.env.INTAKE_MAPPING_PATH || "./config/intake-mapping.yaml",
+    pollSeconds: parseInt(process.env.POLL_SECONDS ?? "60", 10) || 60,
+    autoLoad: cliFlag("skip-load") ? false : parseBool(process.env.AUTO_LOAD, true),
   };
 }
 
