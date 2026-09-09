@@ -611,3 +611,55 @@ function json_(obj) {
     ContentService.MimeType.JSON
   );
 }
+
+var CURSOR_WEBHOOK_PROP = "CURSOR_WEBHOOK_URL";
+var CURSOR_WEBHOOK_KEY_PROP = "CURSOR_WEBHOOK_API_KEY";
+
+function notifyCursorAutomation_(payload) {
+  var props = PropertiesService.getScriptProperties();
+  var url = props.getProperty(CURSOR_WEBHOOK_PROP);
+  if (!url) {
+    return { ok: false, skipped: true, reason: "CURSOR_WEBHOOK_URL not set" };
+  }
+  var key = props.getProperty(CURSOR_WEBHOOK_KEY_PROP) || "";
+  var headers = {};
+  if (key) {
+    headers.Authorization = "Bearer " + key;
+    headers["X-API-Key"] = key;
+  }
+  var res = UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    headers: headers,
+    payload: JSON.stringify(payload || { event: "intake_changed" }),
+    muteHttpExceptions: true,
+    followRedirects: true,
+  });
+  return { ok: res.getResponseCode() >= 200 && res.getResponseCode() < 300, status: res.getResponseCode() };
+}
+
+function onIntakeChange(e) {
+  notifyCursorAutomation_({
+    event: "intake_form_submit",
+    changeType: e && e.changeType,
+    spreadsheetId: INTAKE_SHEET_ID,
+  });
+}
+
+/**
+ * Run once from the Apps Script editor after you paste Cursor's webhook URL
+ * into Project Settings → Script properties:
+ *   CURSOR_WEBHOOK_URL
+ *   CURSOR_WEBHOOK_API_KEY
+ */
+function setupIntakeWatch() {
+  var ss = SpreadsheetApp.openById(INTAKE_SHEET_ID);
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === "onIntakeChange") {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  ScriptApp.newTrigger("onIntakeChange").forSpreadsheet(ss).onFormSubmit().create();
+  return { ok: true, spreadsheet: ss.getName(), handler: "onIntakeChange" };
+}
