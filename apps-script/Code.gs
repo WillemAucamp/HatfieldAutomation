@@ -25,6 +25,21 @@ var SOURCE_SHEET_ID = "12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI";
 var LOADED_SHEET_ID = "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM";
 var INTAKE_SHEET_ID = "1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M";
 
+function doGet() {
+  return json_({
+    ok: true,
+    version: "hatfield-intake-1",
+    actions: [
+      "appendLoaded",
+      "writeStatus",
+      "renumberRows",
+      "updateSheet",
+      "readSheet",
+      "appendApplicant",
+    ],
+  });
+}
+
 function doPost(e) {
   var data = JSON.parse(e.postData.contents);
   var action = data.action || inferAction_(data);

@@ -7,20 +7,41 @@ When a client submits the Google Form, this repo can now:
 3. Append one row to the **automation sheet** in the live 35-column layout (`NR` … `Status` `Timing`)
 4. Run the existing Playwright loader against those new blank-Status rows on [VW Melrose finance](https://vwmelrose.hatfieldgroup.co.za/finance)
 
-## 24/7 watch
+## What is already done
 
-1. Redeploy `apps-script/Code.gs` as a web app (Execute as: Me, Who has access: Anyone). The script owner must be able to **edit the Form intake sheet** as well as the automation sheet.
-2. Copy `.env.example` to `.env`. Set `GEMINI_API_KEY` and `SHEET_WEBHOOK_URL`.
-3. Install and leave the watcher running (or use the GitHub Action after merging to `main`):
+- Gemini key works from this repo (`gemini-3.6-flash`).
+- A fictional Form row has been run through the standing prompt: 35-column JSON, employer lookup, dates, FNB → Cheque/Current, Status/Timing blank. Nothing was written to the live sheets.
+- The live Apps Script webhook still answers, but it is the **old** deploy (`Unknown action: readSheet`). Intake cannot be read until you ship the new script.
 
 ```bash
-npm install
-npm run install-browsers
-npm test
-npm run watch                 # poll intake forever; load Melrose when a row is appended
-npm run ingest                # one-shot Gemini append only (no browser)
-npm run watch -- --once       # one poll, then load any new rows
+npm run doctor          # what is blocked
+npm run enrich-sample   # Gemini only, no sheet writes
 ```
+
+## What only you can do
+
+### 1. Redeploy Apps Script (required)
+
+The Google account that owns the current webhook must do this. I cannot log into that account.
+
+1. Open the automation sheet → **Extensions → Apps Script**.
+2. Replace all code with `apps-script/Code.gs` from this branch (includes `readSheet`, `appendApplicant`, `doGet` version `hatfield-intake-1`).
+3. **Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy.**  
+   Keep **Execute as: Me** and **Who has access: Anyone**.
+4. Confirm that same Google account can **edit** the Form intake sheet:  
+   https://docs.google.com/spreadsheets/d/1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M
+5. Tell me (or re-run `npm run doctor`). It should report `Apps Script deploy: hatfield-intake-1`.
+
+If the /exec URL changes, put the new URL in `.env` as `SHEET_WEBHOOK_URL`.
+
+### 2. Keep it running 24/7 (pick one)
+
+I cannot leave a process running after this agent stops, and I cannot add GitHub Actions secrets (403).
+
+- **Office machine:** `npm run watch` (needs Chromium; `.env` already has `GEMINI_API_KEY` + webhook locally, gitignored).
+- **GitHub Actions:** merge this PR to `main`, then repo **Settings → Secrets → Actions** add `GEMINI_API_KEY` and `SHEET_WEBHOOK_URL`. The workflow `.github/workflows/intake-to-melrose.yml` polls every 5 minutes.
+
+Do **not** submit a real client as a first test. After step 1, run `npm run ingest` on one Form row and check the automation sheet before allowing Melrose to load.
 
 Intake sheet: https://docs.google.com/spreadsheets/d/1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M  
 Automation sheet: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?gid=0#gid=0
