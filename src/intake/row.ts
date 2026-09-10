@@ -1,3 +1,4 @@
+import { transformMobile, validateIdNumber } from "../transforms.js";
 import type { IntakeMapping } from "./mapping.js";
 
 const BANK_ACCOUNT_TYPE: Record<string, string> = {
@@ -33,12 +34,24 @@ export function applyDeterministicFixes(fields: Record<string, string>): Record<
     if (!next["Full name"]) next["Full name"] = fullName;
   }
   const mobile = next["Mobile number"] || next["Client cellphone number (add again at the end)"] || "";
-  if (mobile) {
+  const mobileResult = transformMobile(mobile);
+  if (mobileResult.valid) {
+    next["Mobile number"] = mobileResult.value;
+    next["Client cellphone number (add again at the end)"] = mobileResult.value;
+  } else if (mobile) {
     next["Mobile number"] = mobile;
     next["Client cellphone number (add again at the end)"] = mobile;
   }
+  const idResult = validateIdNumber(next["ID number"]);
+  if (idResult.valid) {
+    next["ID number"] = idResult.value;
+    next["ID Type"] = "RSA ID";
+  } else if (/south african/i.test(next["ID Type"] ?? "")) {
+    next["ID Type"] = "RSA ID";
+  }
   for (const expense of ["Telephone payment", "Transport cost", "Food cost"]) {
-    if (!String(next[expense] ?? "").trim()) next[expense] = "0";
+    const raw = String(next[expense] ?? "").trim();
+    if (!raw || /^unknown$/i.test(raw)) next[expense] = "0";
   }
   return next;
 }

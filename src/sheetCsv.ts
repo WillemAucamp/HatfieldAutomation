@@ -1,4 +1,4 @@
-/** Prefer gviz CSV — Google’s /export endpoint often returns 502 under load. */
+/** Prefer /export CSV — gviz silently blanks text-formatted ID and phone cells. */
 export const DEFAULT_SHEET_ID = "12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI";
 
 export function gvizCsvUrl(sheetId: string, gid = "0"): string {
@@ -9,7 +9,7 @@ export function exportCsvUrl(sheetId: string, gid = "0"): string {
   return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
 }
 
-export const DEFAULT_SHEET_CSV_URL = gvizCsvUrl(DEFAULT_SHEET_ID);
+export const DEFAULT_SHEET_CSV_URL = exportCsvUrl(DEFAULT_SHEET_ID);
 
 export function extractSheetId(url: string): string {
   const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
@@ -29,21 +29,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function candidateUrls(preferred: string): string[] {
+/** /export first: gviz returns 200 but drops @-formatted ID/phone/expense cells. */
+export function csvCandidateUrls(preferred: string): string[] {
   const sheetId = extractSheetId(preferred) || DEFAULT_SHEET_ID;
   const gid = extractGid(preferred);
-  const gviz = gvizCsvUrl(sheetId, gid);
   const exported = exportCsvUrl(sheetId, gid);
-  const urls = [preferred, gviz, exported];
-  return [...new Set(urls)];
+  const gviz = gvizCsvUrl(sheetId, gid);
+  return [...new Set([exported, preferred, gviz])];
 }
 
 /**
- * Fetch sheet CSV with retries and gviz↔export fallback.
+ * Fetch sheet CSV with retries. Tries /export first, then the preferred URL, then gviz.
  * Always sends a browser UA — Googleusercontent redirects are picky.
  */
 export async function fetchSheetCsv(url: string, attemptsPerUrl = 3): Promise<string> {
-  const urls = candidateUrls(url);
+  const urls = csvCandidateUrls(url);
   const errors: string[] = [];
 
   for (const candidate of urls) {
@@ -63,7 +63,7 @@ export async function fetchSheetCsv(url: string, attemptsPerUrl = 3): Promise<st
             errors.push(`${candidate}: HTML instead of CSV`);
             break;
           }
-          if (candidate !== url) {
+          if (candidate !== urls[0]) {
             console.warn(`  [sheetCsv] Fell back to ${candidate}`);
           } else if (attempt > 1) {
             console.warn(`  [sheetCsv] Succeeded on attempt ${attempt}`);

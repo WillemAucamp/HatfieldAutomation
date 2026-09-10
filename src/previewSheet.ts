@@ -10,6 +10,8 @@ async function main(): Promise<void> {
     csvUrl: config.sheetCsvUrl,
     mapping,
     rowFilter: config.rowFilter.length > 0 ? config.rowFilter : undefined,
+    webhookUrl: config.sheetWebhookUrl,
+    spreadsheetId: config.sheetId,
   });
 
   if (applicants.length === 0) {

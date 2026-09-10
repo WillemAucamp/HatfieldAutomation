@@ -131,7 +131,7 @@ field_map:
   - destination: ID Type
     source: id_number
     mode: infer
-    notes: South African ID if 13 digits; otherwise Unknown. Never invent an ID.
+    notes: Exactly "RSA ID" if 13 digits; otherwise Unknown. Never write "South African ID". Never invent an ID.
 
   - destination: ID number
     source: id_number
@@ -145,7 +145,7 @@ field_map:
   - destination: Mobile number
     sources: [whatsapp_phone, call_phone]
     mode: copy
-    notes: Prefer WhatsApp number; else call number. +27 → 0; strip spaces/dashes.
+    notes: Prefer WhatsApp number; else call number. 10 digits starting with 0 (+27 → 0). Never leave empty if a phone exists.
 
   - destination: Address line
     source: street_address
@@ -163,7 +163,7 @@ field_map:
   - destination: Year start living at address (MM DD YYYY format ONLY)
     source: years_at_address
     mode: infer
-    notes: If "X years/months living there", calculate from today as MM DD YYYY.
+    notes: If "X years/months living there", calculate from today as MM DD YYYY. Never use the ID date of birth.
 
   - destination: Next of kin name + Surname
     source: next_of_kin_name
@@ -228,7 +228,7 @@ field_map:
   - destination: Telephone payment
     source: expenses_summary
     mode: infer
-    notes: Map accounts/mobile contracts. Split a single total across Telephone/Transport/Food. 0 if missing.
+    notes: Map accounts/mobile contracts. Split a single total across Telephone/Transport/Food. Numeric only; 0 if missing. Never blank.
 
   - destination: Transport cost
     source: expenses_summary
@@ -277,6 +277,6 @@ rules:
   - Never invent ID numbers or salary figures.
   - Never output Gender on the destination sheet.
   - Dates must be MM DD YYYY.
-  - If a value cannot be determined, output Unknown (expenses default to 0).
+  - If a value cannot be determined, output Unknown (expenses default to 0; ID Type is RSA ID for 13-digit IDs).
   - Do not load a row when consent is not given.
   - Single-line cells only (no line breaks inside addresses or names).

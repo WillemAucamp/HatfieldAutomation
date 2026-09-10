@@ -17,14 +17,16 @@ Today's date for relative calculations is ${todayStamp}.
 
 1. IDENTIFICATION & DATES:
 - Remove all spaces from ID numbers. Do not add notes or commentary.
+- ID Type MUST be exactly "RSA ID" (never "South African ID").
 - Detect gender internally if necessary, but NEVER display it in the output.
 - All date formats MUST strictly follow: MM DD YYYY.
-- Residential Move-in Date: If "X years living there" is provided, calculate the year/date based on the current date and output in MM DD YYYY format.
+- Residential Move-in Date: If "X years living there" is provided, calculate the year/date based on the current date and output in MM DD YYYY format. Do not use the birth date from the ID number.
 - Employment Start Date: If "X years working there" is provided, calculate the start date in MM DD YYYY format. If an exact date is provided, convert it to MM DD YYYY format.
 
 2. CONTACT NUMBERS:
-- Convert "+27" country codes to local "0" format.
-- Remove all spaces, dashes, and special formatting from cellphone numbers.
+- Convert "+27" country codes to local "0" format (2712… → 012…).
+- Every phone MUST be exactly 10 digits starting with 0. No spaces, dashes, or country codes.
+- Fill ALL of: Mobile number, Next of kin cellphone number, Employer telephone number, Client cellphone number (same as Mobile number). Never leave Mobile number empty if any phone exists on the form.
 - Prefer the WhatsApp number as Mobile number; use the call number if WhatsApp is empty.
 - If Next of Kin cellphone number equals the client's number, repeat the client's number.
 
@@ -54,13 +56,16 @@ Today's date for relative calculations is ${todayStamp}.
 - Extract actual expense values when explicitly provided.
 - Map expense items to: Telephone payment (mobile contracts/accounts), Transport cost (fuel/travel/taxi), Food cost (groceries).
 - If only a single combined expense figure is given without a breakdown, split it proportionally across Telephone, Transport, and Food.
-- If expense data is completely missing, output: 0
+- Telephone payment, Transport cost, and Food cost MUST be numeric amounts (e.g. 1000 or 333.33). Never blank, never "Unknown". Use 0 if missing.
 
 6. MISSING DATA & CONSTRAINTS:
 - Never invent ID numbers or salary figures.
-- If a piece of data cannot be determined from documents, text, inference, web search, or specified fallbacks, output: Unknown
+- If a piece of data cannot be determined from documents, text, inference, web search, or specified fallbacks, output: Unknown — except expenses (use 0) and phones/ID (copy from the form; do not output Unknown for those).
 - Title should be Mr/Mrs/Ms/Dr inferred from the name/gender; do not output Gender.
-- ID Type is typically "South African ID" when the ID number is 13 digits.
+- ID Type MUST be exactly "RSA ID" when the ID number is 13 digits. Never write "South African ID".
+- ID number: 13 digits only, no spaces.
+- Year start living at address: calculate from "how long have you lived here" relative to today as MM DD YYYY. NEVER use the date of birth encoded in the ID number.
+- Employment start date: calculate from years/months at the employer, not from the ID number.
 
 7. OUTPUT:
 - Return a single JSON object. No markdown, no commentary, no extra keys.

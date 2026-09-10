@@ -49,6 +49,8 @@ async function main(): Promise<void> {
     mapping,
     rowFilter: rows,
     includeCompleted: true,
+    webhookUrl: config.sheetWebhookUrl,
+    spreadsheetId: config.sheetId,
   });
   const byRow = new Map(applicants.map((a) => [a.rowIndex, a]));
 
