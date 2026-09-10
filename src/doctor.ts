@@ -125,11 +125,20 @@ export async function doctorMain(): Promise<number> {
   }
 
   checks.push({
-    name: "WHATSAPP_API_URL",
+    name: "WhatsApp Cloud API",
     ok: true,
-    detail: config.whatsapp.apiUrl
-      ? `set (leads gid=${config.leadsSheetGid}, templates ${config.whatsapp.approveTemplate}/${config.whatsapp.declineTemplate})`
-      : "optional — required for npm run notify-leads",
+    detail: (() => {
+      const w = config.whatsapp;
+      const url =
+        w.apiUrl ||
+        (w.phoneNumberId
+          ? `https://graph.facebook.com/${w.graphVersion}/${w.phoneNumberId}/messages`
+          : "");
+      if (!url || !w.apiKey) {
+        return `optional — set WHATSAPP_PHONE_NUMBER_ID + WHATSAPP_ACCESS_TOKEN for notify-leads (provider=${w.provider})`;
+      }
+      return `${w.provider} → ${url} templates ${w.approveTemplate}/${w.declineTemplate} lang=${w.templateLanguage}`;
+    })(),
   });
 
   for (const check of checks) print(check);

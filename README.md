@@ -307,13 +307,25 @@ Flow:
 
 Config: see `.env.example` (`WHATSAPP_*`, `LEADS_*`) and `config/leads-whatsapp-automation.md`.
 
+Uses **Meta WhatsApp Cloud API** (same stack as `vwwhatsappapi.onrender.com`):
+
+`POST https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages`
+
+The Render `/webhook` URL is inbound-only; this repo sends outbound templates to Graph directly.
+
 Default request body:
 
 ```json
-{ "to": "27821234567", "template": "approve", "name": "…", "status": "Approved", "rowIndex": 5 }
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "27821234567",
+  "type": "template",
+  "template": { "name": "approve", "language": { "code": "en" } }
+}
 ```
 
-Override shape with `WHATSAPP_BODY_TEMPLATE` placeholders: `{{phone}}` `{{template}}` `{{name}}` `{{status}}` `{{rowIndex}}`.
+Set `WHATSAPP_INCLUDE_NAME_PARAM=true` if the template body expects `{{1}}` = customer name.
 
 ## Development
 

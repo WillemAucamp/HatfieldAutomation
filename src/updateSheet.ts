@@ -246,8 +246,13 @@ async function main(): Promise<void> {
       rowFilter.length > 0 ||
       (set && Object.keys(set).some((k) => /^status$/i.test(k) && isNotifiableLeadStatus(set[k])));
     if (statusTouched) {
-      if (!config.whatsapp.apiUrl) {
-        console.log("Skipping WhatsApp notify: WHATSAPP_API_URL not set");
+      const hasEndpoint =
+        Boolean(config.whatsapp.apiUrl) ||
+        (config.whatsapp.provider === "meta" && Boolean(config.whatsapp.phoneNumberId));
+      if (!hasEndpoint || !config.whatsapp.apiKey) {
+        console.log(
+          "Skipping WhatsApp notify: set WHATSAPP_PHONE_NUMBER_ID + WHATSAPP_ACCESS_TOKEN"
+        );
       } else {
         const summary = await notifyPendingLeads(config, {
           rowFilter: rowFilter.length ? rowFilter : undefined,

@@ -34,9 +34,9 @@ Usage:
 
 Requires:
   SHEET_WEBHOOK_URL
-  WHATSAPP_API_URL
-  WHATSAPP_API_KEY (if your API needs auth)
-  Optional WHATSAPP_APPROVE_TEMPLATE / WHATSAPP_DECLINE_TEMPLATE / WHATSAPP_BODY_TEMPLATE`);
+  WHATSAPP_PHONE_NUMBER_ID + WHATSAPP_ACCESS_TOKEN
+    (or WHATSAPP_API_URL = https://graph.facebook.com/v21.0/{id}/messages)
+  Optional WHATSAPP_APPROVE_TEMPLATE / WHATSAPP_DECLINE_TEMPLATE / WHATSAPP_TEMPLATE_LANGUAGE`);
     return;
   }
 
@@ -50,9 +50,12 @@ Requires:
     return;
   }
 
-  if (!config.whatsapp.apiUrl && !config.dryRun && !argv.includes("--dry-run")) {
+  const hasEndpoint =
+    Boolean(config.whatsapp.apiUrl) ||
+    (config.whatsapp.provider === "meta" && Boolean(config.whatsapp.phoneNumberId));
+  if ((!hasEndpoint || !config.whatsapp.apiKey) && !config.dryRun && !argv.includes("--dry-run")) {
     throw new Error(
-      "WHATSAPP_API_URL is required. Add it to .env (and WHATSAPP_API_KEY if needed)."
+      "WhatsApp Cloud API needs WHATSAPP_PHONE_NUMBER_ID + WHATSAPP_ACCESS_TOKEN (or WHATSAPP_API_URL + token)."
     );
   }
 

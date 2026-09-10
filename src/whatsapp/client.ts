@@ -15,6 +15,7 @@ export interface WhatsAppSendResult {
   statusCode?: number;
   body?: string;
   requestBody?: Record<string, unknown>;
+  requestUrl?: string;
   phoneE164?: string;
   template?: string;
 }
@@ -33,13 +34,26 @@ function resolveTemplate(config: WhatsAppConfig, status: string): string | null 
   return key === "approve" ? config.approveTemplate : config.declineTemplate;
 }
 
+/** Build Graph messages URL: https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages */
+export function resolveWhatsAppApiUrl(config: WhatsAppConfig): string {
+  if (config.apiUrl.trim()) return config.apiUrl.trim();
+  if (config.provider === "meta" && config.phoneNumberId) {
+    const version = (config.graphVersion || "v21.0").replace(/^\/+|\/+$/g, "");
+    return `https://graph.facebook.com/${version}/${config.phoneNumberId}/messages`;
+  }
+  return "";
+}
+
 /**
- * Build the JSON body for the user's WhatsApp API.
+ * Build the JSON body for WhatsApp send.
  *
- * Default shape:
+ * Meta Cloud API (default provider=meta):
+ *   { messaging_product, to, type: "template", template: { name, language } }
+ *
+ * Custom:
  *   { to, template, name, status, rowIndex }
  *
- * Override with WHATSAPP_BODY_TEMPLATE JSON using placeholders:
+ * Override either with WHATSAPP_BODY_TEMPLATE placeholders:
  *   {{phone}} {{template}} {{name}} {{status}} {{rowIndex}}
  */
 export function buildWhatsAppBody(
@@ -70,6 +84,28 @@ export function buildWhatsAppBody(
     }
   }
 
+  if (config.provider === "meta") {
+    const template: Record<string, unknown> = {
+      name: input.template,
+      language: { code: config.templateLanguage || "en" },
+    };
+    if (config.includeNameParameter && input.name) {
+      template.components = [
+        {
+          type: "body",
+          parameters: [{ type: "text", text: input.name }],
+        },
+      ];
+    }
+    return {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: input.phoneE164,
+      type: "template",
+      template,
+    };
+  }
+
   const body: Record<string, unknown> = {
     [config.phoneField]: input.phoneE164,
     [config.templateField]: input.template,
@@ -85,8 +121,24 @@ export async function sendWhatsAppMessage(
   input: WhatsAppSendInput,
   fetchImpl: typeof fetch = fetch
 ): Promise<WhatsAppSendResult> {
-  if (!config.apiUrl) {
-    return { ok: false, skipped: true, reason: "WHATSAPP_API_URL not set" };
+  const requestUrl = resolveWhatsAppApiUrl(config);
+  if (!requestUrl) {
+    return {
+      ok: false,
+      skipped: true,
+      reason:
+        config.provider === "meta"
+          ? "WHATSAPP_PHONE_NUMBER_ID (or WHATSAPP_API_URL) not set"
+          : "WHATSAPP_API_URL not set",
+    };
+  }
+
+  if (!config.apiKey) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "WHATSAPP_ACCESS_TOKEN / WHATSAPP_API_KEY not set",
+    };
   }
 
   const template = resolveTemplate(config, input.status);
@@ -111,7 +163,7 @@ export async function sendWhatsAppMessage(
     rowIndex: input.rowIndex,
   });
 
-  const response = await fetchImpl(config.apiUrl, {
+  const response = await fetchImpl(requestUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -127,6 +179,7 @@ export async function sendWhatsAppMessage(
       statusCode: response.status,
       body: body.slice(0, 500),
       requestBody,
+      requestUrl,
       phoneE164,
       template,
       reason: `WhatsApp API HTTP ${response.status}`,
@@ -138,6 +191,7 @@ export async function sendWhatsAppMessage(
     statusCode: response.status,
     body: body.slice(0, 500),
     requestBody,
+    requestUrl,
     phoneE164,
     template,
   };

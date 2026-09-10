@@ -78,12 +78,20 @@ export interface DataError {
 }
 
 export interface WhatsAppConfig {
+  /** meta = WhatsApp Cloud API; custom = arbitrary JSON POST */
+  provider: "meta" | "custom";
+  /** Full messages URL, or empty to build from graphVersion + phoneNumberId */
   apiUrl: string;
+  graphVersion: string;
+  phoneNumberId: string;
   apiKey: string;
   authHeader: string;
   authScheme: string;
   approveTemplate: string;
   declineTemplate: string;
+  templateLanguage: string;
+  /** When true, pass lead name as the first body text parameter on templates. */
+  includeNameParameter: boolean;
   phoneField: string;
   templateField: string;
   nameField: string;

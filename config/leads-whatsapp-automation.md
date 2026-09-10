@@ -26,10 +26,16 @@ Create this once at https://cursor.com/automations → New Automation
 | Secret | Required |
 | --- | --- |
 | `SHEET_WEBHOOK_URL` | yes |
-| `WHATSAPP_API_URL` | yes |
-| `WHATSAPP_API_KEY` | if your API needs auth |
-| `WHATSAPP_APPROVE_TEMPLATE` / `WHATSAPP_DECLINE_TEMPLATE` | optional (defaults `approve` / `decline`) |
-| `WHATSAPP_BODY_TEMPLATE` | optional JSON override with `{{phone}}` `{{template}}` `{{name}}` `{{status}}` |
+| `WHATSAPP_PHONE_NUMBER_ID` | yes (Meta Cloud API) |
+| `WHATSAPP_ACCESS_TOKEN` | yes |
+| `WHATSAPP_APPROVE_TEMPLATE` / `WHATSAPP_DECLINE_TEMPLATE` | yes — exact approved template names |
+| `WHATSAPP_TEMPLATE_LANGUAGE` | optional (default `en`) |
+| `WHATSAPP_INCLUDE_NAME_PARAM` | optional — `true` if template body has `{{1}}` = name |
+
+Outbound URL (built automatically):
+`https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages`
+
+Your Render app (`https://vwwhatsappapi.onrender.com/webhook`) stays the **inbound** Meta webhook. This notifier does not POST to `/webhook`.
 
 ## Agent instructions (paste all of this)
 
@@ -39,12 +45,12 @@ Repo: WillemAucamp/HatfieldAutomation
 Branch: cursor/leads-whatsapp-notify-c7fd
 
 Each run:
-1. Confirm SHEET_WEBHOOK_URL and WHATSAPP_API_URL are present as environment secrets. If either is missing, stop and report the name. Do not print secret values.
+1. Confirm SHEET_WEBHOOK_URL, WHATSAPP_PHONE_NUMBER_ID, and WHATSAPP_ACCESS_TOKEN are present. If any is missing, stop and report the name. Do not print secret values.
 2. npm ci
 3. npm run doctor
 4. If doctor says the Apps Script deploy is old, STOP and report that.
 5. Run: npm run notify-leads -- --once
-   That reads the Leads tab (gid 1730847217), finds rows where Status is Approved or Declined and "WhatsApp sent" is empty, calls your WhatsApp API, then marks "WhatsApp sent" = Yes.
+   That reads the Leads tab (gid 1730847217), finds rows where Status is Approved or Declined and "WhatsApp sent" is empty, POSTs Meta Cloud API template messages, then marks "WhatsApp sent" = Yes.
 6. Reply with: scanned, pending, sent, skipped, failed. Do not print phone numbers or API keys in full.
 
 If there is nothing to send, say so and do nothing else.

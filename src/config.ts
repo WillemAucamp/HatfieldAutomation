@@ -117,8 +117,15 @@ export function loadConfig(): AppConfig {
     leadsStatusColumn: process.env.LEADS_STATUS_COLUMN || "Status",
     leadsWhatsappSentColumn: process.env.LEADS_WHATSAPP_SENT_COLUMN || "WhatsApp sent",
     whatsapp: {
+      provider: (process.env.WHATSAPP_PROVIDER || "meta").toLowerCase() === "custom" ? "custom" : "meta",
       apiUrl: process.env.WHATSAPP_API_URL || "",
-      apiKey: process.env.WHATSAPP_API_KEY || "",
+      graphVersion: process.env.WHATSAPP_GRAPH_VERSION || "v21.0",
+      phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+      apiKey:
+        process.env.WHATSAPP_ACCESS_TOKEN ||
+        process.env.WHATSAPP_API_KEY ||
+        process.env.WHATSAPP_TOKEN ||
+        "",
       authHeader: process.env.WHATSAPP_AUTH_HEADER || "Authorization",
       authScheme:
         process.env.WHATSAPP_AUTH_SCHEME !== undefined
@@ -126,6 +133,8 @@ export function loadConfig(): AppConfig {
           : "Bearer",
       approveTemplate: process.env.WHATSAPP_APPROVE_TEMPLATE || "approve",
       declineTemplate: process.env.WHATSAPP_DECLINE_TEMPLATE || "decline",
+      templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en",
+      includeNameParameter: parseBool(process.env.WHATSAPP_INCLUDE_NAME_PARAM, false),
       phoneField: process.env.WHATSAPP_PHONE_FIELD || "to",
       templateField: process.env.WHATSAPP_TEMPLATE_FIELD || "template",
       nameField: process.env.WHATSAPP_NAME_FIELD || "name",
