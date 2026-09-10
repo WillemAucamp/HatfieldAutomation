@@ -77,6 +77,20 @@ export interface DataError {
   value: string;
 }
 
+export interface WhatsAppConfig {
+  apiUrl: string;
+  apiKey: string;
+  authHeader: string;
+  authScheme: string;
+  approveTemplate: string;
+  declineTemplate: string;
+  phoneField: string;
+  templateField: string;
+  nameField: string;
+  /** Optional JSON with {{phone}} {{template}} {{name}} {{status}} {{rowIndex}} placeholders. */
+  bodyTemplate: string;
+}
+
 export interface AppConfig {
   sheetCsvUrl: string;
   mappingPath: string;
@@ -105,6 +119,14 @@ export interface AppConfig {
   intakeMappingPath: string;
   pollSeconds: number;
   autoLoad: boolean;
+  /** Leads workbook (money sheet) — Status Approved/Declined → WhatsApp. */
+  leadsSpreadsheetId: string;
+  leadsSheetGid: number;
+  leadsNameColumn: string;
+  leadsNumberColumn: string;
+  leadsStatusColumn: string;
+  leadsWhatsappSentColumn: string;
+  whatsapp: WhatsAppConfig;
 }
 
 export type FieldStrategy =

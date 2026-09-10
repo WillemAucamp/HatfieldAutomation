@@ -8,12 +8,16 @@
  *   npm run sheet-update -- --row 5 --set Status=Declined
  *   npm run sheet-update -- --insert-column-after C --header "Email sent" --dropdown Yes,No
  *
- * Defaults to the money / loaded-clients spreadsheet tab gid=2126384446.
+ * Defaults to the Leads tab gid=1730847217 on the money / loaded-clients spreadsheet.
+ * When Status is set to Approved/Declined, also runs WhatsApp notify for those rows
+ * (unless --skip-whatsapp).
  */
 import { loadConfig } from "./config.js";
+import { isNotifiableLeadStatus } from "./whatsapp/phone.js";
+import { notifyPendingLeads } from "./whatsapp/leads.js";
 
 const DEFAULT_SPREADSHEET_ID = "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM";
-const DEFAULT_GID = 2126384446;
+const DEFAULT_GID = 1730847217;
 
 function parseAssign(raw: string): { key: string; value: string } {
   const eq = raw.indexOf("=");
@@ -36,6 +40,7 @@ function parseArgs(argv: string[]) {
   let insertHeader: string | undefined;
   let dropdown: string | undefined;
   let validationColumn: string | undefined;
+  let skipWhatsapp = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -73,6 +78,8 @@ function parseArgs(argv: string[]) {
       dropdown = argv[++i];
     } else if (arg === "--data-validation-column") {
       validationColumn = argv[++i];
+    } else if (arg === "--skip-whatsapp") {
+      skipWhatsapp = true;
     } else if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -111,7 +118,7 @@ function parseArgs(argv: string[]) {
     };
   }
 
-  return payload;
+  return { payload, skipWhatsapp, set, updates, row };
 }
 
 function printHelp(): void {
@@ -129,8 +136,57 @@ Defaults:
   spreadsheet ${DEFAULT_SPREADSHEET_ID}
   gid         ${DEFAULT_GID}
 
+Status Approved/Declined also triggers WhatsApp notify for affected rows
+(unless --skip-whatsapp). Requires WHATSAPP_API_URL.
+
 Requires Apps Script redeploy with the updateSheet action
 (including insertColumn / dataValidation support).`);
+}
+
+function collectNotifiableRows(
+  set: Record<string, string> | undefined,
+  updates: Array<Record<string, unknown>>,
+  written: unknown,
+  explicitRow?: number
+): number[] {
+  const rows = new Set<number>();
+  const statusFromSet = set?.Status ?? set?.status;
+  if (statusFromSet && isNotifiableLeadStatus(statusFromSet) && explicitRow) {
+    rows.add(explicitRow);
+  }
+
+  for (const item of updates) {
+    const column = String(item.column ?? item.header ?? "");
+    const value = String(item.value ?? "");
+    const row = Number(item.row);
+    if (row && /^status$/i.test(column) && isNotifiableLeadStatus(value)) {
+      rows.add(row);
+    }
+  }
+
+  if (Array.isArray(written)) {
+    for (const item of written) {
+      const rec = item as { row?: number; column?: string; value?: unknown };
+      const row = Number(rec.row);
+      const column = String(rec.column ?? "");
+      const value = String(rec.value ?? "");
+      if (row && /^status$/i.test(column) && isNotifiableLeadStatus(value)) {
+        rows.add(row);
+      }
+    }
+  }
+
+  // find+set without explicit row: scanner will pick up via written rows or full scan
+  if (statusFromSet && isNotifiableLeadStatus(statusFromSet) && !explicitRow && rows.size === 0) {
+    if (Array.isArray(written)) {
+      for (const item of written) {
+        const row = Number((item as { row?: number }).row);
+        if (row) rows.add(row);
+      }
+    }
+  }
+
+  return [...rows];
 }
 
 async function postWebhook(
@@ -158,7 +214,7 @@ async function postWebhook(
 }
 
 async function main(): Promise<void> {
-  const payload = parseArgs(process.argv.slice(2));
+  const { payload, skipWhatsapp, set, updates, row } = parseArgs(process.argv.slice(2));
   if (
     !payload.find &&
     !payload.set &&
@@ -182,6 +238,26 @@ async function main(): Promise<void> {
   console.log("Result:", JSON.stringify(result, null, 2));
   if (result.ok === false) {
     process.exit(1);
+  }
+
+  if (!skipWhatsapp) {
+    const rowFilter = collectNotifiableRows(set, updates, result.written, row);
+    const statusTouched =
+      rowFilter.length > 0 ||
+      (set && Object.keys(set).some((k) => /^status$/i.test(k) && isNotifiableLeadStatus(set[k])));
+    if (statusTouched) {
+      if (!config.whatsapp.apiUrl) {
+        console.log("Skipping WhatsApp notify: WHATSAPP_API_URL not set");
+      } else {
+        const summary = await notifyPendingLeads(config, {
+          rowFilter: rowFilter.length ? rowFilter : undefined,
+        });
+        console.log(
+          `WhatsApp notify: sent=${summary.sent} skipped=${summary.skipped} failed=${summary.failed}`
+        );
+        if (summary.failed > 0) process.exit(1);
+      }
+    }
   }
 }
 

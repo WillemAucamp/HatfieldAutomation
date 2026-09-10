@@ -25,12 +25,13 @@ npm run enrich-sample   # Gemini only, no sheet writes
 The Google account that owns the current webhook must do this. I cannot log into that account.
 
 1. Open the automation sheet → **Extensions → Apps Script**.
-2. Replace all code with `apps-script/Code.gs` from this branch (includes `readSheet`, `appendApplicant`, `doGet` version `hatfield-intake-1`).
+2. Replace all code with `apps-script/Code.gs` from this branch (includes `readSheet`, `appendApplicant`, Leads WhatsApp `onLeadsEdit`, `doGet` version `hatfield-leads-1`).
 3. **Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy.**  
    Keep **Execute as: Me** and **Who has access: Anyone**.
 4. Confirm that same Google account can **edit** the Form intake sheet:  
    https://docs.google.com/spreadsheets/d/1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M
-5. Tell me (or re-run `npm run doctor`). It should report `Apps Script deploy: hatfield-intake-1`.
+5. In the Apps Script editor, run **`setupLeadsWhatsAppWatch`** once (after `CURSOR_WEBHOOK_URL` is set) so Leads Status edits ping Cursor.
+6. Tell me (or re-run `npm run doctor`). It should report `Apps Script deploy: hatfield-leads-1`.
 
 If the /exec URL changes, put the new URL in `.env` as `SHEET_WEBHOOK_URL`.
 
@@ -288,6 +289,31 @@ The only automatic rewrites are known Google Sheets artefacts:
 Fix the sheet cell, then clear **Status** and re-run (`npm run retry -- <row>`). Error codes are written to **Status** as `error ID_NOT_13_DIGITS`, and also stored in `run-log.json` / `run-log.csv`.
 
 Postal code: type the sheet value (and town from the address if needed), then select the first dropdown match. **Province** comes from the sheet. **Bank** and **Account type** come from the sheet (`Bank name`, `Account type`); nicknames such as FNB / Standardbank are matched to the live dropdown.
+
+## Leads WhatsApp (Approved / Declined)
+
+When a row on the Leads tab (`gid=1730847217`) is set to **Approved** or **Declined**, this repo can send a pre-approved WhatsApp via **your** API (no Meta/Twilio SDK).
+
+```bash
+npm run notify-leads -- --dry-run   # scan only
+npm run notify-leads                # send + mark "WhatsApp sent"
+npm run notify-leads -- --ensure-column
+```
+
+Flow:
+1. Sheet UI edit → Apps Script `onLeadsEdit` → Cursor webhook (optional wake-up)
+2. Or `npm run sheet-update -- --set Status=Approved` (sends immediately when `WHATSAPP_API_URL` is set)
+3. `notify-leads` reads pending rows, POSTs to your API, writes **WhatsApp sent** = Yes
+
+Config: see `.env.example` (`WHATSAPP_*`, `LEADS_*`) and `config/leads-whatsapp-automation.md`.
+
+Default request body:
+
+```json
+{ "to": "27821234567", "template": "approve", "name": "…", "status": "Approved", "rowIndex": 5 }
+```
+
+Override shape with `WHATSAPP_BODY_TEMPLATE` placeholders: `{{phone}}` `{{template}}` `{{name}}` `{{status}}` `{{rowIndex}}`.
 
 ## Development
 
