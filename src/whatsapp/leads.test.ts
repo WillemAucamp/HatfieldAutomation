@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isWhatsAppAlreadySent, leadNeedsWhatsApp } from "./leads.js";
+import { columnIndexToLetter, isWhatsAppAlreadySent, leadNeedsWhatsApp } from "./leads.js";
 
 describe("leadNeedsWhatsApp", () => {
   it("requires Approved/Declined, unsent, and valid phone", () => {
@@ -37,8 +37,7 @@ describe("isWhatsAppAlreadySent", () => {
 });
 
 describe("columnIndexToLetter", () => {
-  it("maps 1-based indexes to A1 letters", async () => {
-    const { columnIndexToLetter } = await import("./leads.js");
+  it("maps 1-based indexes to A1 letters", () => {
     assert.equal(columnIndexToLetter(1), "A");
     assert.equal(columnIndexToLetter(26), "Z");
     assert.equal(columnIndexToLetter(27), "AA");
