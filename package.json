@@ -1,0 +1,40 @@
+{
+  "name": "vw-melrose-finance-autofill",
+  "version": "1.0.0",
+  "description": "Browser automation for VW Melrose finance application form",
+  "type": "module",
+  "scripts": {
+    "preview": "tsx src/previewSheet.ts",
+    "build": "tsc",
+    "start": "node dist/runBatch.js",
+    "dev": "tsx src/runBatch.ts",
+    "dry-run": "tsx src/runBatch.ts --dry-run",
+    "ingest": "tsx src/watchIntake.ts --once --skip-load",
+    "watch": "tsx src/watchIntake.ts",
+    "doctor": "tsx src/doctor.ts",
+    "enrich-sample": "tsx src/doctor.ts --sample",
+    "retry": "tsx src/retryRows.ts",
+    "renumber-rows": "tsx src/renumberRows.ts",
+    "sync-loaded": "tsx src/syncLoadedSheet.ts",
+    "sheet-update": "tsx src/updateSheet.ts",
+    "test": "tsx --test src/outcome.test.ts src/transforms.test.ts src/sheetCsv.test.ts src/fetchSheetData.test.ts src/intake/gemini.test.ts src/intake/headers.test.ts src/intake/row.test.ts src/intake/mapping.test.ts",
+    "install-browsers": "playwright install chromium"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "fuse.js": "^7.5.0",
+    "googleapis": "^174.0.1",
+    "papaparse": "^5.5.4",
+    "playwright": "^1.62.1",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/papaparse": "^5.5.2",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}

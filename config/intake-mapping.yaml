@@ -1,0 +1,282 @@
+# Google Form responses → VW Melrose automation sheet.
+# Intake headers are the live Form question titles (row 1).
+# Destination headers are the TSV contract the Melrose loader already reads.
+
+intake:
+  spreadsheet_id: 1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M
+  headers_file: config/intake-form-headers.tsv
+
+destination:
+  spreadsheet_id: 12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI
+  spreadsheet_url: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?gid=0#gid=0
+  gid: 0
+  headers_file: config/output-sheet-headers.tsv
+  loaded_clients_spreadsheet_id: 1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM
+  # LLM / writer must emit exactly this many cells, in this order, one row, no extra columns.
+  column_count: 35
+
+# Exact Form question titles as they appear in the intake sheet (newlines collapsed to spaces).
+intake_columns:
+  - timestamp
+  - vehicle_interest
+  - name_and_surname
+  - email
+  - call_phone
+  - whatsapp_phone
+  - gender
+  - highest_education
+  - street_address
+  - province
+  - city_town
+  - years_at_address
+  - employer_name
+  - job_title
+  - years_at_employer
+  - gross_monthly
+  - nett_monthly
+  - bank_name
+  - next_of_kin_name
+  - next_of_kin_phone
+  - expenses_summary
+  - id_number
+  - consent
+
+intake_headers:
+  timestamp: Timestamp
+  vehicle_interest: "Which vehicle are you thinking of? Remember we can always compare later and give you options to consider"
+  name_and_surname: Name and surname
+  email: Email address
+  call_phone: Call Phone number
+  whatsapp_phone: Whatsapp Phone number
+  gender: Gender
+  highest_education: Highest education
+  street_address: "Current street address Example: 1058 Steve Biko Road"
+  province: Province
+  city_town: "City/Town Example: Pretoria/Cape Town/ Kimberley"
+  years_at_address: "How long have you lived here? Example: 3 years/ 2 months"
+  employer_name: Name of Company you work for?
+  job_title: Job title?
+  years_at_employer: "How long have you been working here? Example: 2 Years /6 Months"
+  gross_monthly: "Gross Income per month (Income on your payslip before any payslip deductions)"
+  nett_monthly: "Net Income per month? (Income paid into your account by your employer)"
+  bank_name: Which bank do you use?
+  next_of_kin_name: "Relative or friend Name & surname Example: Vusi Nel"
+  next_of_kin_phone: "Relative or friend number example: 0856475124"
+  expenses_summary: "Summary of your expenses, what do you pay on the below Food R2000 Accounts R1000 Other R500"
+  id_number: ID Number
+  consent: "Thank you for the above info provided, looking forward to getting you the best possible deal Are you okay with us processing your information for this finance application, Do we have your permission to apply on your behalf to see what is the best possible deal?"
+
+# Exact live output-sheet header row (gid=0). Order is the contract.
+destination_columns:
+  - NR
+  - Full name
+  - Email
+  - Title
+  - First names + surname
+  - ID Type
+  - ID number
+  - Educational level
+  - Mobile number
+  - Address line
+  - Postal code
+  - Province
+  - Year start living at address (MM DD YYYY format ONLY)
+  - Next of kin name + Surname
+  - Next of kin cellphone number
+  - Industry (AI based on employer)
+  - Occupation
+  - Employee level
+  - Employer name
+  - Employer telephone number (online search)
+  - Employer street address (online search)
+  - Employer postal code (online search)
+  - Employer province (online search)
+  - Year they started working there (calculate from years provided)
+  - Gross monthly salary
+  - Nett salary
+  - Telephone payment
+  - Transport cost
+  - Food cost
+  - Bank name
+  - Account type (AI—most likely option based on bank)
+  - Account holder name and surname (same as client)
+  - Client cellphone number (add again at the end)
+  - Status
+  - Timing
+
+# copy = pass through (normalise only). infer = LLM / search / standing prompt rules.
+# writer = filled by the sheet writer / Melrose loader, not by Gemini.
+field_map:
+  - destination: NR
+    mode: writer
+    notes: Next integer after the last data row (row 2 = 1). Do not let the LLM invent NR.
+
+  - destination: Full name
+    source: name_and_surname
+    mode: copy
+
+  - destination: Email
+    source: email
+    mode: copy
+
+  - destination: Title
+    source: gender
+    mode: infer
+    notes: Infer Mr/Mrs/Ms from name/gender. Never output Gender as a column.
+
+  - destination: First names + surname
+    source: name_and_surname
+    mode: copy
+
+  - destination: ID Type
+    source: id_number
+    mode: infer
+    notes: Exactly "RSA ID" if 13 digits; otherwise Unknown. Never write "South African ID". Never invent an ID.
+
+  - destination: ID number
+    source: id_number
+    mode: copy
+    notes: Strip spaces. Never invent.
+
+  - destination: Educational level
+    source: highest_education
+    mode: copy
+
+  - destination: Mobile number
+    sources: [whatsapp_phone, call_phone]
+    mode: copy
+    notes: Prefer WhatsApp number; else call number. 10 digits starting with 0 (+27 → 0). Never leave empty if a phone exists.
+
+  - destination: Address line
+    source: street_address
+    mode: copy
+
+  - destination: Postal code
+    sources: [street_address, city_town, province]
+    mode: infer
+    notes: Infer from address + city via search/geo. Unknown if not found.
+
+  - destination: Province
+    source: province
+    mode: copy
+
+  - destination: Year start living at address (MM DD YYYY format ONLY)
+    source: years_at_address
+    mode: infer
+    notes: If "X years/months living there", calculate from today as MM DD YYYY. Never use the ID date of birth.
+
+  - destination: Next of kin name + Surname
+    source: next_of_kin_name
+    mode: copy
+
+  - destination: Next of kin cellphone number
+    source: next_of_kin_phone
+    mode: copy
+    notes: If NOK number equals client mobile, repeat the client number.
+
+  - destination: Industry (AI based on employer)
+    source: employer_name
+    mode: infer
+
+  - destination: Occupation
+    source: job_title
+    mode: copy
+
+  - destination: Employee level
+    sources: [job_title, employer_name]
+    mode: infer
+
+  - destination: Employer name
+    source: employer_name
+    mode: copy
+
+  - destination: Employer telephone number (online search)
+    sources: [employer_name, city_town, province, street_address]
+    mode: infer
+    notes: Web search, cross-reference client location. Fallback to client mobile if no match.
+
+  - destination: Employer street address (online search)
+    sources: [employer_name, city_town, province, street_address]
+    mode: infer
+    notes: Web search. Fallback to client address line if no match.
+
+  - destination: Employer postal code (online search)
+    sources: [employer_name, city_town, province]
+    mode: infer
+    notes: Web search. Fallback to client postal code if no match.
+
+  - destination: Employer province (online search)
+    sources: [employer_name, province]
+    mode: infer
+    notes: Web search. Fallback to client province if no match.
+
+  - destination: Year they started working there (calculate from years provided)
+    source: years_at_employer
+    mode: infer
+    notes: If "X years/months", calculate start date as MM DD YYYY.
+
+  - destination: Gross monthly salary
+    source: gross_monthly
+    mode: copy
+    notes: Never invent salary figures.
+
+  - destination: Nett salary
+    source: nett_monthly
+    mode: copy
+    notes: Never invent salary figures.
+
+  - destination: Telephone payment
+    source: expenses_summary
+    mode: infer
+    notes: Map accounts/mobile contracts. Split a single total across Telephone/Transport/Food. Numeric only; 0 if missing. Never blank.
+
+  - destination: Transport cost
+    source: expenses_summary
+    mode: infer
+
+  - destination: Food cost
+    source: expenses_summary
+    mode: infer
+    notes: Map groceries/food line.
+
+  - destination: Bank name
+    source: bank_name
+    mode: copy
+
+  - destination: Account type (AI—most likely option based on bank)
+    source: bank_name
+    mode: infer
+    notes: Capitec/Discovery=Savings/Transactional; FNB/ABSA/Nedbank/Standard/Investec=Cheque/Current.
+
+  - destination: Account holder name and surname (same as client)
+    source: name_and_surname
+    mode: copy
+
+  - destination: Client cellphone number (add again at the end)
+    sources: [whatsapp_phone, call_phone]
+    mode: copy
+    notes: Same value as Mobile number.
+
+  - destination: Status
+    mode: writer
+    notes: Leave blank on insert. Melrose loader writes ZAHTVW… or error here; blank means "not loaded yet".
+
+  - destination: Timing
+    mode: writer
+    notes: Leave blank on insert. Melrose loader writes elapsed seconds after a successful load.
+
+passthrough_not_on_destination:
+  - timestamp
+  - vehicle_interest
+  - consent
+  - gender
+
+rules:
+  - Output must be exactly 35 columns in destination_columns order. No extra headings, notes, or columns.
+  - LLM fills columns 2–33 only. Writer sets NR; Status and Timing stay empty so the Melrose loader picks the row up.
+  - Never invent ID numbers or salary figures.
+  - Never output Gender on the destination sheet.
+  - Dates must be MM DD YYYY.
+  - If a value cannot be determined, output Unknown (expenses default to 0; ID Type is RSA ID for 13-digit IDs).
+  - Do not load a row when consent is not given.
+  - Single-line cells only (no line breaks inside addresses or names).
