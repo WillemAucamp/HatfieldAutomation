@@ -24,11 +24,15 @@
 var SOURCE_SHEET_ID = "12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI";
 var LOADED_SHEET_ID = "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM";
 var INTAKE_SHEET_ID = "1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M";
+/** Leads tab (Status Approved/Declined → WhatsApp). From sheet URL gid=. */
+var LEADS_SHEET_GID = 1730847217;
+var LEADS_STATUS_HEADER = "Status";
+var LEADS_WHATSAPP_SENT_HEADER = "WhatsApp sent";
 
 function doGet() {
   return json_({
     ok: true,
-    version: "hatfield-intake-1",
+    version: "hatfield-leads-1",
     actions: [
       "appendLoaded",
       "writeStatus",
@@ -37,6 +41,7 @@ function doGet() {
       "readSheet",
       "appendApplicant",
     ],
+    leadsSheetGid: LEADS_SHEET_GID,
   });
 }
 
@@ -665,4 +670,90 @@ function setupIntakeWatch() {
   }
   ScriptApp.newTrigger("onIntakeChange").forSpreadsheet(ss).onFormSubmit().create();
   return { ok: true, spreadsheet: ss.getName(), handler: "onIntakeChange" };
+}
+
+function isNotifiableLeadStatus_(value) {
+  var s = String(value || "")
+    .trim()
+    .toLowerCase();
+  return s === "approved" || s === "declined";
+}
+
+/**
+ * Installable onEdit: when Leads Status becomes Approved/Declined, ping Cursor
+ * so the agent can run `npm run notify-leads`. WhatsApp secrets stay in Node.
+ *
+ * Also ensures a "WhatsApp sent" column exists (Yes/No dropdown).
+ */
+function onLeadsEdit(e) {
+  if (!e || !e.range) return;
+  var sheet = e.range.getSheet();
+  if (sheet.getSheetId() !== LEADS_SHEET_GID) return;
+  if (e.range.getRow() < 2) return;
+
+  var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  var statusCol = headers.indexOf(LEADS_STATUS_HEADER) + 1;
+  if (!statusCol) return;
+
+  var editedCol = e.range.getColumn();
+  var editedCols = e.range.getNumColumns();
+  var touchesStatus =
+    editedCol <= statusCol && editedCol + editedCols - 1 >= statusCol;
+  if (!touchesStatus) return;
+
+  var startRow = e.range.getRow();
+  var numRows = e.range.getNumRows();
+  var nameCol = headers.indexOf("Name") + 1;
+  var numberCol = headers.indexOf("Number") + 1;
+  ensureColumn_(sheet, headers, LEADS_WHATSAPP_SENT_HEADER);
+  headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  var sentCol = headers.indexOf(LEADS_WHATSAPP_SENT_HEADER) + 1;
+  if (sentCol) {
+    setColumnValidation_(sheet, sentCol, ["Yes", "No"], { fromRow: 2, toRow: 2000 });
+  }
+
+  var notified = [];
+  for (var r = 0; r < numRows; r++) {
+    var row = startRow + r;
+    var status = String(sheet.getRange(row, statusCol).getValue() || "").trim();
+    if (!isNotifiableLeadStatus_(status)) continue;
+    var sent = sentCol ? String(sheet.getRange(row, sentCol).getValue() || "").trim() : "";
+    if (/^yes$/i.test(sent) || /^sent/i.test(sent)) continue;
+    notified.push({
+      rowIndex: row,
+      status: status,
+      name: nameCol ? String(sheet.getRange(row, nameCol).getValue() || "") : "",
+      number: numberCol ? String(sheet.getRange(row, numberCol).getValue() || "") : "",
+    });
+  }
+  if (!notified.length) return;
+
+  notifyCursorAutomation_({
+    event: "leads_status_changed",
+    spreadsheetId: LOADED_SHEET_ID,
+    sheetGid: LEADS_SHEET_GID,
+    rows: notified,
+    instruction: "npm run notify-leads -- --once",
+  });
+}
+
+/**
+ * Run once from the Apps Script editor after CURSOR_WEBHOOK_URL is set.
+ * Creates an installable onEdit trigger on the loaded-clients / Leads spreadsheet.
+ */
+function setupLeadsWhatsAppWatch() {
+  var ss = SpreadsheetApp.openById(LOADED_SHEET_ID);
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === "onLeadsEdit") {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  ScriptApp.newTrigger("onLeadsEdit").forSpreadsheet(ss).onEdit().create();
+  return {
+    ok: true,
+    spreadsheet: ss.getName(),
+    handler: "onLeadsEdit",
+    leadsSheetGid: LEADS_SHEET_GID,
+  };
 }

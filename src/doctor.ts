@@ -102,7 +102,8 @@ export async function doctorMain(): Promise<number> {
   if (config.sheetWebhookUrl) {
     const probe = await probeWebhook(config.sheetWebhookUrl);
     const actions = probe.actions ?? [];
-    const versionOk = probe.version === "hatfield-intake-1";
+    const version = String(probe.version ?? "");
+    const versionOk = /^hatfield-/.test(version);
     const readOk =
       versionOk ||
       actions.includes("readSheet") ||
@@ -116,12 +117,29 @@ export async function doctorMain(): Promise<number> {
       name: "Apps Script deploy",
       ok: Boolean(readOk) && !unknownAction,
       detail: versionOk
-        ? `hatfield-intake-1 (${actions.join(", ")})`
+        ? `${version} (${actions.join(", ")})`
         : unknownAction
           ? "old deploy — paste apps-script/Code.gs and Deploy → New version"
           : probe.error || JSON.stringify(probe.raw ?? probe).slice(0, 240),
     });
   }
+
+  checks.push({
+    name: "WhatsApp Cloud API",
+    ok: true,
+    detail: (() => {
+      const w = config.whatsapp;
+      const url =
+        w.apiUrl ||
+        (w.phoneNumberId
+          ? `https://graph.facebook.com/${w.graphVersion}/${w.phoneNumberId}/messages`
+          : "");
+      if (!url || !w.apiKey) {
+        return `optional — set WHATSAPP_PHONE_NUMBER_ID + WHATSAPP_ACCESS_TOKEN for notify-leads (provider=${w.provider})`;
+      }
+      return `${w.provider} → ${url} templates ${w.approveTemplate}/${w.declineTemplate} lang=${w.templateLanguage}`;
+    })(),
+  });
 
   for (const check of checks) print(check);
   const failed = checks.filter((c) => !c.ok);
