@@ -38,6 +38,50 @@ function candidateUrls(preferred: string): string[] {
   return [...new Set(urls)];
 }
 
+function looksLikeHollowSheetCsv(text: string): boolean {
+  // gviz occasionally returns rows with names but blank ID/mobile cells.
+  // Prefer the next candidate URL (usually /export) in that case.
+  const lines = text.trim().split(/\r?\n/).filter(Boolean);
+  if (lines.length < 3) return false;
+  try {
+    // Lightweight check without pulling in papaparse here.
+    const header = lines[0].toLowerCase();
+    if (!header.includes("id number") || !header.includes("mobile")) return false;
+    const cols = lines[0].split(",");
+    const idIdx = cols.findIndex((c) => /id number/i.test(c.replace(/"/g, "")));
+    const mobileIdx = cols.findIndex((c) => /^"?mobile number"?$/i.test(c.replace(/"/g, "").trim()) || /mobile number/i.test(c.replace(/"/g, "")));
+    if (idIdx < 0) return false;
+    let named = 0;
+    let missingId = 0;
+    for (const line of lines.slice(1, Math.min(lines.length, 40))) {
+      const cells: string[] = [];
+      let cur = "";
+      let inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          inQ = !inQ;
+          continue;
+        }
+        if (ch === "," && !inQ) {
+          cells.push(cur);
+          cur = "";
+          continue;
+        }
+        cur += ch;
+      }
+      cells.push(cur);
+      const name = (cells[1] || cells[4] || "").trim();
+      if (!name) continue;
+      named++;
+      if (!(cells[idIdx] || "").trim()) missingId++;
+    }
+    return named >= 3 && missingId / named >= 0.5;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Fetch sheet CSV with retries and gviz↔export fallback.
  * Always sends a browser UA — Googleusercontent redirects are picky.
@@ -61,6 +105,10 @@ export async function fetchSheetCsv(url: string, attemptsPerUrl = 3): Promise<st
           const text = await response.text();
           if (text.trim().startsWith("<")) {
             errors.push(`${candidate}: HTML instead of CSV`);
+            break;
+          }
+          if (looksLikeHollowSheetCsv(text)) {
+            errors.push(`${candidate}: CSV missing ID/mobile values (hollow export)`);
             break;
           }
           if (candidate !== url) {
