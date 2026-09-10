@@ -48,6 +48,7 @@ describe("output row contract", () => {
 
     assert.equal(values.Status, "");
     assert.equal(values.Timing, "");
+    assert.equal(values["ID Type"], "RSA ID");
     assert.equal(values["Client cellphone number (add again at the end)"], "0821234567");
     assert.equal(values["Account type (AI—most likely option based on bank)"], "Savings/Transactional");
     assert.equal(values["Account holder name and surname (same as client)"], "Ada Lovelace");

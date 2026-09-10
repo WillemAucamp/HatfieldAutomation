@@ -287,6 +287,8 @@ export async function runBatchMain(): Promise<void> {
     rowFilter: config.rowFilter.length > 0 ? config.rowFilter : undefined,
     localCsvPath,
     skipProcessed: config.skipProcessed,
+    webhookUrl: config.sheetWebhookUrl,
+    spreadsheetId: config.sheetId,
   });
 
   if (applicants.length === 0) {

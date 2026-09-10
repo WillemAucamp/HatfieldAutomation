@@ -17,7 +17,7 @@
     "renumber-rows": "tsx src/renumberRows.ts",
     "sync-loaded": "tsx src/syncLoadedSheet.ts",
     "sheet-update": "tsx src/updateSheet.ts",
-    "test": "tsx --test src/outcome.test.ts src/transforms.test.ts src/sheetCsv.test.ts src/intake/gemini.test.ts src/intake/headers.test.ts src/intake/row.test.ts src/intake/mapping.test.ts",
+    "test": "tsx --test src/outcome.test.ts src/transforms.test.ts src/sheetCsv.test.ts src/fetchSheetData.test.ts src/intake/gemini.test.ts src/intake/headers.test.ts src/intake/row.test.ts src/intake/mapping.test.ts",
     "install-browsers": "playwright install chromium"
   },
   "engines": {

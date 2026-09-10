@@ -15,6 +15,7 @@ import {
 } from "./transforms.js";
 import { successfulReferenceFromCell, isStatusPopulated } from "./outcome.js";
 import { fetchSheetCsv } from "./sheetCsv.js";
+import { readSheetRows } from "./intake/sheets.js";
 
 const PROCESSED_COLUMN = "Processed";
 const PROCESSED_LOG_FILE = "processed-rows.json";
@@ -28,6 +29,9 @@ export interface FetchOptions {
   skipProcessed?: boolean;
   /** Include rows that already have Status / a local reference (used for sheet sync). */
   includeCompleted?: boolean;
+  /** Apps Script webhook — preferred over public CSV (gviz drops text ID/phone cells). */
+  webhookUrl?: string;
+  spreadsheetId?: string;
 }
 
 function getCell(row: Record<string, string>, columnHeader: string): string {
@@ -340,17 +344,49 @@ export function validateApplicant(applicant: ApplicantRecord): DataError[] {
   return applicant.errors;
 }
 
-export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRecord[]> {
-  let csvText: string;
-
+async function loadSheetRows(
+  options: FetchOptions
+): Promise<Array<{ rowIndex: number; values: Record<string, string> }>> {
   if (options.localCsvPath && existsSync(options.localCsvPath)) {
-    csvText = readFileSync(options.localCsvPath, "utf-8");
-  } else if (options.csvUrl) {
-    csvText = await fetchSheetCsv(options.csvUrl);
-  } else {
-    throw new Error("Either SHEET_CSV_URL or a local CSV path must be provided");
+    return rowsFromCsv(readFileSync(options.localCsvPath, "utf-8"));
   }
 
+  let csvError: string | undefined;
+  if (options.csvUrl) {
+    try {
+      const rows = rowsFromCsv(await fetchSheetCsv(options.csvUrl));
+      if (rows.length > 0) return rows;
+      csvError = "public CSV had no data rows";
+    } catch (err) {
+      csvError = err instanceof Error ? err.message : String(err);
+      console.warn(`Public CSV fetch failed (${csvError})`);
+    }
+  }
+
+  if (options.webhookUrl && options.spreadsheetId) {
+    try {
+      const rows = await readSheetRows({
+        webhookUrl: options.webhookUrl,
+        spreadsheetId: options.spreadsheetId,
+      });
+      if (rows.length > 0) {
+        console.log(`Fetched ${rows.length} sheet row(s) via Apps Script webhook`);
+        return rows.map((row) => ({ rowIndex: row.rowIndex, values: row.values }));
+      }
+      console.warn("Webhook readSheet returned 0 rows");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`Webhook readSheet failed (${msg})`);
+    }
+  }
+
+  throw new Error(
+    csvError ||
+      "Either SHEET_WEBHOOK_URL, SHEET_CSV_URL, or a local CSV path must be provided"
+  );
+}
+
+function rowsFromCsv(csvText: string): Array<{ rowIndex: number; values: Record<string, string> }> {
   const parsed = Papa.parse<Record<string, string>>(csvText, {
     header: true,
     skipEmptyLines: true,
@@ -360,16 +396,18 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
     console.warn("CSV parse warnings:", parsed.errors.slice(0, 5));
   }
 
+  return parsed.data.map((values, i) => ({ rowIndex: i + 2, values }));
+}
+
+export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRecord[]> {
+  const sheetRows = await loadSheetRows(options);
   const processedLog = options.skipProcessed ? loadProcessedLog() : [];
   const localReferences = loadLocalReferences();
-  let rowNumber = 1;
-
   const applicants: ApplicantRecord[] = [];
 
-  for (const row of parsed.data) {
-    rowNumber++;
+  for (const { rowIndex, values: row } of sheetRows) {
     if (options.rowFilter && options.rowFilter.length > 0) {
-      if (!options.rowFilter.includes(rowNumber)) continue;
+      if (!options.rowFilter.includes(rowIndex)) continue;
     }
 
     const emailRaw = getCell(row, options.mapping.email);
@@ -381,15 +419,15 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
           .map((h) => getCell(row, h as string))
           .join("");
     if (!emailRaw && !idRaw && !nameRaw) {
-      console.log(`Skipping row ${rowNumber}: empty row`);
+      console.log(`Skipping row ${rowIndex}: empty row`);
       continue;
     }
 
-    const applicant = mapRow(row, options.mapping, rowNumber);
+    const applicant = mapRow(row, options.mapping, rowIndex);
 
     if (!options.includeCompleted && isStatusPopulated(applicant.existingStatus)) {
       console.log(
-        `Skipping row ${rowNumber}: Status already populated (${applicant.existingStatus})`
+        `Skipping row ${rowIndex}: Status already populated (${applicant.existingStatus})`
       );
       continue;
     }
@@ -397,26 +435,26 @@ export async function fetchSheetData(options: FetchOptions): Promise<ApplicantRe
     const localRef = successfulReferenceFromCell(localReferences[applicant.rowId]);
     if (!options.includeCompleted && localRef) {
       console.log(
-        `Skipping row ${rowNumber} (${applicant.rowId}): already submitted locally (${localRef})`
+        `Skipping row ${rowIndex} (${applicant.rowId}): already submitted locally (${localRef})`
       );
       continue;
     }
 
     if (options.skipProcessed && applicant.processed) {
       console.log(
-        `Skipping row ${rowNumber} (${applicant.rowId}): already processed at ${applicant.processed}`
+        `Skipping row ${rowIndex} (${applicant.rowId}): already processed at ${applicant.processed}`
       );
       continue;
     }
 
     if (options.skipProcessed && processedLog.includes(applicant.rowId)) {
-      console.log(`Skipping row ${rowNumber} (${applicant.rowId}): in local processed log`);
+      console.log(`Skipping row ${rowIndex} (${applicant.rowId}): in local processed log`);
       continue;
     }
 
     if (applicant.errors.length > 0) {
       console.error(
-        `Row ${rowNumber} (${applicant.firstName || "?"} ${applicant.surname || "?"}): DATA ERROR — not filling`
+        `Row ${rowIndex} (${applicant.firstName || "?"} ${applicant.surname || "?"}): DATA ERROR — not filling`
       );
       for (const err of applicant.errors) {
         console.error(`  [${err.code}] ${err.message}`);

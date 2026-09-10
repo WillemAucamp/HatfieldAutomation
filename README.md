@@ -98,7 +98,7 @@ https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&gid={GID}
 https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}
 ```
 
-Prefer **gviz**. `fetchSheetCsv` retries on 502/503 and falls back between gviz and export.
+Prefer **`/export`**. The gviz CSV endpoint returns HTTP 200 but drops text-formatted ID, phone, and telephone-payment cells (`error ID_EMPTY, MOBILE_EMPTY, TELEPHONE_EXPENSE_EMPTY`). `fetchSheetCsv` tries `/export` first, then gviz. When `SHEET_WEBHOOK_URL` is set, the loader reads the sheet through Apps Script instead of the public CSV.
 
 Ensure the sheet column headers match `mapping.json` (or update that file to match your headers).
 

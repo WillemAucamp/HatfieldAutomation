@@ -483,7 +483,10 @@ function resolveSheet_(ss, data) {
 }
 
 function isPhoneColumn_(name) {
-  return /number|phone|mobile|cell/i.test(String(name || ""));
+  var n = String(name || "");
+  // Do not treat "Telephone payment" as a phone — that expense must stay numeric.
+  if (/payment|cost|salary|expense|gross|nett/i.test(n)) return false;
+  return /(phone|mobile|cell)/i.test(n);
 }
 
 function columnLetterToIndex_(letter) {

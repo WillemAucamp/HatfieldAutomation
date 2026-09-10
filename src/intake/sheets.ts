@@ -6,17 +6,19 @@ export interface IntakeSheetRow {
   values: Record<string, string>;
 }
 
-export async function readUnprocessedIntake(options: {
+export async function readSheetRows(options: {
   webhookUrl: string;
   spreadsheetId: string;
-  statusColumn: string;
+  unprocessedOnly?: boolean;
+  statusColumn?: string;
+  processableStatuses?: string[];
 }): Promise<IntakeSheetRow[]> {
   const parsed = await postWebhookJson(options.webhookUrl, {
     action: "readSheet",
     spreadsheetId: options.spreadsheetId,
-    unprocessedOnly: true,
-    statusColumn: options.statusColumn,
-    processableStatuses: ["", "new", "retry"],
+    unprocessedOnly: Boolean(options.unprocessedOnly),
+    statusColumn: options.statusColumn || "",
+    processableStatuses: options.processableStatuses || ["", "new", "retry"],
   });
   if (parsed.ok === false) {
     throw new Error(String(parsed.error || "readSheet failed"));
@@ -24,11 +26,29 @@ export async function readUnprocessedIntake(options: {
   const rows = Array.isArray(parsed.rows) ? parsed.rows : [];
   return rows.map((row) => {
     const rec = row as { rowIndex?: number; status?: string; values?: Record<string, string> };
+    const values: Record<string, string> = {};
+    for (const [key, value] of Object.entries(rec.values ?? {})) {
+      values[key] = value == null ? "" : String(value);
+    }
     return {
       rowIndex: Number(rec.rowIndex),
       status: String(rec.status ?? ""),
-      values: rec.values ?? {},
+      values,
     };
+  });
+}
+
+export async function readUnprocessedIntake(options: {
+  webhookUrl: string;
+  spreadsheetId: string;
+  statusColumn: string;
+}): Promise<IntakeSheetRow[]> {
+  return readSheetRows({
+    webhookUrl: options.webhookUrl,
+    spreadsheetId: options.spreadsheetId,
+    unprocessedOnly: true,
+    statusColumn: options.statusColumn,
+    processableStatuses: ["", "new", "retry"],
   });
 }
 

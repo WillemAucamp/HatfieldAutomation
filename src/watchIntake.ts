@@ -25,15 +25,16 @@ export async function watchIntakeMain(): Promise<void> {
       `Intake: scanned=${result.scanned} appended=${result.appendedSheetRows.length} skipped=${result.skipped} errors=${result.errors.length}`
     );
 
-    const shouldLoad =
-      !skipLoad &&
-      config.autoLoad &&
-      !config.dryRun &&
-      result.appendedSheetRows.length > 0;
+    const shouldLoad = !skipLoad && config.autoLoad && !config.dryRun;
     if (shouldLoad) {
-      process.env.ROW_FILTER = result.appendedSheetRows.join(",");
+      if (result.appendedSheetRows.length > 0) {
+        process.env.ROW_FILTER = result.appendedSheetRows.join(",");
+        console.log(`Loading automation sheet rows ${process.env.ROW_FILTER} via Melrose autofill…`);
+      } else {
+        delete process.env.ROW_FILTER;
+        console.log("No new intake rows. Checking automation sheet for blank-Status retries…");
+      }
       process.env.HEADLESS = process.env.HEADLESS || "true";
-      console.log(`Loading automation sheet rows ${process.env.ROW_FILTER} via Melrose autofill…`);
       await runBatchMain();
       delete process.env.ROW_FILTER;
     } else if (result.appendedSheetRows.length > 0 && (skipLoad || !config.autoLoad)) {
