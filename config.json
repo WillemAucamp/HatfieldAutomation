@@ -1,0 +1,12 @@
+{
+  "sheetCsvUrl": "",
+  "sheetEditUrl": "",
+  "mappingPath": "./mapping.json",
+  "financeUrl": "https://vwmelrose.hatfieldgroup.co.za/finance",
+  "sheetId": "",
+  "loadedSheetId": "",
+  "loadedSheetEditUrl": "",
+  "loadedNameColumn": "Name",
+  "loadedNumberColumn": "Number",
+  "_comment": "Leave sheet IDs empty in git. For local CLI, set SHEET_ID in .env. For product clients, use clients/<id>.json."
+}
