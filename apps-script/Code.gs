@@ -173,7 +173,8 @@ function renumberRows_(data) {
   for (var i = 1; i <= count; i++) {
     values.push([i]);
   }
-  sheet.getRange(2, 1, lastRow, 1).setValues(values);
+  // getRange(row, column, numRows, numColumns) — not end-row corners.
+  sheet.getRange(2, 1, count, 1).setValues(values);
   return { ok: true, count: count, firstRow: 2, lastRow: lastRow };
 }
 
