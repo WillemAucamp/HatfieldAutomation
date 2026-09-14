@@ -46,6 +46,30 @@ function cliFlag(name: string): boolean {
   return process.argv.includes(`--${name}`);
 }
 
+/** Build Apps Script webhook URL. Prefer deployment id over full URL env secrets. */
+function resolveWebhookUrl(
+  deploymentId: string | undefined,
+  fullUrl: string | undefined,
+  fileUrl: string | undefined
+): string {
+  const id = (deploymentId ?? "").trim();
+  if (id && !id.includes("REDACTED")) {
+    return `https://script.google.com/macros/s/${id}/exec`;
+  }
+  for (const candidate of [fullUrl, fileUrl]) {
+    const url = (candidate ?? "").trim();
+    if (
+      url &&
+      !url.includes("[REDACTED]") &&
+      !url.includes("REDACTED") &&
+      /^https?:\/\//i.test(url)
+    ) {
+      return url;
+    }
+  }
+  return "";
+}
+
 export function loadConfig(): AppConfig {
   const fileConfig = loadFileConfig();
   const dryRun = cliFlag("dry-run") || parseBool(process.env.DRY_RUN, false);
@@ -82,19 +106,24 @@ export function loadConfig(): AppConfig {
         process.env.SHEET_CSV_URL || fileConfig.sheetCsvUrl || DEFAULT_SHEET_CSV_URL
       ) ||
       DEFAULT_SHEET_ID,
-    sheetWebhookUrl: process.env.SHEET_WEBHOOK_URL ?? fileConfig.sheetWebhookUrl ?? "",
+    // Prefer SHEET_WEBHOOK_ID: full SHEET_WEBHOOK_URL secrets are often
+    // replaced with literal "[REDACTED]" at fetch time in Cloud Agent envs.
+    sheetWebhookUrl: resolveWebhookUrl(
+      process.env.SHEET_WEBHOOK_ID,
+      process.env.SHEET_WEBHOOK_URL,
+      fileConfig.sheetWebhookUrl
+    ),
     googleServiceAccountFile:
       process.env.GOOGLE_SERVICE_ACCOUNT_FILE ?? fileConfig.googleServiceAccountFile ?? "",
     loadedSheetId:
       process.env.LOADED_SHEET_ID ||
       fileConfig.loadedSheetId ||
       "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM",
-    loadedSheetWebhookUrl:
-      process.env.LOADED_SHEET_WEBHOOK_URL ||
-      fileConfig.loadedSheetWebhookUrl ||
-      process.env.SHEET_WEBHOOK_URL ||
-      fileConfig.sheetWebhookUrl ||
-      "",
+    loadedSheetWebhookUrl: resolveWebhookUrl(
+      process.env.SHEET_WEBHOOK_ID,
+      process.env.LOADED_SHEET_WEBHOOK_URL || process.env.SHEET_WEBHOOK_URL,
+      fileConfig.loadedSheetWebhookUrl || fileConfig.sheetWebhookUrl
+    ),
     loadedNameColumn: process.env.LOADED_NAME_COLUMN || fileConfig.loadedNameColumn || "Name",
     loadedNumberColumn:
       process.env.LOADED_NUMBER_COLUMN || fileConfig.loadedNumberColumn || "Number",
