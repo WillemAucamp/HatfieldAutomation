@@ -267,7 +267,7 @@ export async function runBatchMain(): Promise<void> {
 
   if (!config.sheetCsvUrl && !localCsvPath) {
     console.error(
-      "SHEET_CSV_URL is not set. Copy .env.example to .env and set your public sheet CSV URL."
+      "SHEET_CSV_URL / SHEET_ID is not set. For local CLI, copy .env.example to .env and set the client sheet. For the product UI, configure clients/<id>.json."
     );
     console.error("Alternatively, pass --local-csv path/to/file.csv");
     process.exit(1);

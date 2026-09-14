@@ -2,7 +2,7 @@ import { config as dotenvConfig } from "dotenv";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { AppConfig, ColumnMapping } from "./types.js";
-import { DEFAULT_SHEET_CSV_URL, DEFAULT_SHEET_ID, extractSheetId } from "./sheetCsv.js";
+import { extractSheetId, gvizCsvUrl } from "./sheetCsv.js";
 
 dotenvConfig();
 
@@ -70,6 +70,13 @@ function resolveWebhookUrl(
   return "";
 }
 
+/**
+ * Load runtime config from env + optional config.json.
+ *
+ * Sheet IDs are never hard-coded for production. The product runner injects
+ * per-client SHEET_ID / SHEET_CSV_URL / LOADED_SHEET_ID. Local CLI may use
+ * config.json or .env — leave those empty until you point at a real sheet.
+ */
 export function loadConfig(): AppConfig {
   const fileConfig = loadFileConfig();
   const dryRun = cliFlag("dry-run") || parseBool(process.env.DRY_RUN, false);
@@ -77,11 +84,19 @@ export function loadConfig(): AppConfig {
     cliFlag("strict") ||
     (!cliFlag("no-strict") && parseBool(process.env.STRICT_MODE, false));
 
+  const sheetIdFromEnv =
+    process.env.SHEET_ID ||
+    fileConfig.sheetId ||
+    extractSheetId(process.env.SHEET_CSV_URL || fileConfig.sheetCsvUrl || "") ||
+    "";
+  const sheetCsvUrl =
+    process.env.SHEET_CSV_URL ||
+    fileConfig.sheetCsvUrl ||
+    (sheetIdFromEnv ? gvizCsvUrl(sheetIdFromEnv) : "");
+  const sheetId = sheetIdFromEnv || extractSheetId(sheetCsvUrl) || "";
+
   return {
-    sheetCsvUrl:
-      process.env.SHEET_CSV_URL ||
-      fileConfig.sheetCsvUrl ||
-      DEFAULT_SHEET_CSV_URL,
+    sheetCsvUrl,
     mappingPath: process.env.MAPPING_PATH ?? fileConfig.mappingPath ?? "./mapping.json",
     dryRun,
     strictMode,
@@ -89,7 +104,10 @@ export function loadConfig(): AppConfig {
     rowFilter: parseRowFilter(process.env.ROW_FILTER),
     actionDelayMin: parseInt(process.env.ACTION_DELAY_MIN ?? "0", 10),
     actionDelayMax: parseInt(process.env.ACTION_DELAY_MAX ?? "0", 10),
-    financeUrl: fileConfig.financeUrl ?? "https://vwmelrose.hatfieldgroup.co.za/finance",
+    financeUrl:
+      process.env.FINANCE_URL ||
+      fileConfig.financeUrl ||
+      "https://vwmelrose.hatfieldgroup.co.za/finance",
     skipProcessed:
       cliFlag("skip-processed") || parseBool(process.env.SKIP_PROCESSED, false),
     keepLastOpen: cliFlag("keep-last-open") || parseBool(process.env.KEEP_LAST_OPEN, false),
@@ -99,13 +117,7 @@ export function loadConfig(): AppConfig {
       cliFlag("verify") ||
       parseBool(process.env.VERIFY_FILLS, false) ||
       strictMode,
-    sheetId:
-      process.env.SHEET_ID ||
-      fileConfig.sheetId ||
-      extractSheetId(
-        process.env.SHEET_CSV_URL || fileConfig.sheetCsvUrl || DEFAULT_SHEET_CSV_URL
-      ) ||
-      DEFAULT_SHEET_ID,
+    sheetId,
     // Prefer SHEET_WEBHOOK_ID: full SHEET_WEBHOOK_URL secrets are often
     // replaced with literal "[REDACTED]" at fetch time in Cloud Agent envs.
     sheetWebhookUrl: resolveWebhookUrl(
@@ -115,10 +127,7 @@ export function loadConfig(): AppConfig {
     ),
     googleServiceAccountFile:
       process.env.GOOGLE_SERVICE_ACCOUNT_FILE ?? fileConfig.googleServiceAccountFile ?? "",
-    loadedSheetId:
-      process.env.LOADED_SHEET_ID ||
-      fileConfig.loadedSheetId ||
-      "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM",
+    loadedSheetId: process.env.LOADED_SHEET_ID || fileConfig.loadedSheetId || "",
     loadedSheetWebhookUrl: resolveWebhookUrl(
       process.env.SHEET_WEBHOOK_ID,
       process.env.LOADED_SHEET_WEBHOOK_URL || process.env.SHEET_WEBHOOK_URL,

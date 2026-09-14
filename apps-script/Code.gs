@@ -1,12 +1,14 @@
 /**
- * One webhook for both Google Sheets.
+ * One webhook for client Google Sheets (applicant + optional loaded-clients).
  *
- * 1. Open EITHER spreadsheet → Extensions → Apps Script
+ * 1. Open the CLIENT’s spreadsheet → Extensions → Apps Script
  * 2. Paste this file
- * 3. Deploy → New deployment → Web app
+ * 3. Optionally set SOURCE_SHEET_ID / LOADED_SHEET_ID below for this deployment
+ *    (leave blank and pass sourceSheetId / loadedSheetId from the runner — preferred)
+ * 4. Deploy → New deployment → Web app
  *      Execute as: Me
  *      Who has access: Anyone
- * 4. Put the /exec URL in .env as SHEET_WEBHOOK_URL
+ * 5. Put the deployment id in operator .env as SHEET_WEBHOOK_ID
  *
  * Actions
  *   appendLoaded  — add/update Name + cellphone on the loaded-clients sheet
@@ -14,11 +16,28 @@
  *   renumberRows  — fill column A with 1, 2, 3… (row 2 = 1; row 1 = header)
  *   updateSheet   — arbitrary cell updates on any spreadsheet/tab
  *
- * The account that deploys this must be able to edit both spreadsheets.
+ * The account that deploys this must be able to edit the target spreadsheet(s).
+ * Do not hard-code another client’s (or the operator’s personal) sheet IDs here
+ * unless this deployment is dedicated to that one client.
  */
 
-var SOURCE_SHEET_ID = "12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI";
-var LOADED_SHEET_ID = "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM";
+// Optional fallbacks for a single-client deployment. Prefer payload IDs from the runner.
+var SOURCE_SHEET_ID = "";
+var LOADED_SHEET_ID = "";
+
+function resolveSpreadsheetId_(requested, fallback) {
+  var id = String(requested || fallback || "").trim();
+  if (id) return id;
+  try {
+    var active = SpreadsheetApp.getActiveSpreadsheet();
+    if (active) return active.getId();
+  } catch (e) {
+    // unbound / library context
+  }
+  throw new Error(
+    "No spreadsheet id. Pass sourceSheetId/loadedSheetId/spreadsheetId from the runner, or set SOURCE_SHEET_ID/LOADED_SHEET_ID in this script."
+  );
+}
 
 function doPost(e) {
   var data = JSON.parse(e.postData.contents);
@@ -55,7 +74,9 @@ function writePhone_(sheet, row, col, value) {
 }
 
 function appendLoaded_(data) {
-  var ss = SpreadsheetApp.openById(data.loadedSheetId || LOADED_SHEET_ID);
+  var ss = SpreadsheetApp.openById(
+    resolveSpreadsheetId_(data.loadedSheetId, LOADED_SHEET_ID)
+  );
   var sheet = ss.getSheets()[0];
   var nameColumn = data.nameColumn || "Name";
   var numberColumn = data.numberColumn || "Number";
@@ -105,7 +126,9 @@ function appendLoaded_(data) {
 }
 
 function writeStatus_(data) {
-  var ss = SpreadsheetApp.openById(data.sourceSheetId || SOURCE_SHEET_ID);
+  var ss = SpreadsheetApp.openById(
+    resolveSpreadsheetId_(data.sourceSheetId, SOURCE_SHEET_ID)
+  );
   var sheet = ss.getSheets()[0];
   var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
 
@@ -153,7 +176,9 @@ function ensureHeaders_(sheet, names) {
 }
 
 function renumberRows_(data) {
-  var ss = SpreadsheetApp.openById(data.sourceSheetId || SOURCE_SHEET_ID);
+  var ss = SpreadsheetApp.openById(
+    resolveSpreadsheetId_(data.sourceSheetId, SOURCE_SHEET_ID)
+  );
   var sheet = ss.getSheets()[0];
   var nrColumn = data.nrColumn || "NR";
   var lastCol = Math.max(sheet.getLastColumn(), 1);
@@ -203,10 +228,10 @@ function ensureColumn_(sheet, headers, name) {
  *     append: { Name: "Jane Doe", Number: "0821234567", Status: "Pending" } }
  */
 function updateSheet_(data) {
-  var spreadsheetId =
-    data.spreadsheetId ||
-    data.workbookId ||
-    LOADED_SHEET_ID;
+  var spreadsheetId = resolveSpreadsheetId_(
+    data.spreadsheetId || data.workbookId,
+    LOADED_SHEET_ID
+  );
 
   var ss = SpreadsheetApp.openById(spreadsheetId);
   var sheet = resolveSheet_(ss, data);

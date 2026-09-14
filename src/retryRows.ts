@@ -6,6 +6,7 @@
  *   npm run retry -- 15 18
  *   npm run retry -- 12,15
  */
+import { pathToFileURL } from "node:url";
 import { loadColumnMapping, loadConfig } from "./config.js";
 import { fetchSheetData } from "./fetchSheetData.js";
 import {
@@ -14,7 +15,7 @@ import {
   removeProcessedRowIds,
 } from "./sheetWriter.js";
 
-function parseRowArgs(argv: string[]): number[] {
+export function parseRowArgs(argv: string[]): number[] {
   const rows: number[] = [];
   for (const arg of argv) {
     if (arg.startsWith("-")) continue;
@@ -26,20 +27,22 @@ function parseRowArgs(argv: string[]): number[] {
   return [...new Set(rows)].sort((a, b) => a - b);
 }
 
-async function main(): Promise<void> {
-  const rows = parseRowArgs(process.argv.slice(2));
+/** Programmatic retry used by the product job runner and CLI. */
+export async function retryRowsMain(rows: number[]): Promise<void> {
   if (rows.length === 0) {
-    console.error("Usage: npm run retry -- <row> [row...]");
-    console.error("Example: npm run retry -- 18");
-    process.exit(1);
+    throw new Error("At least one sheet row number (>= 2) is required");
   }
 
   const config = loadConfig();
   const mapping = loadColumnMapping(config.mappingPath);
 
   if (!config.sheetWebhookUrl) {
-    console.error("SHEET_WEBHOOK_URL is required so retry can clear Status on the sheet.");
-    process.exit(1);
+    throw new Error(
+      "SHEET_WEBHOOK_URL (or SHEET_WEBHOOK_ID) is required so retry can clear Status on the sheet."
+    );
+  }
+  if (!config.sheetCsvUrl && !config.sheetId) {
+    throw new Error("SHEET_CSV_URL or SHEET_ID must be set for the client sheet.");
   }
 
   console.log(`Retrying row(s): ${rows.join(", ")}`);
@@ -89,12 +92,23 @@ async function main(): Promise<void> {
   if (!process.env.HEADLESS) process.env.HEADLESS = "true";
 
   console.log(`Starting live run for row(s) ${rows.join(", ")}...\n`);
-  // Re-load config after ROW_FILTER is set
   const { runBatchMain } = await import("./runBatch.js");
   await runBatchMain();
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+async function main(): Promise<void> {
+  const rows = parseRowArgs(process.argv.slice(2));
+  if (rows.length === 0) {
+    console.error("Usage: npm run retry -- <row> [row...]");
+    console.error("Example: npm run retry -- 18");
+    process.exit(1);
+  }
+  await retryRowsMain(rows);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

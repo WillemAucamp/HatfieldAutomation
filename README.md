@@ -1,6 +1,28 @@
 # VW Melrose Finance Application Auto-Filler
 
-Browser automation that reads applicant data from a public Google Sheet and fills the [VW Melrose finance application](https://vwmelrose.hatfieldgroup.co.za/finance) through Section 5, stopping before document upload for manual completion.
+Browser automation that reads applicant data from a **client-owned** Google Sheet and fills the [VW Melrose finance application](https://vwmelrose.hatfieldgroup.co.za/finance) (Seriti iframe), then writes Status / Timing (and optional loaded-clients Name / Number) back.
+
+## Product (client “Run now”)
+
+Non-technical clients trigger loads from a simple UI — no repo, terminal, or Playwright knowledge. You keep code, secrets, mapping, and deploys.
+
+| Doc | Audience |
+|-----|----------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How client sheets + operator runner fit together |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | Deploy the product UI + runner |
+| [docs/OPERATOR_RUNBOOK.md](docs/OPERATOR_RUNBOOK.md) | Add clients, mapping, debug |
+| [docs/CLIENT_GUIDE.md](docs/CLIENT_GUIDE.md) | One-pager for the client |
+
+```bash
+npm install
+npm run install-browsers
+cp .env.example .env
+# Set OPERATOR_TOKEN, CLIENT_API_TOKENS, SHEET_WEBHOOK_ID
+cp clients/_example.json clients/acme.json   # set their sheetId(s)
+npm run product                              # http://localhost:8787
+```
+
+Per-client sheet IDs live in `clients/<id>.json`. Do **not** ship production against personal App Automation / money sheet IDs.
 
 ## Stack
 
@@ -8,31 +30,21 @@ Browser automation that reads applicant data from a public Google Sheet and fill
 - **Playwright** for browser automation
 - **papaparse** for CSV parsing
 - **fuse.js** for fuzzy label matching
+- **Product UI** (`src/product`) — token auth + job queue wrapping `runBatch` / `retryRows`
 
-## Quick start
+## Operator CLI quick start
 
 ```bash
 npm install
-npm run install-browsers   # downloads Chromium for Playwright
-
+npm run install-browsers
 cp .env.example .env
-# SHEET_CSV_URL already points at the live applicant sheet
-```
-
-The default data source is this public Google Sheet:
-
-https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?usp=sharing
-
-CSV URL (gviz; also in `config.json` — `/export` often 502s, and the fetcher retries/falls back):
-
-```
-https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/gviz/tq?tqx=out:csv&gid=0
+# Set SHEET_ID (or SHEET_CSV_URL) + SHEET_WEBHOOK_ID for the sheet you are testing
 ```
 
 Preview mapped rows without opening a browser:
 
 ```bash
-npm run preview
+SHEET_ID=your_sheet_id npm run preview
 ```
 
 ### Google Sheet CSV URL
@@ -75,12 +87,16 @@ npm run dev -- --local-csv=./sample-data.csv
 
 | File | Purpose |
 |---|---|
+| `src/product/` | Client UI + auth + job queue (wraps existing pipeline) |
+| `clients/` | Per-client sheet config (`_example.json` template) |
 | `src/fetchSheetData.ts` | Fetches and parses public sheet CSV into typed applicant records |
 | `src/fieldResolver.ts` | Resilient field lookup (label → role → placeholder → fieldset → fuzzy) |
 | `src/transforms.ts` | Mobile zero-pad and date format validation |
-| `src/sections/section1.ts` … `section5.ts` | One module per form section |
+| `src/sections/section1.ts` … `section6.ts` | One module per form section |
 | `src/runBatch.ts` | Batch orchestrator |
-| `mapping.json` | Sheet column header → field role mapping |
+| `src/retryRows.ts` | Clear Status then re-run selected rows |
+| `mapping.json` | Default sheet column header → field role mapping |
+| `docs/` | Architecture, deploy, operator runbook, client guide |
 
 ## Field discovery
 
@@ -105,7 +121,7 @@ Environment variables (`.env`):
 
 | Variable | Default | Description |
 |---|---|---|
-| `SHEET_CSV_URL` | live applicant sheet (gviz) | Public Google Sheet CSV URL (gviz preferred) |
+| `SHEET_CSV_URL` / `SHEET_ID` | — (required for CLI) | Client applicant sheet; product injects from `clients/*.json` |
 | `MAPPING_PATH` | `./mapping.json` | Column mapping file |
 | `DRY_RUN` | `false` | Fill only, no navigation past Section 5 |
 | `STRICT_MODE` | `false` | Abort that applicant on field lookup/verify failure |
@@ -114,7 +130,7 @@ Environment variables (`.env`):
 | `SKIP_PROCESSED` | `false` | Skip IDs already in `processed-rows.json` |
 | `KEEP_LAST_OPEN` | `false` | Leave the last headed session open |
 | `SHEET_WEBHOOK_URL` | — | Apps Script web app URL (writes source Status and loaded Name/Number) |
-| `LOADED_SHEET_ID` | loaded-clients sheet | Spreadsheet that receives Name + cellphone after each successful load |
+| `LOADED_SHEET_ID` | — | Optional spreadsheet that receives Name + cellphone after each successful load |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | — | Service account JSON for Sheets API write-back |
 | `ACTION_DELAY_MIN` | `0` | Min ms delay between actions |
 | `ACTION_DELAY_MAX` | `0` | Max ms delay between actions |
@@ -127,8 +143,12 @@ Retry helper: `npm run retry -- <row> [row...]` clears **Status** via the Apps S
 
 ## Pointing at a different sheet
 
-1. Update `SHEET_CSV_URL` in `.env` or `config.json`.
-2. Edit `mapping.json` so each field role maps to your sheet's column headers.
+**Product:** add/edit `clients/<id>.json` with that client’s `sheetId` / optional `loadedSheetId` (see `docs/OPERATOR_RUNBOOK.md`).
+
+**Local CLI:**
+
+1. Set `SHEET_ID` or `SHEET_CSV_URL` in `.env` (leave `config.json` empty in git — no personal IDs as product defaults).
+2. Edit `mapping.json` (or a client-specific mapping file) so each field role maps to the sheet headers.
    Combined columns such as `First names + surname` are split on the last space.
 3. Ensure date columns contain pre-formatted `MM DD YYYY` strings (e.g. `08 12 2013`).
 4. Format mobile numbers as text in the sheet, or rely on the zero-pad transform for 9-digit values.
@@ -181,12 +201,14 @@ Dry-run still stops before Finish and does not write either sheet.
 
 CSV export is read-only. One Apps Script webhook can edit **both** spreadsheets (you must be able to edit both):
 
-1. Open [the loaded-clients sheet](https://docs.google.com/spreadsheets/d/1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM/edit) (or the applicant sheet) → Extensions → Apps Script.
+1. Open the **client’s** applicant sheet or loaded-clients sheet → Extensions → Apps Script.
 2. Paste `apps-script/Code.gs`.
 3. Deploy → New deployment → Web app. Execute as *Me*, access *Anyone*.
-4. Put the web app URL in `.env`:
+4. Prefer the deployment id in `.env` (avoids full-URL secret redaction):
 
 ```
+SHEET_WEBHOOK_ID=AKfycb…
+# or full URL fallback:
 SHEET_WEBHOOK_URL=https://script.google.com/macros/s/…/exec
 ```
 

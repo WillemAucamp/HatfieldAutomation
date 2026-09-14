@@ -1,5 +1,11 @@
-/** Prefer gviz CSV — Google’s /export endpoint often returns 502 under load. */
-export const DEFAULT_SHEET_ID = "12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI";
+/**
+ * Prefer gviz CSV — Google’s /export endpoint often returns 502 under load.
+ * Product / multi-client runs must set SHEET_ID or SHEET_CSV_URL per client.
+ * These empty defaults exist only so imports stay stable; never use them as
+ * a production sheet target.
+ */
+export const DEFAULT_SHEET_ID = "";
+export const DEFAULT_SHEET_CSV_URL = "";
 
 export function gvizCsvUrl(sheetId: string, gid = "0"): string {
   return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`;
@@ -8,8 +14,6 @@ export function gvizCsvUrl(sheetId: string, gid = "0"): string {
 export function exportCsvUrl(sheetId: string, gid = "0"): string {
   return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
 }
-
-export const DEFAULT_SHEET_CSV_URL = gvizCsvUrl(DEFAULT_SHEET_ID);
 
 export function extractSheetId(url: string): string {
   const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
@@ -30,7 +34,12 @@ function sleep(ms: number): Promise<void> {
 }
 
 function candidateUrls(preferred: string): string[] {
-  const sheetId = extractSheetId(preferred) || DEFAULT_SHEET_ID;
+  const sheetId = extractSheetId(preferred);
+  if (!sheetId) {
+    throw new Error(
+      "SHEET_CSV_URL / SHEET_ID is missing. Point the client (or local .env) at their Google Sheet."
+    );
+  }
   const gid = extractGid(preferred);
   const gviz = gvizCsvUrl(sheetId, gid);
   const exported = exportCsvUrl(sheetId, gid);

@@ -2,17 +2,14 @@
  * Arbitrary Google Sheet updates via the Apps Script webhook.
  *
  * Usage examples:
- *   npm run sheet-update -- --find Name="Thapelo Nyathi" --set Status=Approved Comment="ok"
- *   npm run sheet-update -- --a1 F2=Approved --a1 H2="note"
- *   npm run sheet-update -- --append Name="Jane Doe" Number=0821234567 Status=Pending
- *   npm run sheet-update -- --row 5 --set Status=Declined
+ *   npm run sheet-update -- --spreadsheet <SHEET_ID> --find Name="Thapelo Nyathi" --set Status=Approved Comment="ok"
+ *   npm run sheet-update -- --spreadsheet <SHEET_ID> --a1 F2=Approved --a1 H2="note"
+ *   npm run sheet-update -- --spreadsheet <SHEET_ID> --append Name="Jane Doe" Number=0821234567 Status=Pending
+ *   npm run sheet-update -- --spreadsheet <SHEET_ID> --row 5 --set Status=Declined
  *
- * Defaults to the money / loaded-clients spreadsheet tab gid=2126384446.
+ * Pass --spreadsheet (or LOADED_SHEET_ID / SHEET_ID in env). No personal sheet IDs are hard-coded.
  */
 import { loadConfig } from "./config.js";
-
-const DEFAULT_SPREADSHEET_ID = "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM";
-const DEFAULT_GID = 2126384446;
 
 function parseAssign(raw: string): { key: string; value: string } {
   const eq = raw.indexOf("=");
@@ -23,8 +20,6 @@ function parseAssign(raw: string): { key: string; value: string } {
 function parseArgs(argv: string[]) {
   const payload: Record<string, unknown> = {
     action: "updateSheet",
-    spreadsheetId: DEFAULT_SPREADSHEET_ID,
-    sheetGid: DEFAULT_GID,
   };
   const updates: Array<Record<string, unknown>> = [];
   let find: Record<string, string> | undefined;
@@ -83,19 +78,16 @@ function parseArgs(argv: string[]) {
 }
 
 function printHelp(): void {
-  console.log(`Update the money Google Sheet via Apps Script webhook.
+  console.log(`Update a Google Sheet via Apps Script webhook.
 
 Examples:
-  npm run sheet-update -- --find Name="Thapelo Nyathi" --set Status=Approved
-  npm run sheet-update -- --a1 F2=Approved --a1 H2=note
-  npm run sheet-update -- --row 5 --set Status=Declined Comment=ok
-  npm run sheet-update -- --append Name="Jane Doe" Number=0821234567 Status=Pending
+  npm run sheet-update -- --spreadsheet <SHEET_ID> --find Name="Thapelo Nyathi" --set Status=Approved
+  npm run sheet-update -- --spreadsheet <SHEET_ID> --a1 F2=Approved --a1 H2=note
+  npm run sheet-update -- --spreadsheet <SHEET_ID> --row 5 --set Status=Declined Comment=ok
+  npm run sheet-update -- --spreadsheet <SHEET_ID> --append Name="Jane Doe" Number=0821234567 Status=Pending
 
-Defaults:
-  spreadsheet ${DEFAULT_SPREADSHEET_ID}
-  gid         ${DEFAULT_GID}
-
-Requires Apps Script redeploy with the updateSheet action.`);
+Requires --spreadsheet or LOADED_SHEET_ID / SHEET_ID in the environment.
+Requires Apps Script with the updateSheet action.`);
 }
 
 async function postWebhook(
@@ -130,8 +122,16 @@ async function main(): Promise<void> {
   }
 
   const config = loadConfig();
+  if (!payload.spreadsheetId) {
+    payload.spreadsheetId = config.loadedSheetId || config.sheetId || "";
+  }
+  if (!payload.spreadsheetId) {
+    throw new Error(
+      "Pass --spreadsheet <SHEET_ID> or set LOADED_SHEET_ID / SHEET_ID for the target client sheet."
+    );
+  }
   if (!config.sheetWebhookUrl) {
-    throw new Error("SHEET_WEBHOOK_URL is required");
+    throw new Error("SHEET_WEBHOOK_URL (or SHEET_WEBHOOK_ID) is required");
   }
 
   console.log("Sending updateSheet payload:");
