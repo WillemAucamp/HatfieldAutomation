@@ -75,6 +75,16 @@ async function main(): Promise<void> {
     console.log(`  Cleared ${clearedIds} ID(s) from processed-rows.json.`);
   }
 
+  // Sheets CSV/export can lag a few seconds behind Apps Script writes.
+  console.log("  Waiting for sheet Status clears to propagate...");
+  await new Promise((r) => setTimeout(r, 5000));
+
+  // Bust CSV caches so the live run does not skip on a stale Status cell.
+  if (config.sheetCsvUrl) {
+    const sep = config.sheetCsvUrl.includes("?") ? "&" : "?";
+    process.env.SHEET_CSV_URL = `${config.sheetCsvUrl}${sep}_cb=${Date.now()}`;
+  }
+
   process.env.ROW_FILTER = rows.join(",");
   if (!process.env.HEADLESS) process.env.HEADLESS = "true";
 
