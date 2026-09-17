@@ -1,4 +1,17 @@
-# Cursor Automation — paste into the Untitled Settings screen
+# DEPRECATED — Cursor always-on agent
+
+**Do not use this for production.** It burns Cursor tokens on a 5-minute schedule.
+
+Production path is **n8n → HTTP → this repo**:
+
+- Setup: [`config/n8n-setup.md`](./n8n-setup.md)
+- Server: `npm run trigger-server` (`POST /ingest`, `POST /load`)
+
+Keep this file only as a historical paste of the old automation settings.
+
+---
+
+# (Archived) Cursor Automation — paste into the Untitled Settings screen
 
 Create this once at https://cursor.com/automations → New Automation.
 This file is the exact config. Do not invent extra steps.

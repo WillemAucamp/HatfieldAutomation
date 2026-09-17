@@ -1,8 +1,9 @@
-name: Intake to Melrose
+# Deprecated for production — use n8n + trigger-server instead (config/n8n-setup.md).
+# Kept as manual backup only (workflow_dispatch). Schedule disabled to avoid double-runs.
+
+name: Intake to Melrose (manual backup)
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:

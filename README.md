@@ -34,22 +34,19 @@ The Google account that owns the current webhook must do this. I cannot log into
 
 If the /exec URL changes, put the new URL in `.env` as `SHEET_WEBHOOK_URL`.
 
-### 2. Cursor always-on agent (required for 24/7)
+### 2. n8n triggers (24/7 without Cursor agent)
 
-I cannot click Save/Active on [cursor.com/automations](https://cursor.com/automations) or add Cloud Agent secrets.
+**Preferred production path.** Full steps: [`config/n8n-setup.md`](./config/n8n-setup.md).
 
-Exact paste values are in `config/cursor-automation.md`.
+1. Host this repo with `npm run trigger-server` (or the included Docker/Fly config).
+2. Set `TRIGGER_SECRET`, `GEMINI_API_KEY`, `SHEET_WEBHOOK_URL` on that host (`AUTO_LOAD=false`).
+3. In n8n: Form/webhook → `POST /ingest` → then `POST /load` (Seriti path unchanged).
+4. Apps Script script properties: `N8N_WEBHOOK_URL` (+ optional `N8N_WEBHOOK_API_KEY`), then run `setupIntakeWatch` once.
+5. **Disable** any Cursor always-on automation — it only burns tokens. See archived `config/cursor-automation.md`.
 
-1. New Automation → name **Hatfield intake to Melrose** → repo **HatfieldAutomation** → branch **cursor/intake-llm-watch-43d2**
-2. Trigger: **Scheduled** every 5 minutes
-3. Paste the Agent instructions from that file
-4. Keep Memories; do not create PRs
-5. Add Cloud Agent secrets (Runtime Secret): `GEMINI_API_KEY`, `SHEET_WEBHOOK_URL`
-6. **Save**, then toggle **Active**
+Manual Melrose still works exactly as before: `npm run dev` / `ROW_FILTER=N npm run dev`.
 
-Optional: after Save, add a **Webhook** trigger. Put `CURSOR_WEBHOOK_URL` and `CURSOR_WEBHOOK_API_KEY` in Apps Script → Project Settings → Script properties, then run `setupIntakeWatch` once so a Form submit pings Cursor immediately.
-
-Do **not** use a real client as the first test. After Apps Script is `hatfield-intake-1`, run `npm run ingest` (or let the automation run once) and check the automation sheet before Melrose submits.
+Do **not** use a real client as the first test. After Apps Script is `hatfield-intake-1`, run `npm run ingest` (or hit `/ingest`) and check the automation sheet before Melrose submits.
 
 Intake sheet: https://docs.google.com/spreadsheets/d/1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M  
 Automation sheet: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?gid=0#gid=0

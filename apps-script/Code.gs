@@ -615,16 +615,27 @@ function json_(obj) {
   );
 }
 
+// Prefer n8n. Legacy Cursor props still work as fallback.
+var N8N_WEBHOOK_PROP = "N8N_WEBHOOK_URL";
+var N8N_WEBHOOK_KEY_PROP = "N8N_WEBHOOK_API_KEY";
 var CURSOR_WEBHOOK_PROP = "CURSOR_WEBHOOK_URL";
 var CURSOR_WEBHOOK_KEY_PROP = "CURSOR_WEBHOOK_API_KEY";
 
-function notifyCursorAutomation_(payload) {
+function notifyOrchestrator_(payload) {
   var props = PropertiesService.getScriptProperties();
-  var url = props.getProperty(CURSOR_WEBHOOK_PROP);
+  var url =
+    props.getProperty(N8N_WEBHOOK_PROP) || props.getProperty(CURSOR_WEBHOOK_PROP);
   if (!url) {
-    return { ok: false, skipped: true, reason: "CURSOR_WEBHOOK_URL not set" };
+    return {
+      ok: false,
+      skipped: true,
+      reason: "N8N_WEBHOOK_URL (or legacy CURSOR_WEBHOOK_URL) not set",
+    };
   }
-  var key = props.getProperty(CURSOR_WEBHOOK_KEY_PROP) || "";
+  var key =
+    props.getProperty(N8N_WEBHOOK_KEY_PROP) ||
+    props.getProperty(CURSOR_WEBHOOK_KEY_PROP) ||
+    "";
   var headers = {};
   if (key) {
     headers.Authorization = "Bearer " + key;
@@ -638,11 +649,19 @@ function notifyCursorAutomation_(payload) {
     muteHttpExceptions: true,
     followRedirects: true,
   });
-  return { ok: res.getResponseCode() >= 200 && res.getResponseCode() < 300, status: res.getResponseCode() };
+  return {
+    ok: res.getResponseCode() >= 200 && res.getResponseCode() < 300,
+    status: res.getResponseCode(),
+  };
+}
+
+/** @deprecated use notifyOrchestrator_ */
+function notifyCursorAutomation_(payload) {
+  return notifyOrchestrator_(payload);
 }
 
 function onIntakeChange(e) {
-  notifyCursorAutomation_({
+  notifyOrchestrator_({
     event: "intake_form_submit",
     changeType: e && e.changeType,
     spreadsheetId: INTAKE_SHEET_ID,
@@ -650,10 +669,13 @@ function onIntakeChange(e) {
 }
 
 /**
- * Run once from the Apps Script editor after you paste Cursor's webhook URL
+ * Run once from the Apps Script editor after you paste the n8n webhook URL
  * into Project Settings → Script properties:
- *   CURSOR_WEBHOOK_URL
- *   CURSOR_WEBHOOK_API_KEY
+ *   N8N_WEBHOOK_URL
+ *   N8N_WEBHOOK_API_KEY   (optional; if your n8n webhook expects a header)
+ *
+ * Legacy Cursor props (CURSOR_WEBHOOK_URL / CURSOR_WEBHOOK_API_KEY) still work.
+ * After cutover, remove the Cursor automation and use only N8N_*.
  */
 function setupIntakeWatch() {
   var ss = SpreadsheetApp.openById(INTAKE_SHEET_ID);
