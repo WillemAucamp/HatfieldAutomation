@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+runs/
+processed-rows.json
+application-references.json
+service-account.json
+*.log
+playwright-report/
+test-results/
+data/
+clients/*.json
+clients/*.secrets.json
+clients/*.handoff.txt
+!clients/_example.json
+!clients/_example.secrets.json

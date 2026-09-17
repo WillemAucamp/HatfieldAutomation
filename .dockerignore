@@ -1,0 +1,14 @@
+node_modules
+.git
+.env
+data
+runs
+processed-rows.json
+application-references.json
+service-account.json
+*.log
+clients/*.json
+clients/*.secrets.json
+clients/*.handoff.txt
+!clients/_example.json
+!clients/_example.secrets.json

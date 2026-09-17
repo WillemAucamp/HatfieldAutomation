@@ -1,0 +1,31 @@
+# fly.io — optional. From repo root after `fly auth login`:
+#   fly launch --no-deploy
+#   fly secrets set OPERATOR_TOKEN=… SHEET_WEBHOOK_ID=… CLIENT_API_TOKENS=…
+#   fly volumes create hatfield_data --size 1
+#   fly deploy
+#
+# Note: mount a volume for ./data and bake or sync clients/*.json via secrets/ssh.
+
+app = "hatfield-load-runner"
+primary_region = "jnb"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "45s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"
