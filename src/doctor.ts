@@ -16,21 +16,41 @@ function print(check: Check): void {
   console.log(`${check.ok ? "OK  " : "FAIL"}  ${check.name}: ${check.detail}`);
 }
 
-async function probeWebhook(url: string): Promise<{ version?: string; actions?: string[]; error?: string; raw?: unknown }> {
-  const get = await fetch(url, { method: "GET", redirect: "follow" });
-  const getText = await get.text();
+async function probeWebhook(url: string): Promise<{
+  version?: string;
+  actions?: string[];
+  error?: string;
+  raw?: unknown;
+  getStatus?: number;
+}> {
+  let getStatus = 0;
+  let getText = "";
   try {
-    const json = JSON.parse(getText) as { version?: string; actions?: string[]; ok?: boolean };
-    if (json.version || json.actions) return json;
-  } catch {
-    // POST handshake below
+    const get = await fetch(url, { method: "GET", redirect: "follow" });
+    getStatus = get.status;
+    getText = await get.text();
+    try {
+      const json = JSON.parse(getText) as { version?: string; actions?: string[]; ok?: boolean };
+      if (json.version || json.actions) return { ...json, getStatus };
+    } catch {
+      // Apps Script sometimes 404s on GET while POST actions work — fall through.
+    }
+  } catch (err) {
+    getText = err instanceof Error ? err.message : String(err);
   }
 
   try {
-    const posted = await postWebhookJson(url, { action: "readSheet", unprocessedOnly: true });
-    return { raw: posted };
+    const posted = await postWebhookJson(url, {
+      action: "readSheet",
+      unprocessedOnly: true,
+      statusColumn: "Enrichment Status",
+    });
+    return { raw: posted, getStatus };
   } catch (err) {
-    return { error: `${get.status} ${getText.slice(0, 180)} | POST ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      getStatus,
+      error: `GET ${getStatus || "err"} ${getText.slice(0, 120)} | POST ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }
 
@@ -103,23 +123,27 @@ export async function doctorMain(): Promise<number> {
     const probe = await probeWebhook(config.sheetWebhookUrl);
     const actions = probe.actions ?? [];
     const versionOk = probe.version === "hatfield-intake-1";
+    const raw = probe.raw && typeof probe.raw === "object" ? (probe.raw as Record<string, unknown>) : null;
     const readOk =
       versionOk ||
       actions.includes("readSheet") ||
-      (probe.raw && typeof probe.raw === "object" && (probe.raw as { ok?: boolean; rows?: unknown }).ok === true);
+      Boolean(raw && raw.ok === true && Array.isArray(raw.rows));
     const unknownAction =
-      probe.raw &&
-      typeof probe.raw === "object" &&
-      /unknown action/i.test(String((probe.raw as { error?: string }).error ?? ""));
+      raw != null && /unknown action/i.test(String(raw.error ?? ""));
+    const rowCount = raw && Array.isArray(raw.rows) ? raw.rows.length : undefined;
 
     checks.push({
       name: "Apps Script deploy",
       ok: Boolean(readOk) && !unknownAction,
       detail: versionOk
         ? `hatfield-intake-1 (${actions.join(", ")})`
-        : unknownAction
-          ? "old deploy — paste apps-script/Code.gs and Deploy → New version"
-          : probe.error || JSON.stringify(probe.raw ?? probe).slice(0, 240),
+        : readOk
+          ? `readSheet OK${rowCount !== undefined ? ` (${rowCount} unprocessed intake rows)` : ""}${
+              probe.getStatus && probe.getStatus !== 200 ? `; GET returned ${probe.getStatus} (ignored)` : ""
+            }`
+          : unknownAction
+            ? "old deploy — paste apps-script/Code.gs and Deploy → New version"
+            : probe.error || JSON.stringify(probe.raw ?? probe).slice(0, 240),
     });
   }
 

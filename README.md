@@ -36,7 +36,7 @@ If the /exec URL changes, put the new URL in `.env` as `SHEET_WEBHOOK_URL`.
 
 ### 2. n8n triggers (24/7 without Cursor agent)
 
-**Preferred production path.** Full steps: [`config/n8n-setup.md`](./config/n8n-setup.md).
+**Preferred production path.** Your remaining clicks: [`config/YOU_DO.md`](./config/YOU_DO.md). Details: [`config/n8n-setup.md`](./config/n8n-setup.md).
 
 1. Host this repo with `npm run trigger-server` (or the included Docker/Fly config).
 2. Set `TRIGGER_SECRET`, `GEMINI_API_KEY`, `SHEET_WEBHOOK_URL` on that host (`AUTO_LOAD=false`).

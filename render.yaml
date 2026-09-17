@@ -1,0 +1,37 @@
+# Render.com blueprint — host the n8n trigger server (Playwright + Chromium).
+# Connect this repo in Render → New → Blueprint → select this file.
+# Then set secret env vars in the Render dashboard (do not commit them).
+
+services:
+  - type: web
+    name: hatfield-n8n-triggers
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: HEADLESS
+        value: "true"
+      - key: AUTO_LOAD
+        value: "false"
+      - key: TRIGGER_PORT
+        value: "8788"
+      - key: TRIGGER_DATA_DIR
+        value: /data/trigger
+      - key: SHEET_ID
+        value: 12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI
+      - key: INTAKE_SPREADSHEET_ID
+        value: 1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M
+      - key: LOADED_SHEET_ID
+        value: 1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM
+      - key: SHEET_CSV_URL
+        value: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/export?format=csv&gid=0
+      - key: TRIGGER_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SHEET_WEBHOOK_URL
+        sync: false
+    disk:
+      name: hatfield-trigger-data
+      mountPath: /data
+      sizeGB: 1

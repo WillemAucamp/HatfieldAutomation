@@ -1,5 +1,8 @@
 # n8n orchestration (Option 1) — replace Cursor always-on agent
 
+**Your remaining steps only:** [`config/YOU_DO.md`](./YOU_DO.md)  
+**Importable workflow:** [`config/n8n-workflow-hatfield-intake.json`](./n8n-workflow-hatfield-intake.json)
+
 This repo already does the real work:
 
 | Step | Existing command / code | HTTP trigger |
