@@ -1,0 +1,36 @@
+# Optional Fly.io host for the n8n trigger server.
+#   fly launch --no-deploy
+#   fly secrets set TRIGGER_SECRET=… GEMINI_API_KEY=… SHEET_WEBHOOK_URL=…
+#   fly volumes create hatfield_trigger_data --size 1
+#   fly deploy
+#
+# Point n8n HTTP nodes at https://<app>.fly.dev/ingest and /load
+# with Authorization: Bearer <TRIGGER_SECRET>
+
+app = "hatfield-n8n-triggers"
+primary_region = "jnb"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8788
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "60s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"
+
+[mounts]
+  source = "hatfield_trigger_data"
+  destination = "/app/data"

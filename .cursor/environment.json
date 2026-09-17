@@ -1,0 +1,4 @@
+{
+  "name": "Hatfield Melrose loader",
+  "install": "npm ci\nnpx playwright install --with-deps chromium"
+}
