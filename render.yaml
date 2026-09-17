@@ -1,0 +1,21 @@
+# Render.com blueprint — create a Web Service from this repo.
+# Set secrets in the Render dashboard: OPERATOR_TOKEN, SHEET_WEBHOOK_ID, CLIENT_API_TOKENS, PRODUCT_PUBLIC_URL
+services:
+  - type: web
+    name: hatfield-load-runner
+    runtime: docker
+    plan: standard
+    healthCheckPath: /api/health
+    envVars:
+      - key: HEADLESS
+        value: "true"
+      - key: PRODUCT_PORT
+        value: "8787"
+      - key: OPERATOR_TOKEN
+        sync: false
+      - key: SHEET_WEBHOOK_ID
+        sync: false
+      - key: CLIENT_API_TOKENS
+        sync: false
+      - key: PRODUCT_PUBLIC_URL
+        sync: false

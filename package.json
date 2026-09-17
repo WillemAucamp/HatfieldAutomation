@@ -15,6 +15,10 @@
     "sheet-update": "tsx src/updateSheet.ts",
     "product": "tsx src/product/server.ts",
     "product:dev": "tsx src/product/server.ts",
+    "bootstrap-secrets": "tsx scripts/bootstrap-secrets.ts",
+    "new-client": "tsx scripts/new-client.ts",
+    "validate-sheet": "tsx scripts/validate-client-sheet.ts",
+    "readiness": "tsx scripts/readiness.ts",
     "test": "tsx --test src/outcome.test.ts src/transforms.test.ts src/sheetCsv.test.ts src/product/clients.test.ts",
     "install-browsers": "playwright install chromium"
   },

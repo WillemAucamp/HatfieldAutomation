@@ -99,6 +99,12 @@ async function handleApi(
     return;
   }
 
+  if (method === "GET" && pathname === "/api/ready") {
+    const ready = computeReadiness();
+    sendJson(res, ready.ready ? 200 : 503, ready);
+    return;
+  }
+
   if (method === "GET" && pathname === "/api/required-columns") {
     sendJson(res, 200, { columns: requiredColumnsDoc() });
     return;
@@ -252,10 +258,59 @@ async function handler(req: IncomingMessage, res: ServerResponse): Promise<void>
   }
 }
 
+function isUnsetOrPlaceholder(value: string): boolean {
+  const v = value.trim();
+  if (!v) return true;
+  return /YOUR-HOST|PASTE_|EXAMPLE|generate-a-long|fake-webhook|FakeClient|AKfycb\.\.\.|xxx+/i.test(
+    v
+  );
+}
+
+function computeReadiness(): {
+  ready: boolean;
+  service: string;
+  checks: Record<string, boolean>;
+  missing: string[];
+  clients: number;
+  queue: ReturnType<typeof getQueueSnapshot>;
+} {
+  const hasOperator = !isUnsetOrPlaceholder(process.env.OPERATOR_TOKEN ?? "");
+  const webhookId = process.env.SHEET_WEBHOOK_ID ?? "";
+  const webhookUrl = process.env.SHEET_WEBHOOK_URL ?? "";
+  const hasWebhook =
+    (!isUnsetOrPlaceholder(webhookId) && !webhookId.includes("REDACTED")) ||
+    (!isUnsetOrPlaceholder(webhookUrl) && !webhookUrl.includes("REDACTED"));
+  const clients = listClientConfigs().filter(
+    (c) => c.sheetId && !isUnsetOrPlaceholder(c.sheetId)
+  );
+  const checks = {
+    operatorToken: hasOperator,
+    sheetWebhook: hasWebhook,
+    realClientConfigured: clients.length > 0,
+  };
+  const missing: string[] = [];
+  if (!checks.operatorToken) missing.push("OPERATOR_TOKEN");
+  if (!checks.sheetWebhook) missing.push("SHEET_WEBHOOK_ID");
+  if (!checks.realClientConfigured) missing.push("clients/<id>.json with real sheetId");
+  return {
+    ready: missing.length === 0,
+    service: "hatfield-product",
+    checks,
+    missing,
+    clients: clients.length,
+    queue: getQueueSnapshot(),
+  };
+}
+
 export function startProductServer(): void {
+  const ready = computeReadiness();
+  if (!ready.ready) {
+    console.warn(`[product] Not fully ready yet. Missing: ${ready.missing.join(", ")}`);
+    console.warn("[product] See docs/YOU_PROVIDE.md — UI will still start for local testing.");
+  }
   if (!(process.env.OPERATOR_TOKEN ?? "").trim()) {
     console.warn(
-      "[product] OPERATOR_TOKEN is not set — operator login will fail until you set it."
+      "[product] OPERATOR_TOKEN is not set — run: npm run bootstrap-secrets"
     );
   }
   recoverQueueOnBoot();
@@ -265,7 +320,12 @@ export function startProductServer(): void {
   server.listen(PORT, () => {
     console.log(`Product UI listening on http://0.0.0.0:${PORT}`);
     console.log(`Clients dir: ${resolve(process.env.CLIENTS_DIR ?? "./clients")}`);
-    console.log(`Configured clients: ${listClientConfigs().map((c) => c.id).join(", ") || "(none)"}`);
+    console.log(
+      `Configured clients: ${listClientConfigs()
+        .map((c) => c.id)
+        .join(", ") || "(none)"}`
+    );
+    console.log(`Ready: ${ready.ready ? "yes" : "no"} — GET /api/ready`);
   });
 }
 

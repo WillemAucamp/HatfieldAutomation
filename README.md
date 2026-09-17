@@ -12,6 +12,8 @@ Non-technical clients trigger loads from a simple UI — no repo, terminal, or P
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Deploy the product UI + runner |
 | [docs/OPERATOR_RUNBOOK.md](docs/OPERATOR_RUNBOOK.md) | Add clients, mapping, debug |
 | [docs/CLIENT_GUIDE.md](docs/CLIENT_GUIDE.md) | One-pager for the client |
+| [docs/YOU_PROVIDE.md](docs/YOU_PROVIDE.md) | Only steps Willem must do (hosting, Apps Script, sheet IDs) |
+| [docs/APPS_SCRIPT_CHECKLIST.md](docs/APPS_SCRIPT_CHECKLIST.md) | Write-back deploy checklist |
 
 ```bash
 npm install
@@ -19,7 +21,12 @@ npm run install-browsers
 cp .env.example .env
 # Set OPERATOR_TOKEN, CLIENT_API_TOKENS, SHEET_WEBHOOK_ID
 cp clients/_example.json clients/acme.json   # set their sheetId(s)
+npm run bootstrap-secrets                    # OPERATOR_TOKEN in .env
+npm run new-client -- --id acme --name "Acme" --sheet THEIR_ID --print-email
+npm run validate-sheet -- --client acme
+npm run readiness
 npm run product                              # http://localhost:8787
+# or: docker compose up -d --build
 ```
 
 Per-client sheet IDs live in `clients/<id>.json`. Do **not** ship production against personal App Automation / money sheet IDs.
