@@ -24,7 +24,7 @@ import {
   type JobKind,
 } from "./jobs.js";
 
-dotenvConfig();
+dotenvConfig({ path: resolve(process.cwd(), ".env"), override: true });
 
 const PUBLIC_DIR = resolve(process.env.PRODUCT_PUBLIC_DIR ?? "./src/product/public");
 const PORT = parseInt(process.env.PRODUCT_PORT ?? "8787", 10);
