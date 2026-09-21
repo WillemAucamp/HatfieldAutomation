@@ -1,7 +1,7 @@
 {
   "name": "vw-melrose-finance-autofill",
   "version": "1.0.0",
-  "description": "Browser automation for VW Melrose finance application form",
+  "description": "Browser automation for VW Melrose finance application form — product UI + Playwright Seriti autofill",
   "type": "module",
   "scripts": {
     "preview": "tsx src/previewSheet.ts",
@@ -13,7 +13,13 @@
     "renumber-rows": "tsx src/renumberRows.ts",
     "sync-loaded": "tsx src/syncLoadedSheet.ts",
     "sheet-update": "tsx src/updateSheet.ts",
-    "test": "tsx --test src/outcome.test.ts src/transforms.test.ts src/sheetCsv.test.ts",
+    "product": "tsx src/product/server.ts",
+    "product:dev": "tsx src/product/server.ts",
+    "bootstrap-secrets": "tsx scripts/bootstrap-secrets.ts",
+    "new-client": "tsx scripts/new-client.ts",
+    "validate-sheet": "tsx scripts/validate-client-sheet.ts",
+    "readiness": "tsx scripts/readiness.ts",
+    "test": "tsx --test src/outcome.test.ts src/transforms.test.ts src/sheetCsv.test.ts src/product/clients.test.ts",
     "install-browsers": "playwright install chromium"
   },
   "engines": {

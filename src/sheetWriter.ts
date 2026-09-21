@@ -512,6 +512,10 @@ export async function appendLoadedClient(
   name: string,
   number: string
 ): Promise<LoadedClientWrite> {
+  if (!config.loadedSheetId?.trim()) {
+    return { written: false, skipped: true };
+  }
+
   const webhook = config.loadedSheetWebhookUrl || config.sheetWebhookUrl;
   if (webhook) {
     try {

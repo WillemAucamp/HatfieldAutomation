@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Finance load runner</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="bg" aria-hidden="true"></div>
+    <main class="shell">
+      <header class="brand">
+        <p class="eyebrow">Hatfield · VW Melrose finance</p>
+        <h1>Load runner</h1>
+        <p class="lede">
+          Run open sheet rows into the finance site. Your Google Sheet stays the
+          source of truth — empty Status means to load.
+        </p>
+      </header>
+
+      <section id="login-panel" class="panel">
+        <h2>Sign in</h2>
+        <p class="hint">Paste the access token you were given. No GitHub or terminal needed.</p>
+        <label class="field">
+          <span>Access token</span>
+          <input id="token-input" type="password" autocomplete="current-password" placeholder="••••••••" />
+        </label>
+        <button type="button" id="login-btn" class="btn primary">Continue</button>
+        <p id="login-error" class="error" hidden></p>
+      </section>
+
+      <section id="app-panel" class="panel" hidden>
+        <div class="session-bar">
+          <div>
+            <p class="eyebrow" id="role-label">Client</p>
+            <h2 id="client-title">—</h2>
+            <p class="meta" id="client-meta"></p>
+          </div>
+          <button type="button" id="logout-btn" class="btn ghost">Sign out</button>
+        </div>
+
+        <div id="operator-pick" class="operator-pick" hidden>
+          <label class="field">
+            <span>Client</span>
+            <select id="client-select"></select>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="run-open-btn" class="btn primary">Run open rows</button>
+          <div class="retry-row">
+            <label class="field compact">
+              <span>Retry row</span>
+              <input id="retry-row-input" type="number" min="2" step="1" placeholder="e.g. 18" />
+            </label>
+            <button type="button" id="retry-btn" class="btn secondary">Retry row</button>
+          </div>
+        </div>
+        <p id="action-error" class="error" hidden></p>
+        <p id="action-ok" class="ok" hidden></p>
+
+        <div class="status-block">
+          <div class="status-head">
+            <h3>Recent runs</h3>
+            <button type="button" id="refresh-btn" class="btn ghost small">Refresh</button>
+          </div>
+          <ul id="jobs-list" class="jobs"></ul>
+          <p id="jobs-empty" class="hint">No runs yet.</p>
+        </div>
+
+        <details class="help">
+          <summary>How the sheet works</summary>
+          <ul>
+            <li>Leave <strong>Status</strong> blank on rows you want loaded.</li>
+            <li>After a run, Status shows <code>ZAHTVW…</code> on success or <code>error …</code> on failure.</li>
+            <li><strong>Timing</strong> is seconds for that row.</li>
+            <li>To retry a failed row, use Retry above (or clear Status yourself and Run open rows).</li>
+          </ul>
+        </details>
+      </section>
+    </main>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

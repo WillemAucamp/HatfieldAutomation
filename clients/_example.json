@@ -1,0 +1,13 @@
+{
+  "id": "example-dealership",
+  "displayName": "Example Dealership",
+  "enabled": true,
+  "sheetId": "PASTE_CLIENT_APPLICANT_SHEET_ID_HERE",
+  "sheetGid": "0",
+  "loadedSheetId": "PASTE_OPTIONAL_LOADED_CLIENTS_SHEET_ID_HERE",
+  "loadedNameColumn": "Name",
+  "loadedNumberColumn": "Number",
+  "mappingPath": "./mapping.json",
+  "financeUrl": "https://vwmelrose.hatfieldgroup.co.za/finance",
+  "notes": "Copy to clients/<slug>.json (do not keep the _example prefix). Set the client API token via CLIENT_API_TOKENS or clients/<slug>.secrets.json."
+}
