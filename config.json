@@ -1,0 +1,11 @@
+{
+  "sheetCsvUrl": "https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/export?format=csv&gid=0",
+  "sheetEditUrl": "https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?usp=sharing",
+  "mappingPath": "./mapping.json",
+  "financeUrl": "https://vwmelrose.hatfieldgroup.co.za/finance",
+  "sheetId": "12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI",
+  "loadedSheetId": "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM",
+  "loadedSheetEditUrl": "https://docs.google.com/spreadsheets/d/1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM/edit?usp=sharing",
+  "loadedNameColumn": "Name",
+  "loadedNumberColumn": "Number"
+}
