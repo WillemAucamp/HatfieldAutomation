@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: '24'
       
       - run: npm install
       - run: npm run install-browsers
@@ -29,3 +29,4 @@ jobs:
           DRY_RUN: ${{ github.event.inputs.dryRun }}
           SHEET_CSV_URL: ${{ secrets.SHEET_CSV_URL }}
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
+          HEADLESS: 'true'
