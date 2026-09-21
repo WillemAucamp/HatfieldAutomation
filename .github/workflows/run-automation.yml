@@ -1,0 +1,31 @@
+name: Run VW Finance Automation
+
+on:
+  workflow_dispatch:
+    inputs:
+      rowFilter:
+        description: 'Row numbers to process (comma-separated, leave blank for all)'
+        required: false
+      dryRun:
+        description: 'Dry run only?'
+        type: boolean
+        default: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - run: npm install
+      - run: npm run install-browsers
+      
+      - run: npm run dev
+        env:
+          ROW_FILTER: ${{ github.event.inputs.rowFilter }}
+          DRY_RUN: ${{ github.event.inputs.dryRun }}
+          SHEET_CSV_URL: ${{ secrets.SHEET_CSV_URL }}
+          SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
