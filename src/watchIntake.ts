@@ -43,8 +43,19 @@ export async function watchIntakeMain(): Promise<void> {
         process.env.HEADLESS = process.env.HEADLESS || "true";
         await runBatchMain();
       } else if (appendedSheetRows.length > 0) {
-        process.env.ROW_FILTER = appendedSheetRows.join(",");
-        console.log(`Loading automation sheet rows ${process.env.ROW_FILTER} via Melrose autofill…`);
+        const usableRows = appendedSheetRows.filter((row) => Number.isInteger(row) && row >= 2);
+        if (usableRows.length > 0) {
+          process.env.ROW_FILTER = usableRows.join(",");
+          console.log(`Loading automation sheet rows ${process.env.ROW_FILTER} via Melrose autofill…`);
+        } else {
+          delete process.env.ROW_FILTER;
+          console.warn(
+            `Ingest reported sheet rows ${appendedSheetRows.join(", ")} which are not usable. ` +
+              "Loading every blank-Status automation row instead."
+          );
+        }
+        // Public CSV / NR renumber can lag a few seconds behind Apps Script writes.
+        await sleep(4000);
         process.env.HEADLESS = process.env.HEADLESS || "true";
         await runBatchMain();
         delete process.env.ROW_FILTER;

@@ -351,6 +351,27 @@ async function loadSheetRows(
     return rowsFromCsv(readFileSync(options.localCsvPath, "utf-8"));
   }
 
+  let webhookError: string | undefined;
+  if (options.webhookUrl && options.spreadsheetId) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const rows = await readSheetRows({
+          webhookUrl: options.webhookUrl,
+          spreadsheetId: options.spreadsheetId,
+        });
+        if (rows.length > 0) {
+          console.log(`Fetched ${rows.length} sheet row(s) via Apps Script webhook`);
+          return rows.map((row) => ({ rowIndex: row.rowIndex, values: row.values }));
+        }
+        webhookError = "webhook readSheet returned 0 rows";
+      } catch (err) {
+        webhookError = err instanceof Error ? err.message : String(err);
+        console.warn(`Webhook readSheet failed (${webhookError})`);
+      }
+    }
+    console.warn("Webhook readSheet returned no rows; falling back to public CSV");
+  }
+
   let csvError: string | undefined;
   if (options.csvUrl) {
     try {
@@ -363,25 +384,9 @@ async function loadSheetRows(
     }
   }
 
-  if (options.webhookUrl && options.spreadsheetId) {
-    try {
-      const rows = await readSheetRows({
-        webhookUrl: options.webhookUrl,
-        spreadsheetId: options.spreadsheetId,
-      });
-      if (rows.length > 0) {
-        console.log(`Fetched ${rows.length} sheet row(s) via Apps Script webhook`);
-        return rows.map((row) => ({ rowIndex: row.rowIndex, values: row.values }));
-      }
-      console.warn("Webhook readSheet returned 0 rows");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`Webhook readSheet failed (${msg})`);
-    }
-  }
-
   throw new Error(
-    csvError ||
+    webhookError ||
+      csvError ||
       "Either SHEET_WEBHOOK_URL, SHEET_CSV_URL, or a local CSV path must be provided"
   );
 }

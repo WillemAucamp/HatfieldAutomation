@@ -293,6 +293,12 @@ export async function runBatchMain(): Promise<void> {
 
   if (applicants.length === 0) {
     console.log("No applicants found.");
+    if (config.rowFilter.length > 0) {
+      throw new Error(
+        `No applicants matched ROW_FILTER=${config.rowFilter.join(",")}. ` +
+          "The ingest step may have returned a fake row 0 after an Apps Script redirect."
+      );
+    }
     return;
   }
 
