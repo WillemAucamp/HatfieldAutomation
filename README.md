@@ -4,7 +4,7 @@ Manual pipeline (no Cursor live agent):
 
 1. New rows on the **intake** Form sheet
 2. **Gemini** formats them with the standing finance prompt
-3. One 35-column row is appended to the **automation sheet** (`NR` … `Status` `Timing`)
+3. One 38-column row is appended to the **automation sheet** (`NR` … `Status` `Timing`)
 4. Playwright fills [VW Melrose / Seriti](https://vwmelrose.hatfieldgroup.co.za/finance) for **every blank-Status** automation row (new plus leftovers)
 
 **How you start it:** GitHub → Actions → **Intake to Melrose** → **Run workflow**.  
@@ -28,6 +28,8 @@ npm run doctor          # what is blocked
 npm run enrich-sample   # Gemini only, no sheet writes
 npm run process         # one local run: ingest then Seriti
 ```
+
+Leads **Approved/Declined** WhatsApp: `npm run notify-leads` (see [`config/leads-whatsapp-automation.md`](./config/leads-whatsapp-automation.md)). Do not turn the Cursor 24/7 intake agent back on.
 
 Intake sheet: https://docs.google.com/spreadsheets/d/1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M  
 Automation sheet: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?gid=0#gid=0
@@ -274,6 +276,43 @@ The only automatic rewrites are known Google Sheets artefacts:
 Fix the named sheet cell (or ignore the row if Status says “Not a sheet cell”), then clear **Status** and re-run load-only. Error codes are written to **Status** as `error CODE: what to do`, and also stored in `run-log.json` / `run-log.csv`.
 
 Postal code: type the sheet value (and town from the address if needed), then select the first dropdown match. **Province** comes from the sheet. **Bank** and **Account type** come from the sheet (`Bank name`, `Account type`); nicknames such as FNB / Standardbank are matched to the live dropdown.
+
+## Leads WhatsApp (Approved / Declined)
+
+When a row on the Leads tab (`gid=1730847217`) is set to **Approved** or **Declined**, this repo can send a pre-approved WhatsApp via **your** API (no Meta/Twilio SDK).
+
+```bash
+npm run notify-leads -- --dry-run   # scan only
+npm run notify-leads                # send + mark "WhatsApp sent"
+npm run notify-leads -- --ensure-column
+```
+
+Flow:
+1. Sheet UI edit → Apps Script `onLeadsEdit` → Cursor webhook (optional wake-up)
+2. Or `npm run sheet-update -- --set Status=Approved` (sends immediately when `WHATSAPP_API_URL` is set)
+3. `notify-leads` reads pending rows, POSTs to your API, writes **WhatsApp sent** = Yes
+
+Config: see `.env.example` (`WHATSAPP_*`, `LEADS_*`) and `config/leads-whatsapp-automation.md`.
+
+Uses **Meta WhatsApp Cloud API** (same stack as `vwwhatsappapi.onrender.com`):
+
+`POST https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages`
+
+The Render `/webhook` URL is inbound-only; this repo sends outbound templates to Graph directly.
+
+Default request body:
+
+```json
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "27821234567",
+  "type": "template",
+  "template": { "name": "approve", "language": { "code": "en" } }
+}
+```
+
+Set `WHATSAPP_INCLUDE_NAME_PARAM=true` if the template body expects `{{1}}` = customer name.
 
 ## Development
 
