@@ -1,92 +1,124 @@
-# What only Willem can do (everything else is done in this PR)
+# What only Willem can do
 
-I cannot log into your Google account, n8n, Cursor Automations UI, Fly/Render, or GitHub Actions secrets from this agent. Do these in order.
+I cannot log into GitHub secrets, Google Apps Script, or Cursor Automations from this agent. Everything in the repo is ready. Do these in order. Skip anything already done.
 
-## 0. Fix the Cursor cloud secret shape (2 minutes)
-
-`SHEET_WEBHOOK_URL` in Cloud Agent secrets is currently stored like:
-
-`SHEET_WEBHOOK_URL=https://script.google.com/.../exec`
-
-It must be **only** the URL:
-
-`https://script.google.com/.../exec`
-
-(The code now strips the bad prefix, but fix the secret so other tools stop breaking.)
-
-## 1. Host the trigger server (required)
-
-Pick one:
-
-**A — Render (easiest with this repo)**  
-1. https://dashboard.render.com → New → Blueprint  
-2. Select repo `HatfieldAutomation`, branch `cursor/n8n-http-triggers-e278`, file `render.yaml`  
-3. Set secrets: `TRIGGER_SECRET`, `GEMINI_API_KEY`, `SHEET_WEBHOOK_URL` (URL only)  
-4. Copy the public URL, e.g. `https://hatfield-n8n-triggers.onrender.com`
-
-**B — Fly.io**  
-Use `fly.toml` + `Dockerfile`. Set the same three secrets. Note the HTTPS app URL.
-
-**C — Any VPS/Docker**  
-`docker build -t hatfield-triggers . && docker run -p 8788:8788 -e …`
-
-Generate a strong `TRIGGER_SECRET` (e.g. `openssl rand -hex 32`). Keep it for n8n.
-
-Smoke after deploy:
-
-```bash
-curl -s https://YOUR_HOST/health
-curl -s -X POST https://YOUR_HOST/ingest -H "Authorization: Bearer YOUR_SECRET"
-# expect 202 + jobId
-```
-
-## 2. n8n workflow (required)
-
-1. Open your n8n → Workflows → Import from File  
-2. Import `config/n8n-workflow-hatfield-intake.json` from this branch  
-3. Set n8n environment variables:
-   - `HATFIELD_TRIGGER_URL` = `https://YOUR_HOST` (no trailing slash)
-   - `HATFIELD_TRIGGER_SECRET` = same as server `TRIGGER_SECRET`
-4. Activate the workflow  
-5. Copy the **Production Webhook URL** for path `hatfield-intake`
-
-Optional: lengthen the Wait node if Gemini+sheet append often takes >5s (poll until `job.status` is `success`).
-
-## 3. Apps Script → n8n (required, Google login)
-
-1. Open either spreadsheet → Extensions → Apps Script  
-2. Paste latest `apps-script/Code.gs` from this branch if not already deployed  
-3. Deploy → Manage deployments → Edit → **New version** → Deploy  
-   (version string should be `hatfield-intake-1` when GET works; POST `readSheet` already works on the live webhook)  
-4. Project Settings → Script properties:
-   - `N8N_WEBHOOK_URL` = n8n Production Webhook URL from step 2  
-   - `N8N_WEBHOOK_API_KEY` = optional shared secret if you protect the n8n webhook  
-5. Run function `setupIntakeWatch` once  
-6. Remove `CURSOR_WEBHOOK_URL` / `CURSOR_WEBHOOK_API_KEY` after cutover
-
-## 4. Disable Cursor always-on agent (required — token burn)
-
-1. https://cursor.com/automations  
-2. Find **Hatfield intake to Melrose** (or similar)  
-3. Toggle **Off** / delete  
-
-## 5. Backlog of old Form rows (decision — do not auto-run)
-
-Doctor currently sees **dozens of unprocessed intake rows** (Enrichment Status empty).  
-**Do not** point n8n at production until you decide:
-
-- Mark old rows’ **Enrichment Status** as `skipped_historical` (or similar) so only new Form submits run, **or**  
-- Intentionally process them in a controlled batch (`npm run ingest` then review Sheet 2 before `/load`)
-
-I did **not** run ingest against those live rows from this agent.
-
-## 6. First live test
-
-1. Submit a **fake** Google Form response  
-2. Confirm n8n execution → automation sheet gets a 35-col row with blank Status  
-3. Confirm `/load` runs Seriti and writes Status  
-4. Only then allow real clients
+The Cursor always-on agent is **already Off**. Do not turn it back on. A click in GitHub (or the Sheet menu) now starts intake → Gemini → automation sheet → Seriti.
 
 ---
 
-Done already in-repo: HTTP `/ingest` + `/load`, auth, queue, Docker/Fly/Render configs, Apps Script n8n props, n8n import JSON, doctor hardened, webhook URL normalize, Cursor automation docs deprecated.
+## 1. Confirm Cursor automation stays Off (30 seconds)
+
+1. Open https://cursor.com/automations
+2. Find **Hatfield intake to Melrose**
+3. Leave it **Off**. Delete it if you prefer.
+
+That 5-minute live agent was the token burn. Nothing in this PR starts it again.
+
+---
+
+## 2. GitHub Actions secrets (required — 2 minutes)
+
+Open https://github.com/WillemAucamp/HatfieldAutomation/settings/secrets/actions
+
+Create or fix these two repository secrets:
+
+| Name | Value |
+| --- | --- |
+| `GEMINI_API_KEY` | your Gemini key (same one already in Cursor secrets) |
+| `SHEET_WEBHOOK_URL` | **only** the Apps Script URL, like `https://script.google.com/macros/s/…/exec` |
+
+If `SHEET_WEBHOOK_URL` currently looks like `SHEET_WEBHOOK_URL=https://script.google.com/…`, edit it and delete the `SHEET_WEBHOOK_URL=` prefix. The url must start with `https://`.
+
+---
+
+## 3. First run from GitHub (required)
+
+Until this PR is merged, pick branch **`cursor/manual-pipeline-trigger-df0d`**. After merge, use **`main`**.
+
+1. Open https://github.com/WillemAucamp/HatfieldAutomation/actions/workflows/intake-to-melrose.yml
+2. Click **Run workflow**
+3. First test (safe):
+   - Branch: this PR’s branch (or `main` after merge)
+   - mode: **`ingest-only`**
+   - maxIntakeRows: **`1`**
+   - dryRun: **unchecked**
+4. Click the green **Run workflow**
+5. Open the run → confirm Gemini appended **one** row on the [automation sheet](https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?gid=0#gid=0) with blank Status
+6. Then **Run workflow** again with mode **`load-only`** (or **`full`** next time)
+
+`full` = Gemini then Seriti for those new rows only.  
+`ingest-only` = Gemini → automation sheet, no browser.  
+`load-only` = Seriti for blank Status (or the rowFilter you type).
+
+A click never processes more than `maxIntakeRows` Form rows (default 5). Leftovers stay unprocessed for the next click.
+
+If Seriti fails in GitHub (blocked datacenter IP), ingest still worked. On your machine:
+
+```bash
+ROW_FILTER=N npm run dev
+```
+
+Replace `N` with the automation-sheet row number Gemini just wrote.
+
+---
+
+## 4. Optional — Hatfield menu on the Google Sheet
+
+Only if you want **Hatfield → Process now** inside the spreadsheet instead of opening GitHub.
+
+1. Open the spreadsheet that already has Apps Script (automation or intake sheet) → **Extensions → Apps Script**
+2. Replace the code with `apps-script/Code.gs` from this branch
+3. **Deploy → Manage deployments → pencil → Version: New version → Deploy**  
+   Keep **Execute as: Me**, **Who has access: Anyone**
+4. **Project Settings → Script properties** add:
+
+   | Property | Value |
+   | --- | --- |
+   | `GITHUB_TOKEN` | a GitHub personal access token with **Actions: Read and write** on this repo |
+   | `GITHUB_REPO` | `WillemAucamp/HatfieldAutomation` |
+   | `GITHUB_REF` | `main` after merge; until then `cursor/manual-pipeline-trigger-df0d` |
+   | `MAX_INTAKE_ROWS` | `5` (optional) |
+
+   Token: GitHub → Settings → Developer settings → Personal access tokens. Fine-grained: this repo, **Actions: Read and write**. Classic: `repo` + `workflow`.
+5. Reload the spreadsheet. A **Hatfield** menu appears. Click **Process now**.
+
+If the /exec URL changes when you redeploy, update GitHub secret `SHEET_WEBHOOK_URL` to the new URL.
+
+---
+
+## 5. Old Form rows sitting in intake (do this before a big `full` run)
+
+Unprocessed intake rows still have a blank **Enrichment Status**. One `full` click will only take `maxIntakeRows` of them (default 5), but you probably do not want yesterday’s leftover Forms in Seriti.
+
+Pick one:
+
+- **Skip them:** in the sheet, Hatfield menu → **Mark old Form rows skipped…** (writes `skipped_historical` on blank Enrichment Status), **or**
+- **Process in batches:** keep clicking Run with `maxIntakeRows=5` until the queue is empty.
+
+---
+
+## 6. What you do **not** need
+
+- n8n
+- Render / Fly / Docker host
+- Cursor automations
+- `setupIntakeWatch` in Apps Script
+- Any always-on agent
+
+Those files are still in the repo as leftovers. Ignore them.
+
+---
+
+## Local fallback (your laptop, no GitHub)
+
+```bash
+cp .env.example .env
+# paste GEMINI_API_KEY and SHEET_WEBHOOK_URL
+
+npm install
+npm run install-browsers
+
+MAX_INTAKE_ROWS=1 npm run ingest    # Gemini only
+npm run process                     # Gemini then Seriti (new rows only)
+npm run dev                         # Seriti only, blank Status
+```

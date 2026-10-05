@@ -11,6 +11,7 @@
     "dry-run": "tsx src/runBatch.ts --dry-run",
     "ingest": "tsx src/watchIntake.ts --once --skip-load",
     "watch": "tsx src/watchIntake.ts",
+    "process": "tsx src/watchIntake.ts --once",
     "trigger-server": "tsx src/trigger/server.ts",
     "doctor": "tsx src/doctor.ts",
     "enrich-sample": "tsx src/doctor.ts --sample",
@@ -18,7 +19,7 @@
     "renumber-rows": "tsx src/renumberRows.ts",
     "sync-loaded": "tsx src/syncLoadedSheet.ts",
     "sheet-update": "tsx src/updateSheet.ts",
-    "test": "tsx --test src/outcome.test.ts src/transforms.test.ts src/sheetCsv.test.ts src/fetchSheetData.test.ts src/intake/gemini.test.ts src/intake/headers.test.ts src/intake/row.test.ts src/intake/mapping.test.ts src/trigger/server.test.ts src/config.normalize.test.ts",
+    "test": "tsx --test src/outcome.test.ts src/transforms.test.ts src/sheetCsv.test.ts src/fetchSheetData.test.ts src/intake/gemini.test.ts src/intake/headers.test.ts src/intake/row.test.ts src/intake/mapping.test.ts src/intake/ingest.test.ts src/trigger/server.test.ts src/config.normalize.test.ts",
     "install-browsers": "playwright install chromium"
   },
   "engines": {

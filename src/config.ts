@@ -147,7 +147,16 @@ export function loadConfig(): AppConfig {
     intakeMappingPath: process.env.INTAKE_MAPPING_PATH || "./config/intake-mapping.yaml",
     pollSeconds: parseInt(process.env.POLL_SECONDS ?? "60", 10) || 60,
     autoLoad: cliFlag("skip-load") ? false : parseBool(process.env.AUTO_LOAD, true),
+    maxIntakeRows: parseMaxIntakeRows(process.env.MAX_INTAKE_ROWS, 0),
   };
+}
+
+/** 0 or empty = unlimited. Negative / NaN falls back to the default. */
+export function parseMaxIntakeRows(value: string | undefined, defaultValue = 0): number {
+  if (value === undefined || value.trim() === "") return defaultValue;
+  const n = parseInt(value.trim(), 10);
+  if (Number.isNaN(n) || n < 0) return defaultValue;
+  return n;
 }
 
 export function loadColumnMapping(mappingPath: string): ColumnMapping {

@@ -17,6 +17,10 @@
  *   readSheet     — read rows (used for Google Form intake)
  *   appendApplicant — append a formatted finance row on the automation sheet
  *
+ * Operator menu (after this file is in Apps Script, reload the spreadsheet):
+ *   Hatfield → Process now / Ingest only / Load open rows
+ *   Needs script properties GITHUB_TOKEN (and optional GITHUB_REPO / GITHUB_REF).
+ *
  * The account that deploys this must be able to edit the intake Form sheet
  * AND the automation / loaded-clients sheets.
  */
@@ -669,13 +673,8 @@ function onIntakeChange(e) {
 }
 
 /**
- * Run once from the Apps Script editor after you paste the n8n webhook URL
- * into Project Settings → Script properties:
- *   N8N_WEBHOOK_URL
- *   N8N_WEBHOOK_API_KEY   (optional; if your n8n webhook expects a header)
- *
- * Legacy Cursor props (CURSOR_WEBHOOK_URL / CURSOR_WEBHOOK_API_KEY) still work.
- * After cutover, remove the Cursor automation and use only N8N_*.
+ * Optional leftover. Do not run this unless you still use n8n auto-trigger.
+ * Production is a manual GitHub Actions click (or the Hatfield menu below).
  */
 function setupIntakeWatch() {
   var ss = SpreadsheetApp.openById(INTAKE_SHEET_ID);
@@ -687,4 +686,142 @@ function setupIntakeWatch() {
   }
   ScriptApp.newTrigger("onIntakeChange").forSpreadsheet(ss).onFormSubmit().create();
   return { ok: true, spreadsheet: ss.getName(), handler: "onIntakeChange" };
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu("Hatfield")
+    .addItem("Process now (intake → Seriti)", "menuProcessFull")
+    .addItem("Ingest only (Gemini → automation sheet)", "menuIngestOnly")
+    .addItem("Load open rows (Seriti only)", "menuLoadOnly")
+    .addSeparator()
+    .addItem("Mark old Form rows skipped…", "menuSkipHistorical")
+    .addToUi();
+}
+
+function menuProcessFull() {
+  dispatchGitHubWorkflow_("full");
+}
+
+function menuIngestOnly() {
+  dispatchGitHubWorkflow_("ingest-only");
+}
+
+function menuLoadOnly() {
+  dispatchGitHubWorkflow_("load-only");
+}
+
+function dispatchGitHubWorkflow_(mode) {
+  var props = PropertiesService.getScriptProperties();
+  var token = props.getProperty("GITHUB_TOKEN");
+  var repo = props.getProperty("GITHUB_REPO") || "WillemAucamp/HatfieldAutomation";
+  var workflow = props.getProperty("GITHUB_WORKFLOW") || "intake-to-melrose.yml";
+  var ref = props.getProperty("GITHUB_REF") || "main";
+  var maxRows = props.getProperty("MAX_INTAKE_ROWS") || "5";
+  var ui = SpreadsheetApp.getUi();
+
+  if (!token) {
+    ui.alert(
+      "GitHub token missing",
+      "Open Extensions → Apps Script → Project Settings → Script properties and add:\n\n" +
+        "GITHUB_TOKEN = a GitHub personal access token with Actions: write\n" +
+        "GITHUB_REPO = WillemAucamp/HatfieldAutomation  (optional)\n" +
+        "GITHUB_REF = main  (or cursor/manual-pipeline-trigger-df0d until that PR is merged)\n\n" +
+        "Until then, run the pipeline from GitHub → Actions → Intake to Melrose → Run workflow.",
+      ui.ButtonSet.OK
+    );
+    return;
+  }
+
+  var url =
+    "https://api.github.com/repos/" + repo + "/actions/workflows/" + workflow + "/dispatches";
+  var body = {
+    ref: ref,
+    inputs: {
+      mode: String(mode || "full"),
+      maxIntakeRows: String(maxRows),
+      dryRun: "false",
+    },
+  };
+
+  var res = UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      Authorization: "Bearer " + token,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "hatfield-apps-script",
+    },
+    payload: JSON.stringify(body),
+    muteHttpExceptions: true,
+  });
+  var code = res.getResponseCode();
+  if (code === 204 || code === 200) {
+    ui.alert(
+      "Started",
+      "GitHub Actions is running mode=" +
+        mode +
+        " on " +
+        repo +
+        "@" +
+        ref +
+        ".\n\nWatch it at:\nhttps://github.com/" +
+        repo +
+        "/actions",
+      ui.ButtonSet.OK
+    );
+    return;
+  }
+  ui.alert(
+    "GitHub did not start the run",
+    "HTTP " + code + "\n" + res.getContentText().slice(0, 500),
+    ui.ButtonSet.OK
+  );
+}
+
+/**
+ * One-time backlog cleanup. Sets blank Enrichment Status cells to skipped_historical
+ * so a Process now click does not send old Form rows through Gemini + Seriti.
+ */
+function menuSkipHistorical() {
+  var ui = SpreadsheetApp.getUi();
+  var confirm = ui.alert(
+    "Skip historical intake?",
+    "This writes skipped_historical on every Form row whose Enrichment Status is blank. New submits stay processable. Continue?",
+    ui.ButtonSet.YES_NO
+  );
+  if (confirm !== ui.Button.YES) return;
+
+  var ss = SpreadsheetApp.openById(INTAKE_SHEET_ID);
+  var sheet = ss.getSheets()[0];
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    ui.alert("No intake data rows.");
+    return;
+  }
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var statusCol = -1;
+  for (var i = 0; i < headers.length; i++) {
+    if (String(headers[i]).trim() === "Enrichment Status") {
+      statusCol = i + 1;
+      break;
+    }
+  }
+  if (statusCol < 1) {
+    ui.alert("No Enrichment Status column on the intake sheet.");
+    return;
+  }
+  var range = sheet.getRange(2, statusCol, lastRow - 1, 1);
+  var values = range.getValues();
+  var written = 0;
+  for (var r = 0; r < values.length; r++) {
+    if (String(values[r][0]).trim() === "") {
+      values[r][0] = "skipped_historical";
+      written++;
+    }
+  }
+  if (written > 0) range.setValues(values);
+  ui.alert("Marked " + written + " Form row(s) skipped_historical.");
 }

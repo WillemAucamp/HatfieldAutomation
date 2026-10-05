@@ -1,9 +1,16 @@
+# n8n orchestration — leftover, not required
+
+**You do not need n8n, Render, or Fly.** The operator path is a GitHub Actions click: [`config/YOU_DO.md`](./YOU_DO.md).
+
+Keep this file only if you still want Form-submit → n8n → HTTP.
+
+---
+
 # n8n orchestration (Option 1) — replace Cursor always-on agent
 
-**Your remaining steps only:** [`config/YOU_DO.md`](./YOU_DO.md)  
-**Importable workflow:** [`config/n8n-workflow-hatfield-intake.json`](./n8n-workflow-hatfield-intake.json)
+n8n only **starts** those jobs. It does not reimplement Gemini or Seriti.
 
-This repo already does the real work:
+Ignore the rest of this file unless you still want that architecture.
 
 | Step | Existing command / code | HTTP trigger |
 | --- | --- | --- |

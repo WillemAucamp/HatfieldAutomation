@@ -105,6 +105,8 @@ export interface AppConfig {
   intakeMappingPath: string;
   pollSeconds: number;
   autoLoad: boolean;
+  /** 0 = no cap (process every unprocessed Form row). */
+  maxIntakeRows: number;
 }
 
 export type FieldStrategy =

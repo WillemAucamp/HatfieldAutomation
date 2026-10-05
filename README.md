@@ -1,57 +1,40 @@
 # VW Melrose Finance Application Auto-Filler
 
-When a client submits the Google Form, this repo can now:
+Manual pipeline (no Cursor live agent):
 
-1. Read the new **intake** row
-2. Send it to **Gemini** with the standing finance prompt (fresh call every time)
-3. Append one row to the **automation sheet** in the live 35-column layout (`NR` … `Status` `Timing`)
-4. Run the existing Playwright loader against those new blank-Status rows on [VW Melrose finance](https://vwmelrose.hatfieldgroup.co.za/finance)
+1. New rows on the **intake** Form sheet
+2. **Gemini** formats them with the standing finance prompt
+3. One 35-column row is appended to the **automation sheet** (`NR` … `Status` `Timing`)
+4. Playwright fills [VW Melrose / Seriti](https://vwmelrose.hatfieldgroup.co.za/finance) for those new blank-Status rows
 
-## What is already done
+**How you start it:** GitHub → Actions → **Intake to Melrose** → **Run workflow**.  
+Optional: a **Hatfield** menu on the Google Sheet fires that same workflow.
 
-- Gemini key works from this repo (`gemini-3.6-flash`).
-- A fictional Form row has been run through the standing prompt: 35-column JSON, employer lookup, dates, FNB → Cheque/Current, Status/Timing blank. Nothing was written to the live sheets.
-- The live Apps Script webhook still answers, but it is the **old** deploy (`Unknown action: readSheet`). Intake cannot be read until you ship the new script.
+There is no 24/7 agent. Do not re-enable the Cursor automation **Hatfield intake to Melrose**.
+
+## Operator steps (you)
+
+Full click-by-click list: **[`config/YOU_DO.md`](./config/YOU_DO.md)**
+
+Short version:
+
+1. Leave Cursor automations **Off**
+2. Set GitHub secrets `GEMINI_API_KEY` and `SHEET_WEBHOOK_URL` (URL only)
+3. Click **Run workflow** (`ingest-only` + `maxIntakeRows=1` the first time)
+4. Optional: paste `apps-script/Code.gs` and add `GITHUB_TOKEN` for the Sheet menu
 
 ```bash
 npm run doctor          # what is blocked
 npm run enrich-sample   # Gemini only, no sheet writes
+npm run process         # one local run: ingest then Seriti
 ```
-
-## What only you can do
-
-### 1. Redeploy Apps Script (required)
-
-The Google account that owns the current webhook must do this. I cannot log into that account.
-
-1. Open the automation sheet → **Extensions → Apps Script**.
-2. Replace all code with `apps-script/Code.gs` from this branch (includes `readSheet`, `appendApplicant`, `doGet` version `hatfield-intake-1`).
-3. **Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy.**  
-   Keep **Execute as: Me** and **Who has access: Anyone**.
-4. Confirm that same Google account can **edit** the Form intake sheet:  
-   https://docs.google.com/spreadsheets/d/1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M
-5. Tell me (or re-run `npm run doctor`). It should report `Apps Script deploy: hatfield-intake-1`.
-
-If the /exec URL changes, put the new URL in `.env` as `SHEET_WEBHOOK_URL`.
-
-### 2. n8n triggers (24/7 without Cursor agent)
-
-**Preferred production path.** Your remaining clicks: [`config/YOU_DO.md`](./config/YOU_DO.md). Details: [`config/n8n-setup.md`](./config/n8n-setup.md).
-
-1. Host this repo with `npm run trigger-server` (or the included Docker/Fly config).
-2. Set `TRIGGER_SECRET`, `GEMINI_API_KEY`, `SHEET_WEBHOOK_URL` on that host (`AUTO_LOAD=false`).
-3. In n8n: Form/webhook → `POST /ingest` → then `POST /load` (Seriti path unchanged).
-4. Apps Script script properties: `N8N_WEBHOOK_URL` (+ optional `N8N_WEBHOOK_API_KEY`), then run `setupIntakeWatch` once.
-5. **Disable** any Cursor always-on automation — it only burns tokens. See archived `config/cursor-automation.md`.
-
-Manual Melrose still works exactly as before: `npm run dev` / `ROW_FILTER=N npm run dev`.
-
-Do **not** use a real client as the first test. After Apps Script is `hatfield-intake-1`, run `npm run ingest` (or hit `/ingest`) and check the automation sheet before Melrose submits.
 
 Intake sheet: https://docs.google.com/spreadsheets/d/1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M  
 Automation sheet: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?gid=0#gid=0
 
-Processed Form rows are marked in **Enrichment Status**. The loader still skips any automation row whose **Status** is already filled.
+Processed Form rows are marked in **Enrichment Status**. The loader still skips any automation row whose **Status** is already filled. Each click processes at most `MAX_INTAKE_ROWS` (default 5 in GitHub Actions).
+
+n8n / Render / `trigger-server` are leftover and **not required**. See [`config/n8n-setup.md`](./config/n8n-setup.md) only if you still want that path.
 
 ## Stack
 
@@ -102,6 +85,12 @@ Ensure the sheet column headers match `mapping.json` (or update that file to mat
 ### Run
 
 ```bash
+# One local pipeline click: new Form rows → Gemini → Seriti
+MAX_INTAKE_ROWS=5 npm run process
+
+# Gemini only (writes automation sheet, does not open Seriti)
+MAX_INTAKE_ROWS=1 npm run ingest
+
 # Dry-run: fills sections 1–5, screenshots each step, does not click Finish
 npm run dry-run
 

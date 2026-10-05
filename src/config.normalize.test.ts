@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { normalizeEnvValue } from "./config.js";
+import { normalizeEnvValue, parseMaxIntakeRows } from "./config.js";
 
 describe("normalizeEnvValue", () => {
   it("strips NAME= prefix from pasted secrets", () => {
@@ -23,5 +23,22 @@ describe("normalizeEnvValue", () => {
 
   it("strips wrapping quotes", () => {
     assert.equal(normalizeEnvValue('"hello"', "GEMINI_API_KEY"), "hello");
+  });
+});
+
+describe("parseMaxIntakeRows", () => {
+  it("treats empty as unlimited (0) by default", () => {
+    assert.equal(parseMaxIntakeRows(undefined), 0);
+    assert.equal(parseMaxIntakeRows(""), 0);
+    assert.equal(parseMaxIntakeRows("  "), 0);
+  });
+
+  it("parses a positive cap", () => {
+    assert.equal(parseMaxIntakeRows("5"), 5);
+  });
+
+  it("rejects negative / NaN and falls back", () => {
+    assert.equal(parseMaxIntakeRows("-1", 3), 3);
+    assert.equal(parseMaxIntakeRows("nope", 3), 3);
   });
 });

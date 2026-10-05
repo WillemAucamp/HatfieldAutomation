@@ -10,36 +10,52 @@ function sleep(ms: number): Promise<void> {
 export async function watchIntakeMain(): Promise<void> {
   const once = process.argv.includes("--once");
   const skipLoad = process.argv.includes("--skip-load");
+  const skipIngest = process.argv.includes("--skip-ingest");
 
   do {
     const config = loadConfig();
-    if (!config.geminiApiKey && !config.dryRun) {
+    if (!skipIngest && !config.geminiApiKey && !config.dryRun) {
       throw new Error("GEMINI_API_KEY is not set");
     }
 
-    console.log(
-      `\n[${new Date().toISOString()}] Checking intake sheet ${config.intakeSpreadsheetId}…`
-    );
-    const result = await ingestNewRows(config);
-    console.log(
-      `Intake: scanned=${result.scanned} appended=${result.appendedSheetRows.length} skipped=${result.skipped} errors=${result.errors.length}`
-    );
+    let appendedSheetRows: number[] = [];
+
+    if (skipIngest) {
+      console.log(
+        `\n[${new Date().toISOString()}] Skipping intake ingest. Loading automation sheet (blank Status${
+          config.rowFilter.length ? ` or ROW_FILTER=${config.rowFilter.join(",")}` : ""
+        })…`
+      );
+    } else {
+      console.log(
+        `\n[${new Date().toISOString()}] Checking intake sheet ${config.intakeSpreadsheetId}…`
+      );
+      const result = await ingestNewRows(config);
+      appendedSheetRows = result.appendedSheetRows;
+      console.log(
+        `Intake: scanned=${result.scanned} appended=${result.appendedSheetRows.length} skipped=${result.skipped} remaining=${result.remaining} errors=${result.errors.length}`
+      );
+    }
 
     const shouldLoad = !skipLoad && config.autoLoad && !config.dryRun;
     if (shouldLoad) {
-      if (result.appendedSheetRows.length > 0) {
-        process.env.ROW_FILTER = result.appendedSheetRows.join(",");
+      if (skipIngest) {
+        process.env.HEADLESS = process.env.HEADLESS || "true";
+        await runBatchMain();
+      } else if (appendedSheetRows.length > 0) {
+        process.env.ROW_FILTER = appendedSheetRows.join(",");
         console.log(`Loading automation sheet rows ${process.env.ROW_FILTER} via Melrose autofill…`);
-      } else {
+        process.env.HEADLESS = process.env.HEADLESS || "true";
+        await runBatchMain();
         delete process.env.ROW_FILTER;
-        console.log("No new intake rows. Checking automation sheet for blank-Status retries…");
+      } else {
+        console.log(
+          "No new intake rows. Skipping Melrose. Re-run with --skip-ingest (or mode=load-only) to retry blank-Status rows."
+        );
       }
-      process.env.HEADLESS = process.env.HEADLESS || "true";
-      await runBatchMain();
-      delete process.env.ROW_FILTER;
-    } else if (result.appendedSheetRows.length > 0 && (skipLoad || !config.autoLoad)) {
+    } else if (appendedSheetRows.length > 0 && (skipLoad || !config.autoLoad)) {
       console.log(
-        `Appended rows ${result.appendedSheetRows.join(", ")} with blank Status. Skipping Melrose load.`
+        `Appended rows ${appendedSheetRows.join(", ")} with blank Status. Skipping Melrose load.`
       );
     }
 

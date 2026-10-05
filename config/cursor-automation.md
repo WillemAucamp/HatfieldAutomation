@@ -2,10 +2,9 @@
 
 **Do not use this for production.** It burns Cursor tokens on a 5-minute schedule.
 
-Production path is **n8n → HTTP → this repo**:
+Production path is a **manual GitHub Actions click** (optional Sheet menu). See [`config/YOU_DO.md`](./YOU_DO.md).
 
-- Setup: [`config/n8n-setup.md`](./n8n-setup.md)
-- Server: `npm run trigger-server` (`POST /ingest`, `POST /load`)
+n8n + `trigger-server` is an unused leftover ([`config/n8n-setup.md`](./n8n-setup.md)).
 
 Keep this file only as a historical paste of the old automation settings.
 

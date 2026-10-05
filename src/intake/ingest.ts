@@ -10,6 +10,15 @@ export interface IngestResult {
   appendedSheetRows: number[];
   skipped: number;
   errors: string[];
+  remaining: number;
+}
+
+/** Keep leftover Form rows unprocessed so a later click can pick them up. */
+export function capIntakeRows<T>(rows: T[], max: number): { rows: T[]; remaining: number } {
+  if (!max || max <= 0 || rows.length <= max) {
+    return { rows, remaining: 0 };
+  }
+  return { rows: rows.slice(0, max), remaining: rows.length - max };
 }
 
 export async function ingestNewRows(
@@ -17,19 +26,33 @@ export async function ingestNewRows(
   extras: { dryRun?: boolean; enrich?: typeof enrichWithGemini } = {}
 ): Promise<IngestResult> {
   const dryRun = extras.dryRun ?? config.dryRun;
-  const result: IngestResult = { scanned: 0, appendedSheetRows: [], skipped: 0, errors: [] };
+  const result: IngestResult = {
+    scanned: 0,
+    appendedSheetRows: [],
+    skipped: 0,
+    errors: [],
+    remaining: 0,
+  };
 
   if (!config.sheetWebhookUrl) {
     throw new Error("SHEET_WEBHOOK_URL is required to read the intake sheet");
   }
 
   const mapping = loadIntakeMapping(config.intakeMappingPath);
-  const intakeRows = await readUnprocessedIntake({
+  const allIntakeRows = await readUnprocessedIntake({
     webhookUrl: config.sheetWebhookUrl,
     spreadsheetId: config.intakeSpreadsheetId,
     statusColumn: config.intakeStatusColumn,
   });
-  result.scanned = intakeRows.length;
+  result.scanned = allIntakeRows.length;
+  const capped = capIntakeRows(allIntakeRows, config.maxIntakeRows);
+  result.remaining = capped.remaining;
+  const intakeRows = capped.rows;
+  if (result.remaining > 0) {
+    console.log(
+      `Capping ingest at ${intakeRows.length} of ${result.scanned} unprocessed Form rows (${result.remaining} left for a later run)`
+    );
+  }
 
   const enrich = extras.enrich ?? enrichWithGemini;
 
