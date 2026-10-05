@@ -75,6 +75,30 @@ function cliFlag(name: string): boolean {
   return process.argv.includes(`--${name}`);
 }
 
+/** Build Apps Script webhook URL. Prefer deployment id over full URL env secrets. */
+function resolveWebhookUrl(
+  deploymentId: string | undefined,
+  fullUrl: string | undefined,
+  fileUrl: string | undefined
+): string {
+  const id = (deploymentId ?? "").trim();
+  if (id && !id.includes("REDACTED")) {
+    return `https://script.google.com/macros/s/${id}/exec`;
+  }
+  for (const candidate of [fullUrl, fileUrl]) {
+    const url = (candidate ?? "").trim();
+    if (
+      url &&
+      !url.includes("[REDACTED]") &&
+      !url.includes("REDACTED") &&
+      /^https?:\/\//i.test(url)
+    ) {
+      return url;
+    }
+  }
+  return "";
+}
+
 export function loadConfig(): AppConfig {
   const fileConfig = loadFileConfig();
   const dryRun = cliFlag("dry-run") || parseBool(process.env.DRY_RUN, false);
@@ -111,10 +135,13 @@ export function loadConfig(): AppConfig {
         process.env.SHEET_CSV_URL || fileConfig.sheetCsvUrl || DEFAULT_SHEET_CSV_URL
       ) ||
       DEFAULT_SHEET_ID,
-    sheetWebhookUrl:
-      normalizeEnvValue(process.env.SHEET_WEBHOOK_URL, "SHEET_WEBHOOK_URL") ||
-      fileConfig.sheetWebhookUrl ||
-      "",
+    // Prefer SHEET_WEBHOOK_ID when the full URL secret is redacted.
+    // Also strip NAME= prefixes / extract an embedded /exec URL.
+    sheetWebhookUrl: resolveWebhookUrl(
+      normalizeEnvValue(process.env.SHEET_WEBHOOK_ID, "SHEET_WEBHOOK_ID"),
+      normalizeEnvValue(process.env.SHEET_WEBHOOK_URL, "SHEET_WEBHOOK_URL"),
+      fileConfig.sheetWebhookUrl
+    ),
     googleServiceAccountFile:
       normalizeEnvValue(
         process.env.GOOGLE_SERVICE_ACCOUNT_FILE,
@@ -126,12 +153,12 @@ export function loadConfig(): AppConfig {
       normalizeEnvValue(process.env.LOADED_SHEET_ID, "LOADED_SHEET_ID") ||
       fileConfig.loadedSheetId ||
       "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM",
-    loadedSheetWebhookUrl:
+    loadedSheetWebhookUrl: resolveWebhookUrl(
+      normalizeEnvValue(process.env.SHEET_WEBHOOK_ID, "SHEET_WEBHOOK_ID"),
       normalizeEnvValue(process.env.LOADED_SHEET_WEBHOOK_URL, "LOADED_SHEET_WEBHOOK_URL") ||
-      fileConfig.loadedSheetWebhookUrl ||
-      normalizeEnvValue(process.env.SHEET_WEBHOOK_URL, "SHEET_WEBHOOK_URL") ||
-      fileConfig.sheetWebhookUrl ||
-      "",
+        normalizeEnvValue(process.env.SHEET_WEBHOOK_URL, "SHEET_WEBHOOK_URL"),
+      fileConfig.loadedSheetWebhookUrl || fileConfig.sheetWebhookUrl
+    ),
     loadedNameColumn: process.env.LOADED_NAME_COLUMN || fileConfig.loadedNameColumn || "Name",
     loadedNumberColumn:
       process.env.LOADED_NUMBER_COLUMN || fileConfig.loadedNumberColumn || "Number",
