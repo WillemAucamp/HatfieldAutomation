@@ -103,10 +103,13 @@ export async function ingestNewRows(
         });
       }
 
+      console.log(`Enriching ${label} with Gemini…`);
+      const startedMs = Date.now();
       const fields = await enrich(mapping, flattenRow(intake.values), {
         apiKey: config.geminiApiKey,
         model: config.geminiModel,
       });
+      console.log(`Gemini finished ${label} in ${((Date.now() - startedMs) / 1000).toFixed(1)}s`);
       const values = buildOutputValues(mapping, fields);
 
       if (dryRun) {

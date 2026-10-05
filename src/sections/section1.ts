@@ -104,7 +104,7 @@ export async function runSection1(ctx: FillContext): Promise<void> {
   const consentGroupCount = 2;
   await fillRadioGroupsByAnswer(form, config, consentGroupCount, "Yes", 7);
 
-  await fillSelectByVisibleText(form, config, "#branchSalesPerson", "Willem Leendert Kuperus");
+  await fillSelectByVisibleText(form, config, "#branchSalesPerson", "Willem Leendert Kuperus", "Salesperson");
 
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 

@@ -731,7 +731,7 @@ function dispatchGitHubWorkflow_(mode) {
       "Open Extensions → Apps Script → Project Settings → Script properties and add:\n\n" +
         "GITHUB_TOKEN = a GitHub personal access token with Actions: write\n" +
         "GITHUB_REPO = WillemAucamp/HatfieldAutomation  (optional)\n" +
-        "GITHUB_REF = main  (or cursor/manual-pipeline-trigger-df0d until that PR is merged)\n\n" +
+        "GITHUB_REF = main  (or cursor/full-chain-seriti-df0d until that PR is merged)\n\n" +
         "Until then, run the pipeline from GitHub → Actions → Intake to Melrose → Run workflow.",
       ui.ButtonSet.OK
     );

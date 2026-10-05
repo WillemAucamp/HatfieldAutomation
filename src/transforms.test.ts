@@ -23,6 +23,11 @@ describe("expandSelectNeedles", () => {
     const terms = expandSelectNeedles("Savings/Transactional").map((t) => t.toLowerCase());
     assert.ok(terms.includes("savings"));
   });
+
+  it("maps Matric certificate to Grade 12 search terms", () => {
+    const terms = expandSelectNeedles("Matric certificate").map((t) => t.toLowerCase());
+    assert.ok(terms.includes("grade 12"));
+  });
 });
 
 describe("valuesMatch bank aliases", () => {

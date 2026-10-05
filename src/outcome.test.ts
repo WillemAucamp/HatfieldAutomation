@@ -4,6 +4,7 @@ import {
   classifyRuntimeError,
   durationSeconds,
   formatErrorCell,
+  formatRuntimeErrorCell,
   isStatusPopulated,
   successfulReferenceFromCell,
 } from "./outcome.js";
@@ -50,6 +51,35 @@ describe("classifyRuntimeError", () => {
       "FINISH_NO_REFERENCE"
     );
     assert.equal(classifyRuntimeError("locator.waitFor: Timeout 20000ms exceeded", 4), "SECTION4_TIMEOUT");
+    assert.equal(
+      classifyRuntimeError('No option matching "Bank Zero" in Bank. Available: CAPITEC | FNB', 5),
+      "DROPDOWN_OPTION_MISSING"
+    );
+    assert.equal(
+      classifyRuntimeError("Work & Salary Next did not open the next page. Waiting for [id=\"ddlBank\"]", 4),
+      "WORK_NEXT_FAILED"
+    );
+  });
+});
+
+describe("formatRuntimeErrorCell", () => {
+  it("tells the operator which sheet column to change for a bank dropdown miss", () => {
+    const cell = formatRuntimeErrorCell(
+      'No option matching "Bank Zero" in Bank. Available: CAPITEC BANK LIMITED | FIRSTRAND BANK LIMITED',
+      5
+    );
+    assert.match(cell, /^error DROPDOWN_OPTION_MISSING:/);
+    assert.match(cell, /Bank "Bank Zero"/);
+    assert.match(cell, /Change that sheet column/);
+  });
+
+  it("explains WORK_NEXT_FAILED is not a telephone/bank cell problem", () => {
+    const cell = formatRuntimeErrorCell(
+      'waiting for locator(\'[id="txtTelephonePayment"], [id="ddlBank"]\')',
+      4
+    );
+    assert.match(cell, /^error WORK_NEXT_FAILED:/);
+    assert.match(cell, /Not telephone\/bank/);
   });
 });
 

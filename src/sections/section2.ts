@@ -1,6 +1,6 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
-import { clickNext, screenshotSection, waitForSelectorVisible } from "../formUtils.js";
+import { clickNextAndWait, screenshotSection, waitForSelectorVisible } from "../formUtils.js";
 
 const SECTION = "section2";
 
@@ -17,7 +17,7 @@ export async function runSection2(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["carChoiceInd"],
     ids: ["ddlcarChoiceInd"],
-  }, "No");
+  }, "No", { fallbackToFirst: true });
 
   await fillField(ctx, {
     name: "Max price range",
@@ -37,11 +37,16 @@ export async function runSection2(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["PaymentDay"],
     ids: ["ddlPaymentDay"],
-  }, "25");
+  }, "25", { fallbackToFirst: true });
 
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 
   if (!config.dryRun) {
-    await clickNext(form, config);
+    await clickNextAndWait(
+      form,
+      config,
+      '[id="txtClientFirstName"]',
+      "Deal Information"
+    );
   }
 }

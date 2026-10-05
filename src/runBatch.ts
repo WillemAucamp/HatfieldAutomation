@@ -10,6 +10,7 @@ import {
   classifyRuntimeError,
   durationSeconds,
   formatErrorCell,
+  formatRuntimeErrorCell,
   successfulReferenceFromCell,
 } from "./outcome.js";
 import {
@@ -197,7 +198,7 @@ async function processApplicant(
       finishedAt: new Date().toISOString(),
       error,
       errorCodes,
-      sheetStatus: formatErrorCell(errorCodes),
+      sheetStatus: formatRuntimeErrorCell(error, sectionReached),
       durationSeconds: elapsed(),
     };
     await persistOutcome(config, mapping, applicant, result, warnings);

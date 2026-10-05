@@ -5,7 +5,7 @@ Manual pipeline (no Cursor live agent):
 1. New rows on the **intake** Form sheet
 2. **Gemini** formats them with the standing finance prompt
 3. One 35-column row is appended to the **automation sheet** (`NR` … `Status` `Timing`)
-4. Playwright fills [VW Melrose / Seriti](https://vwmelrose.hatfieldgroup.co.za/finance) for those new blank-Status rows
+4. Playwright fills [VW Melrose / Seriti](https://vwmelrose.hatfieldgroup.co.za/finance) for **every blank-Status** automation row (new plus leftovers)
 
 **How you start it:** GitHub → Actions → **Intake to Melrose** → **Run workflow**.  
 Optional: a **Hatfield** menu on the Google Sheet fires that same workflow.
@@ -20,7 +20,7 @@ Short version:
 
 1. Leave Cursor automations **Off**
 2. Set GitHub secrets `GEMINI_API_KEY` and `SHEET_WEBHOOK_URL` (URL only)
-3. Click **Run workflow** (`ingest-only` + `maxIntakeRows=1` the first time)
+3. Click **Run workflow** with mode **`full`** (two jobs: Gemini ingest, then Seriti). Keep `maxIntakeRows` at 5.
 4. Optional: paste `apps-script/Code.gs` and add `GITHUB_TOKEN` for the Sheet menu
 
 ```bash
@@ -85,7 +85,7 @@ Ensure the sheet column headers match `mapping.json` (or update that file to mat
 ### Run
 
 ```bash
-# One local pipeline click: new Form rows → Gemini → Seriti
+# One local pipeline click: new Form rows → Gemini → Seriti (blank Status too)
 MAX_INTAKE_ROWS=5 npm run process
 
 # Gemini only (writes automation sheet, does not open Seriti)
@@ -263,15 +263,15 @@ The only automatic rewrites are known Google Sheets artefacts:
 | `ACCOUNT_HOLDER_EMPTY` | Account holder is empty |
 | `BANK_EMPTY` | Bank name cell is empty |
 | `ACCOUNT_TYPE_EMPTY` | Account type cell is empty |
-| `PERSONAL_NEXT_FAILED` | Next did not leave Personal Information |
-| `WORK_NEXT_FAILED` | Next did not leave Work & Salary |
+| `PERSONAL_NEXT_FAILED` | Personal Info Next did not open Work — residency date, postal, ID, or province, not the next sheet columns |
+| `WORK_NEXT_FAILED` | Work & Salary Next did not open expenses — **not** telephone/bank. Employment date, salary, or Industry/Occupation |
 | `FINANCIAL_NEXT_FAILED` | Next did not reach Upload Documents |
-| `DROPDOWN_OPTION_MISSING` | Bank/account type (or other select) had no matching option — fails immediately |
+| `DROPDOWN_OPTION_MISSING` | A Seriti menu had no match. Status now names the field and value. **Bank / Account type / Province** = change that sheet column. Other menus are form labels, not sheet cells |
 | `FINISH_NO_REFERENCE` | Finish clicked but no `ZAHTVW` popup |
 | `FORM_IFRAME_TIMEOUT` | Finance iframe did not load |
 | `SUBMIT_FAILED` | Unclassified runtime failure |
 
-Fix the sheet cell, then clear **Status** and re-run (`npm run retry -- <row>`). Error codes are written to **Status** as `error ID_NOT_13_DIGITS`, and also stored in `run-log.json` / `run-log.csv`.
+Fix the named sheet cell (or ignore the row if Status says “Not a sheet cell”), then clear **Status** and re-run load-only. Error codes are written to **Status** as `error CODE: what to do`, and also stored in `run-log.json` / `run-log.csv`.
 
 Postal code: type the sheet value (and town from the address if needed), then select the first dropdown match. **Province** comes from the sheet. **Bank** and **Account type** come from the sheet (`Bank name`, `Account type`); nicknames such as FNB / Standardbank are matched to the live dropdown.
 

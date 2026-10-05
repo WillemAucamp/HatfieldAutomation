@@ -63,12 +63,13 @@ function parseBool(value: string | undefined, defaultValue: boolean): boolean {
   return ["1", "true", "yes"].includes(value.toLowerCase());
 }
 
-function parseRowFilter(value: string | undefined): number[] {
+/** Sheet data rows start at 2. Ignore 0 (Apps Script 302) and 1 (header). */
+export function parseRowFilter(value: string | undefined): number[] {
   if (!value?.trim()) return [];
   return value
     .split(",")
     .map((s) => parseInt(s.trim(), 10))
-    .filter((n) => !Number.isNaN(n));
+    .filter((n) => Number.isInteger(n) && n >= 2);
 }
 
 function cliFlag(name: string): boolean {

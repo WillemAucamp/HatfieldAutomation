@@ -412,6 +412,14 @@ export function expandSelectNeedles(raw: string): string[] {
     { keys: ["savings"], terms: ["SAVINGS"] },
     { keys: ["cheque"], terms: ["CHEQUE", "CURRENT"] },
     { keys: ["current"], terms: ["CURRENT", "CHEQUE"] },
+    { keys: ["matric", "grade 12", "grade12"], terms: ["MATRIC", "GRADE 12"] },
+    { keys: ["rsa id", "rsa"], terms: ["RSA"] },
+    { keys: ["labourer", "laborer"], terms: ["LABOURER", "LABORER"] },
+    { keys: ["skilled worker"], terms: ["SKILLED"] },
+    { keys: ["business services"], terms: ["BUSINESS SERVICES"] },
+    { keys: ["gauteng", "gp"], terms: ["GAUTENG"] },
+    { keys: ["western cape", "wc"], terms: ["WESTERN CAPE"] },
+    { keys: ["kwazulu natal", "kwazulu-natal", "kzn"], terms: ["KWAZULU"] },
   ];
 
   for (const { keys, terms } of aliasTable) {

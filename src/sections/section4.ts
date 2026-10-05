@@ -1,6 +1,6 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
-import { clickNext, screenshotSection, syncAddressFromPostal, waitForSelectorVisible } from "../formUtils.js";
+import { clickNextAndWait, screenshotSection, syncAddressFromPostal, waitForSelectorVisible, waitForSelectOptions } from "../formUtils.js";
 
 const SECTION = "section4";
 
@@ -19,8 +19,9 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["industry"],
     ids: ["ddlIndustry"],
-  }, "Business services");
+  }, "Business services", { fallbackToFirst: true });
 
+  await waitForSelectOptions(form.locator('[id="ddlOccupation"]'));
   await fillField(ctx, {
     name: "Occupation",
     section: SECTION,
@@ -29,8 +30,9 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["occupation"],
     ids: ["ddlOccupation"],
-  }, "Labourer (Skilled)");
+  }, "Labourer (Skilled)", { fallbackToFirst: true });
 
+  await waitForSelectOptions(form.locator('[id="ddlLevel"]'));
   await fillField(ctx, {
     name: "Level",
     section: SECTION,
@@ -39,7 +41,7 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["level"],
     ids: ["ddlLevel"],
-  }, "Skilled worker");
+  }, "Skilled worker", { fallbackToFirst: true });
 
   await fillField(ctx, {
     name: "Employer name",
@@ -122,7 +124,7 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["salaryDay"],
     ids: ["ddlSalaryDay"],
-  }, "25");
+  }, "25", { fallbackToFirst: true });
 
   await fillField(ctx, {
     name: "Gross monthly",
@@ -147,6 +149,11 @@ export async function runSection4(ctx: FillContext): Promise<void> {
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 
   if (!config.dryRun) {
-    await clickNext(form, config);
+    await clickNextAndWait(
+      form,
+      config,
+      '[id="txtTelephonePayment"], [id="ddlBank"]',
+      "Work & Salary"
+    );
   }
 }
