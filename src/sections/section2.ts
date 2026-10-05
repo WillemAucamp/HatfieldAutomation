@@ -28,7 +28,7 @@ export async function runSection2(ctx: FillContext): Promise<void> {
     type: "text",
     names: ["VehicleMaxPriceRange"],
     ids: ["txtVehicleMaxPriceRange"],
-  }, "300 000");
+  }, data.maxPrice);
 
   await fillField(ctx, {
     name: "Payment day",

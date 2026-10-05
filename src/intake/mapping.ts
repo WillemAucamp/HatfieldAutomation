@@ -44,5 +44,9 @@ export function writerColumns(mapping: IntakeMapping): string[] {
 }
 
 export function llmColumns(mapping: IntakeMapping): string[] {
-  return mapping.field_map.filter((f) => f.mode !== "writer").map((f) => f.destination);
+  return mapping.field_map.filter((f) => f.mode === "infer").map((f) => f.destination);
+}
+
+export function copyColumns(mapping: IntakeMapping): FieldMapEntry[] {
+  return mapping.field_map.filter((f) => f.mode === "copy");
 }

@@ -71,10 +71,9 @@ export function needsEmployerSearch(
 
 function requestBody(
   mapping: IntakeMapping,
-  formText: string,
-  useSearch: boolean
+  formText: string
 ): Record<string, unknown> {
-  const body: Record<string, unknown> = {
+  return {
     contents: [
       {
         role: "user",
@@ -86,17 +85,12 @@ function requestBody(
       responseMimeType: "application/json",
     },
   };
-  if (useSearch) {
-    body.tools = [{ google_search: {} }];
-  }
-  return body;
 }
 
 async function generateOnce(
   mapping: IntakeMapping,
   formText: string,
-  options: GeminiClientOptions,
-  useSearch: boolean
+  options: GeminiClientOptions
 ): Promise<{ fields?: Record<string, string>; error: string }> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const model = options.model || "gemini-3.6-flash";
@@ -107,7 +101,7 @@ async function generateOnce(
       "Content-Type": "application/json",
       "x-goog-api-key": options.apiKey,
     },
-    body: JSON.stringify(requestBody(mapping, formText, useSearch)),
+    body: JSON.stringify(requestBody(mapping, formText)),
   });
   const json = (await response.json()) as GeminiResponse;
   if (!response.ok || json.error) {
@@ -133,19 +127,8 @@ export async function enrichWithGemini(
     throw new Error("GEMINI_API_KEY is not set");
   }
 
-  // Web search is ~1 min/row. Try without it first; only search when employer fields are empty.
-  console.log("Gemini: formatting without web search…");
-  const first = await generateOnce(mapping, formText, options, false);
-  if (first.fields && !needsEmployerSearch(first.fields, mapping)) {
-    return first.fields;
-  }
-  if (first.fields) {
-    console.log("Gemini: employer fields still empty/Unknown — retrying with web search…");
-  } else {
-    console.log(`Gemini: first attempt failed (${first.error}) — retrying with web search…`);
-  }
-
-  const second = await generateOnce(mapping, formText, options, true);
-  if (second.fields) return second.fields;
-  throw new Error(second.error || first.error || "Gemini returned an empty response");
+  console.log("Gemini: formatting inferred columns…");
+  const result = await generateOnce(mapping, formText, options);
+  if (result.fields) return result.fields;
+  throw new Error(result.error || "Gemini returned an empty response");
 }

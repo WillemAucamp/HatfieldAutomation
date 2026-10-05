@@ -9,6 +9,8 @@ import {
   restorePostalCode,
   splitFullName,
   splitNextOfKinName,
+  initialsFromFirstNames,
+
   transformMobile,
   validateDateFormat,
   validateIdNumber,
@@ -69,23 +71,27 @@ function pushError(
 function resolveName(
   row: Record<string, string>,
   mapping: ColumnMapping
-): { firstName: string; surname: string; original: string; error?: DataError } {
+): { firstName: string; surname: string; initials: string; original: string; error?: DataError } {
   const firstFromCol = mapping.firstName ? getCell(row, mapping.firstName) : "";
   const surnameFromCol = mapping.surname ? getCell(row, mapping.surname) : "";
   if (firstFromCol && surnameFromCol && mapping.firstName !== mapping.surname) {
-    return { firstName: firstFromCol, surname: surnameFromCol, original: `${firstFromCol} ${surnameFromCol}` };
+    return {
+      firstName: firstFromCol,
+      surname: surnameFromCol,
+      initials: initialsFromFirstNames(firstFromCol),
+      original: `${firstFromCol} ${surnameFromCol}`,
+    };
   }
 
   const primary =
     (mapping.fullName ? getCell(row, mapping.fullName) : "") ||
     firstFromCol ||
     surnameFromCol;
-  // Sheet often has both "First names + surname" and a separate "Full name" column.
-  // Prefer the mapped column, but fall back to "Full name" when it lacks a surname.
-  const fullNameFallback = getCell(row, "Full name");
-  const candidates = [primary, fullNameFallback].filter(
-    (v, i, arr) => Boolean(v) && arr.indexOf(v) === i
-  );
+  const candidates = [
+    primary,
+    getCell(row, "Full name"),
+    getCell(row, "First names + surname"),
+  ].filter((v, i, arr) => Boolean(v) && arr.indexOf(v) === i);
 
   let combined = primary;
   let split = splitFullName(combined, "NAME_EMPTY", "NAME_MISSING_SURNAME", "Applicant name");
@@ -108,6 +114,7 @@ function resolveName(
   return {
     firstName: split.firstName,
     surname: split.surname,
+    initials: split.initials,
     original: combined,
     error: split.valid
       ? undefined
@@ -128,11 +135,20 @@ function resolveNextOfKin(
   const surnameFromCol = mapping.nextOfKinSurname
     ? getCell(row, mapping.nextOfKinSurname)
     : "";
-  if (firstFromCol && mapping.nextOfKinName !== mapping.nextOfKinSurname) {
+  if (firstFromCol && mapping.nextOfKinName && mapping.nextOfKinName !== mapping.nextOfKinSurname && surnameFromCol) {
+    const split = splitNextOfKinName(`${firstFromCol} ${surnameFromCol}`);
     return {
-      firstName: firstFromCol,
-      surname: surnameFromCol || firstFromCol,
-      original: `${firstFromCol} ${surnameFromCol || firstFromCol}`.trim(),
+      firstName: split.firstName,
+      surname: split.surname,
+      original: `${firstFromCol} ${surnameFromCol}`.trim(),
+      error: split.valid
+        ? undefined
+        : {
+            code: split.code ?? "NEXT_OF_KIN_EMPTY",
+            field: "nextOfKin",
+            message: split.message ?? "Next of kin name is invalid",
+            value: `${firstFromCol} ${surnameFromCol}`.trim(),
+          },
     };
   }
 
@@ -211,12 +227,82 @@ function mapRow(
   const nextOfKinPhoneRaw = mapping.nextOfKinPhone
     ? getCell(row, mapping.nextOfKinPhone)
     : "";
-  const nextOfKinPhoneResult = nextOfKinPhoneRaw
-    ? transformMobile(nextOfKinPhoneRaw)
-    : { value: "", valid: true };
-  if (nextOfKinPhoneRaw) {
-    pushError(errors, nextOfKinPhoneResult, "nextOfKinPhone", nextOfKinPhoneRaw);
-  }
+  const nextOfKinPhoneResult = transformMobile(nextOfKinPhoneRaw);
+  pushError(errors, nextOfKinPhoneResult, "nextOfKinPhone", nextOfKinPhoneRaw);
+
+  const titleRaw = mapping.title ? getCell(row, mapping.title) : getCell(row, "Title");
+  const titleResult = requireText(titleRaw, "TITLE_EMPTY", "Title is missing on the intake sheet");
+  pushError(errors, titleResult, "title", titleRaw);
+
+  const educationRaw = mapping.educationalLevel
+    ? getCell(row, mapping.educationalLevel)
+    : getCell(row, "Educational level");
+  const educationResult = requireText(
+    educationRaw,
+    "EDUCATION_EMPTY",
+    "Educational level is missing on the intake sheet"
+  );
+  pushError(errors, educationResult, "educationalLevel", educationRaw);
+
+  const industryRaw = mapping.industry
+    ? getCell(row, mapping.industry)
+    : getCell(row, "Industry (AI based on employer)");
+  const industryResult = requireText(
+    industryRaw,
+    "INDUSTRY_EMPTY",
+    "Industry is missing (not on the intake sheet or could not be determined from employer/job title)"
+  );
+  pushError(errors, industryResult, "industry", industryRaw);
+
+  const occupationRaw = mapping.occupation
+    ? getCell(row, mapping.occupation)
+    : getCell(row, "Occupation");
+  const occupationResult = requireText(
+    occupationRaw,
+    "OCCUPATION_EMPTY",
+    "Occupation/job title is missing on the intake sheet"
+  );
+  pushError(errors, occupationResult, "occupation", occupationRaw);
+
+  const levelRaw = mapping.employeeLevel
+    ? getCell(row, mapping.employeeLevel)
+    : getCell(row, "Employee level");
+  const levelResult = requireText(
+    levelRaw,
+    "EMPLOYEE_LEVEL_EMPTY",
+    "Employee level is missing (not on the intake sheet or could not be determined from job title)"
+  );
+  pushError(errors, levelResult, "employeeLevel", levelRaw);
+
+  const maritalRaw = mapping.maritalStatus
+    ? getCell(row, mapping.maritalStatus)
+    : getCell(row, "Marital status");
+  const maritalResult = requireText(
+    maritalRaw,
+    "MARITAL_STATUS_EMPTY",
+    "Marital status is not on the intake sheet"
+  );
+  pushError(errors, maritalResult, "maritalStatus", maritalRaw);
+
+  const nokRelRaw = mapping.nextOfKinRelationship
+    ? getCell(row, mapping.nextOfKinRelationship)
+    : getCell(row, "Next of kin relationship");
+  const nokRelResult = requireText(
+    nokRelRaw,
+    "NOK_RELATIONSHIP_EMPTY",
+    "Next of kin relationship is not on the intake sheet"
+  );
+  pushError(errors, nokRelResult, "nextOfKinRelationship", nokRelRaw);
+
+  const maxPriceRaw = mapping.maxPrice
+    ? getCell(row, mapping.maxPrice)
+    : getCell(row, "Max price range");
+  const maxPriceResult = requireText(
+    maxPriceRaw,
+    "MAX_PRICE_EMPTY",
+    "Max price is not on the intake sheet"
+  );
+  pushError(errors, maxPriceResult, "maxPrice", maxPriceRaw);
 
   const employerNameRaw = getCell(row, mapping.employerName);
   const employerNameResult = requireText(
@@ -311,20 +397,29 @@ function mapRow(
     email: emailResult.value,
     firstName: name.firstName,
     surname: name.surname,
+    initials: name.initials,
+    title: titleResult.value,
+    educationalLevel: educationResult.value,
     idNumber: idResult.valid ? idResult.value : idRaw,
     mobile: mobileResult.valid ? mobileResult.value : mobileRaw,
     addressLine1: addressResult.value,
     postalCode: postalResult.value,
-    province: provinceResult.value || "Gauteng",
+    province: provinceResult.value,
     residencyStartDate: residencyResult.value,
     nextOfKinName: nextOfKin.firstName,
     nextOfKinSurname: nextOfKin.surname,
     nextOfKinPhone: nextOfKinPhoneResult.valid ? nextOfKinPhoneResult.value : nextOfKinPhoneRaw,
+    nextOfKinRelationship: nokRelResult.value,
+    industry: industryResult.value,
+    occupation: occupationResult.value,
+    employeeLevel: levelResult.value,
+    maritalStatus: maritalResult.value,
+    maxPrice: maxPriceResult.value,
     employerName: employerNameResult.value,
     employerPhone: employerPhoneResult.valid ? employerPhoneResult.value : employerPhoneRaw,
     employerAddress: employerAddressResult.value,
     employerPostalCode: employerPostalResult.value,
-    employerProvince: employerProvinceResult.value || provinceResult.value || "Gauteng",
+    employerProvince: employerProvinceResult.value,
     employmentStartDate: employmentResult.value,
     grossMonthly: grossResult.value,
     nettSalary: nettResult.value,

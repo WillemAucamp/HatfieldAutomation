@@ -19,7 +19,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientTitle"],
     ids: ["ddlClientTitle"],
-  }, "Mr", { fallbackToFirst: true });
+  }, data.title);
 
   await fillField(ctx, {
     name: "First name",
@@ -41,6 +41,18 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     names: ["clientLastName"],
     ids: ["txtClientLastName"],
   }, data.surname);
+
+  if (data.initials) {
+    await fillField(ctx, {
+      name: "Initials",
+      section: SECTION,
+      labels: ["Initials", "Initial"],
+      role: "textbox",
+      type: "text",
+      names: ["clientInitials"],
+      ids: ["txtClientInitials", "txtInitials"],
+    }, data.initials);
+  }
 
   // Name entry recreates identity controls with a new numeric prefix (71_IdType → 72_IdType).
   await waitForSelectorVisible(form, '[id$="_IdType"], [id$="_IdNumber"]');
@@ -73,7 +85,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientEducationLevel"],
     ids: ["ddlClientEducationLevel"],
-  }, "Matric certificate", { fallbackToFirst: true });
+  }, data.educationalLevel);
 
   await fillField(ctx, {
     name: "Citizenship country",
@@ -112,7 +124,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientPhysicalAddressProvince"],
     ids: ["clientPhysicalAddressDdlClientProvince"],
-  }, data.province || "Gauteng");
+  }, data.province);
 
   await fillField(ctx, {
     name: "Postal code",
@@ -161,7 +173,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientMaritalStatus"],
     ids: ["ddlClientMaritalStatus"],
-  }, "Single", { fallbackToFirst: true });
+  }, data.maritalStatus);
 
   await fillField(ctx, {
     name: "Next of kin name",
@@ -203,7 +215,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["relativeRelation"],
     ids: ["ddlRelativeRelation"],
-  }, "Sibling", { fallbackToFirst: true });
+  }, data.nextOfKinRelationship);
 
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandSelectNeedles, formatDateForForm, postalSearchNeedles, restoreIdNumber, restorePostalCode, splitNextOfKinName, validateDateFormat, validateIdNumber, valuesMatch } from "./transforms.js";
+import { expandSelectNeedles, formatDateForForm, initialsFromFirstNames, parseDurationToMmDdYyyy, parsePersonName, postalSearchNeedles, restoreIdNumber, restorePostalCode, splitNextOfKinName, titleFromGender, validateDateFormat, validateIdNumber, valuesMatch } from "./transforms.js";
 
 describe("expandSelectNeedles", () => {
   it("maps FNB to Firstrand search terms", () => {
@@ -40,19 +40,64 @@ describe("valuesMatch bank aliases", () => {
   });
 });
 
-describe("splitNextOfKinName", () => {
-  it("duplicates a single given name as the surname", () => {
-    assert.deepEqual(splitNextOfKinName("Phuluso"), {
-      firstName: "Phuluso",
-      surname: "Phuluso",
+describe("parsePersonName", () => {
+  it("splits Willem Aucamp and derives initials in code", () => {
+    assert.deepEqual(parsePersonName("Willem Aucamp"), {
+      firstName: "Willem",
+      surname: "Aucamp",
+      initials: "W",
       valid: true,
     });
+    assert.equal(initialsFromFirstNames("Willem Christoffel"), "WC");
+  });
+
+  it("keeps middle names in first names", () => {
+    const parsed = parsePersonName("Willem Christoffel Scholtz");
+    assert.equal(parsed.firstName, "Willem Christoffel");
+    assert.equal(parsed.surname, "Scholtz");
+    assert.equal(parsed.initials, "WC");
+    assert.equal(parsed.valid, true);
+  });
+
+  it("rejects a one-letter last token instead of treating it as the surname", () => {
+    const parsed = parsePersonName("Willem A");
+    assert.equal(parsed.valid, false);
+    assert.equal(parsed.code, "NAME_MISSING_SURNAME");
+    assert.equal(parsed.surname, "A");
+  });
+});
+
+describe("titleFromGender", () => {
+  it("maps Male to Mr and Female to Ms", () => {
+    assert.equal(titleFromGender("Male").value, "Mr");
+    assert.equal(titleFromGender("Female").value, "Ms");
+    assert.equal(titleFromGender("").valid, false);
+    assert.equal(titleFromGender("").code, "TITLE_EMPTY");
+  });
+});
+
+describe("parseDurationToMmDdYyyy", () => {
+  it("subtracts years from today", () => {
+    const today = new Date(2026, 9, 5);
+    assert.equal(parseDurationToMmDdYyyy("3 years", today), "10 05 2023");
+    assert.equal(parseDurationToMmDdYyyy("6 months", today), "04 05 2026");
+  });
+});
+
+describe("splitNextOfKinName", () => {
+  it("does not duplicate a single given name as the surname", () => {
+    const parsed = splitNextOfKinName("Phuluso");
+    assert.equal(parsed.valid, false);
+    assert.equal(parsed.code, "NEXT_OF_KIN_MISSING_SURNAME");
+    assert.equal(parsed.firstName, "Phuluso");
+    assert.equal(parsed.surname, "");
   });
 
   it("still splits a two-word next of kin name", () => {
     assert.deepEqual(splitNextOfKinName("Phuluso Nevombe"), {
       firstName: "Phuluso",
       surname: "Nevombe",
+      initials: "P",
       valid: true,
     });
   });

@@ -194,7 +194,7 @@ export async function enrichSampleMain(): Promise<void> {
     apiKey: config.geminiApiKey,
     model: config.geminiModel,
   });
-  const values = buildOutputValues(mapping, fields);
+  const values = buildOutputValues(mapping, fields, SAMPLE_INTAKE);
   const ordered = mapping.destination_columns.map((column) => [
     column,
     column === "NR" ? "(assigned on append)" : values[column] ?? "",

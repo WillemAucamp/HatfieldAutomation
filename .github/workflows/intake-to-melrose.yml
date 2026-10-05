@@ -1,9 +1,7 @@
 # Manual operator trigger. No schedule. No Cursor agent.
 # Actions → Intake to Melrose → Run workflow
 #
-# full = two jobs in the same run: Gemini ingest, then Seriti load.
-# Do not click load-only while a full run is still ingesting — they share
-# a concurrency group and the load-only click will sit in queue.
+# One job: Gemini ingest then Seriti load (same runner, Playwright installed once).
 
 name: Intake to Melrose
 
@@ -42,11 +40,10 @@ env:
   HEADLESS: "true"
 
 jobs:
-  ingest:
-    name: Gemini ingest
-    if: ${{ github.event.inputs.mode != 'load-only' }}
+  pipeline:
+    name: Intake to Melrose
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -54,7 +51,17 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Cache Playwright browsers
+        if: ${{ github.event.inputs.mode != 'ingest-only' && github.event.inputs.dryRun != 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+      - name: Install Playwright Chromium
+        if: ${{ github.event.inputs.mode != 'ingest-only' && github.event.inputs.dryRun != 'true' }}
+        run: npx playwright install --with-deps chromium
       - name: Enrich Form rows onto the automation sheet
+        if: ${{ github.event.inputs.mode != 'load-only' }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
@@ -65,28 +72,8 @@ jobs:
           set -euo pipefail
           echo "mode=${MODE} maxIntakeRows=${MAX_INTAKE_ROWS} dryRun=${DRY_RUN}"
           AUTO_LOAD=false npm run ingest
-
-  load:
-    name: Seriti load
-    needs: ingest
-    if: ${{ always() && github.event.inputs.mode != 'ingest-only' && github.event.inputs.dryRun != 'true' && needs.ingest.result != 'cancelled' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-      - run: npm ci
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
       - name: Load blank-Status rows into Seriti
+        if: ${{ github.event.inputs.mode != 'ingest-only' && github.event.inputs.dryRun != 'true' }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}

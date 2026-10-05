@@ -6,6 +6,14 @@ export interface ColumnMapping {
   fullName?: string;
   firstName?: string;
   surname?: string;
+  title?: string;
+  educationalLevel?: string;
+  industry?: string;
+  occupation?: string;
+  employeeLevel?: string;
+  maritalStatus?: string;
+  nextOfKinRelationship?: string;
+  maxPrice?: string;
   idNumber: string;
   mobile: string;
   addressLine1: string;
@@ -41,6 +49,9 @@ export interface ApplicantRecord {
   email: string;
   firstName: string;
   surname: string;
+  initials: string;
+  title: string;
+  educationalLevel: string;
   idNumber: string;
   mobile: string;
   addressLine1: string;
@@ -50,6 +61,12 @@ export interface ApplicantRecord {
   nextOfKinName: string;
   nextOfKinSurname: string;
   nextOfKinPhone?: string;
+  nextOfKinRelationship: string;
+  industry: string;
+  occupation: string;
+  employeeLevel: string;
+  maritalStatus: string;
+  maxPrice: string;
   employerName: string;
   employerPhone: string;
   employerAddress: string;
