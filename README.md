@@ -1,6 +1,40 @@
 # VW Melrose Finance Application Auto-Filler
 
-Browser automation that reads applicant data from a public Google Sheet and fills the [VW Melrose finance application](https://vwmelrose.hatfieldgroup.co.za/finance) through Section 5, stopping before document upload for manual completion.
+Manual pipeline (no Cursor live agent):
+
+1. New rows on the **intake** Form sheet
+2. **Gemini** formats them with the standing finance prompt
+3. One 35-column row is appended to the **automation sheet** (`NR` … `Status` `Timing`)
+4. Playwright fills [VW Melrose / Seriti](https://vwmelrose.hatfieldgroup.co.za/finance) for those new blank-Status rows
+
+**How you start it:** GitHub → Actions → **Intake to Melrose** → **Run workflow**.  
+Optional: a **Hatfield** menu on the Google Sheet fires that same workflow.
+
+There is no 24/7 agent. Do not re-enable the Cursor automation **Hatfield intake to Melrose**.
+
+## Operator steps (you)
+
+Full click-by-click list: **[`config/YOU_DO.md`](./config/YOU_DO.md)**
+
+Short version:
+
+1. Leave Cursor automations **Off**
+2. Set GitHub secrets `GEMINI_API_KEY` and `SHEET_WEBHOOK_URL` (URL only)
+3. Click **Run workflow** (`ingest-only` + `maxIntakeRows=1` the first time)
+4. Optional: paste `apps-script/Code.gs` and add `GITHUB_TOKEN` for the Sheet menu
+
+```bash
+npm run doctor          # what is blocked
+npm run enrich-sample   # Gemini only, no sheet writes
+npm run process         # one local run: ingest then Seriti
+```
+
+Intake sheet: https://docs.google.com/spreadsheets/d/1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M  
+Automation sheet: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?gid=0#gid=0
+
+Processed Form rows are marked in **Enrichment Status**. The loader still skips any automation row whose **Status** is already filled. Each click processes at most `MAX_INTAKE_ROWS` (default 5 in GitHub Actions).
+
+n8n / Render / `trigger-server` are leftover and **not required**. See [`config/n8n-setup.md`](./config/n8n-setup.md) only if you still want that path.
 
 ## Stack
 
@@ -44,13 +78,19 @@ https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&gid={GID}
 https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}
 ```
 
-Prefer **gviz**. `fetchSheetCsv` retries on 502/503 and falls back between gviz and export.
+Prefer **`/export`**. The gviz CSV endpoint returns HTTP 200 but drops text-formatted ID, phone, and telephone-payment cells (`error ID_EMPTY, MOBILE_EMPTY, TELEPHONE_EXPENSE_EMPTY`). `fetchSheetCsv` tries `/export` first, then gviz. When `SHEET_WEBHOOK_URL` is set, the loader reads the sheet through Apps Script instead of the public CSV.
 
 Ensure the sheet column headers match `mapping.json` (or update that file to match your headers).
 
 ### Run
 
 ```bash
+# One local pipeline click: new Form rows → Gemini → Seriti
+MAX_INTAKE_ROWS=5 npm run process
+
+# Gemini only (writes automation sheet, does not open Seriti)
+MAX_INTAKE_ROWS=1 npm run ingest
+
 # Dry-run: fills sections 1–5, screenshots each step, does not click Finish
 npm run dry-run
 

@@ -98,6 +98,15 @@ export interface AppConfig {
   loadedSheetWebhookUrl: string;
   loadedNameColumn: string;
   loadedNumberColumn: string;
+  geminiApiKey: string;
+  geminiModel: string;
+  intakeSpreadsheetId: string;
+  intakeStatusColumn: string;
+  intakeMappingPath: string;
+  pollSeconds: number;
+  autoLoad: boolean;
+  /** 0 = no cap (process every unprocessed Form row). */
+  maxIntakeRows: number;
 }
 
 export type FieldStrategy =

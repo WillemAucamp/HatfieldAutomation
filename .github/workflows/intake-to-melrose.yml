@@ -1,0 +1,69 @@
+# Manual operator trigger. No schedule. No Cursor agent.
+# Actions → Intake to Melrose → Run workflow
+
+name: Intake to Melrose
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "full = Gemini then Seriti; ingest-only = Gemini to automation sheet; load-only = Seriti for blank Status"
+        type: choice
+        options:
+          - full
+          - ingest-only
+          - load-only
+        default: full
+      maxIntakeRows:
+        description: "Max unprocessed Form rows to enrich this run. Default 5. Use 0 only if you intend to process the whole backlog."
+        required: false
+        default: "5"
+      rowFilter:
+        description: "load-only: automation sheet row numbers (comma-separated). Leave blank for every empty Status row."
+        required: false
+        default: ""
+      dryRun:
+        description: "Gemini mapping only — do not write sheets or open Seriti"
+        type: boolean
+        default: false
+
+concurrency:
+  group: hatfield-pipeline
+  cancel-in-progress: false
+
+jobs:
+  ingest-and-load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright (Seriti load only)
+        if: ${{ github.event.inputs.mode != 'ingest-only' && github.event.inputs.dryRun != 'true' }}
+        run: npx playwright install --with-deps chromium
+      - name: Run selected pipeline step
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
+          SHEET_CSV_URL: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/gviz/tq?tqx=out:csv&gid=0
+          SHEET_ID: 12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI
+          INTAKE_SPREADSHEET_ID: 1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M
+          HEADLESS: "true"
+          MODE: ${{ github.event.inputs.mode }}
+          MAX_INTAKE_ROWS: ${{ github.event.inputs.maxIntakeRows }}
+          ROW_FILTER: ${{ github.event.inputs.rowFilter }}
+          DRY_RUN: ${{ github.event.inputs.dryRun }}
+        run: |
+          set -euo pipefail
+          echo "mode=${MODE} maxIntakeRows=${MAX_INTAKE_ROWS} dryRun=${DRY_RUN} rowFilter=${ROW_FILTER:-}"
+          if [ "${MODE}" = "load-only" ]; then
+            AUTO_LOAD=true npm run dev
+          elif [ "${MODE}" = "ingest-only" ]; then
+            AUTO_LOAD=false npm run ingest
+          else
+            AUTO_LOAD=true npm run process
+          fi

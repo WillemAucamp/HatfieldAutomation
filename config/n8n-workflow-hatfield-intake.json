@@ -1,0 +1,153 @@
+{
+  "name": "Hatfield intake → Melrose (Option 1)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hatfield-intake",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-intake",
+      "name": "Form submit webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "hatfield-intake"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.HATFIELD_TRIGGER_URL}}/ingest",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.HATFIELD_TRIGGER_SECRET}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-ingest",
+      "name": "POST /ingest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [280, 0]
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "wait-ingest",
+      "name": "Wait for ingest",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [520, 0],
+      "webhookId": "wait-ingest"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.HATFIELD_TRIGGER_URL}}/jobs/{{$('POST /ingest').item.json.jobId}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.HATFIELD_TRIGGER_SECRET}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-poll-ingest",
+      "name": "Poll ingest job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [760, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "ingest-done",
+              "leftValue": "={{$json.job.status}}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-ingest-ok",
+      "name": "Ingest succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1000, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.HATFIELD_TRIGGER_URL}}/load",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.HATFIELD_TRIGGER_SECRET}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"rows\": {{ JSON.stringify($('Poll ingest job').item.json.job.result.appendedSheetRows || []) }}\n}",
+        "options": {}
+      },
+      "id": "http-load",
+      "name": "POST /load (unchanged Seriti)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1240, -80]
+    }
+  ],
+  "connections": {
+    "Form submit webhook": {
+      "main": [[{ "node": "POST /ingest", "type": "main", "index": 0 }]]
+    },
+    "POST /ingest": {
+      "main": [[{ "node": "Wait for ingest", "type": "main", "index": 0 }]]
+    },
+    "Wait for ingest": {
+      "main": [[{ "node": "Poll ingest job", "type": "main", "index": 0 }]]
+    },
+    "Poll ingest job": {
+      "main": [[{ "node": "Ingest succeeded?", "type": "main", "index": 0 }]]
+    },
+    "Ingest succeeded?": {
+      "main": [
+        [{ "node": "POST /load (unchanged Seriti)", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "description": "Apps Script Form submit → n8n → Hatfield trigger /ingest then /load. Set env HATFIELD_TRIGGER_URL and HATFIELD_TRIGGER_SECRET in n8n."
+  }
+}

@@ -94,6 +94,8 @@ async function main(): Promise<void> {
     csvUrl: config.sheetCsvUrl,
     mapping,
     includeCompleted: true,
+    webhookUrl: config.sheetWebhookUrl,
+    spreadsheetId: config.sheetId,
   });
   const byRowId = new Map(applicants.map((a) => [a.rowId, a]));
   const byRowIndex = new Map(applicants.map((a) => [a.rowIndex, a]));

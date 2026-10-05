@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   DEFAULT_SHEET_CSV_URL,
+  csvCandidateUrls,
   exportCsvUrl,
   extractGid,
   extractSheetId,
@@ -9,8 +10,16 @@ import {
 } from "./sheetCsv.js";
 
 describe("sheetCsv urls", () => {
-  it("defaults to the gviz CSV endpoint", () => {
-    assert.match(DEFAULT_SHEET_CSV_URL, /gviz\/tq\?tqx=out:csv/);
+  it("defaults to the export CSV endpoint", () => {
+    assert.match(DEFAULT_SHEET_CSV_URL, /export\?format=csv/);
+  });
+
+  it("tries /export before gviz so text-formatted ID cells are not dropped", () => {
+    const id = "12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI";
+    const preferred = gvizCsvUrl(id);
+    const order = csvCandidateUrls(preferred);
+    assert.equal(order[0], exportCsvUrl(id));
+    assert.ok(order.includes(preferred));
   });
 
   it("builds gviz and export URLs for a sheet id", () => {
