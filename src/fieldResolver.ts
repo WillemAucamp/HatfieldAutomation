@@ -276,7 +276,7 @@ async function selectDropdownByText(
       el.dispatchEvent(new Event("change", { bubbles: true }));
     });
     console.log(`  [fieldResolver] Selected "${match.text}" for ${fieldName}`);
-    } else {
+  } else {
     await locator.click();
     const option = form.getByRole("option", { name: new RegExp(`^${value}$`, "i") }).first();
     if (await option.isVisible({ timeout: 1500 }).catch(() => false)) {
