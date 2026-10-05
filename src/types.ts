@@ -94,6 +94,28 @@ export interface DataError {
   value: string;
 }
 
+export interface WhatsAppConfig {
+  /** meta = WhatsApp Cloud API; custom = arbitrary JSON POST */
+  provider: "meta" | "custom";
+  /** Full messages URL, or empty to build from graphVersion + phoneNumberId */
+  apiUrl: string;
+  graphVersion: string;
+  phoneNumberId: string;
+  apiKey: string;
+  authHeader: string;
+  authScheme: string;
+  approveTemplate: string;
+  declineTemplate: string;
+  templateLanguage: string;
+  /** When true, pass lead name as the first body text parameter on templates. */
+  includeNameParameter: boolean;
+  phoneField: string;
+  templateField: string;
+  nameField: string;
+  /** Optional JSON with {{phone}} {{template}} {{name}} {{status}} {{rowIndex}} placeholders. */
+  bodyTemplate: string;
+}
+
 export interface AppConfig {
   sheetCsvUrl: string;
   mappingPath: string;
@@ -124,6 +146,14 @@ export interface AppConfig {
   autoLoad: boolean;
   /** 0 = no cap (process every unprocessed Form row). */
   maxIntakeRows: number;
+  /** Leads workbook (money sheet) — Status Approved/Declined → WhatsApp. */
+  leadsSpreadsheetId: string;
+  leadsSheetGid: number;
+  leadsNameColumn: string;
+  leadsNumberColumn: string;
+  leadsStatusColumn: string;
+  leadsWhatsappSentColumn: string;
+  whatsapp: WhatsAppConfig;
 }
 
 export type FieldStrategy =

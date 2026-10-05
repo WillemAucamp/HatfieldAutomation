@@ -122,7 +122,8 @@ export async function doctorMain(): Promise<number> {
   if (config.sheetWebhookUrl) {
     const probe = await probeWebhook(config.sheetWebhookUrl);
     const actions = probe.actions ?? [];
-    const versionOk = probe.version === "hatfield-intake-1";
+    const version = String(probe.version ?? "");
+    const versionOk = probe.version === "hatfield-intake-1" || /^hatfield-/.test(version);
     const raw = probe.raw && typeof probe.raw === "object" ? (probe.raw as Record<string, unknown>) : null;
     const readOk =
       versionOk ||
@@ -136,7 +137,7 @@ export async function doctorMain(): Promise<number> {
       name: "Apps Script deploy",
       ok: Boolean(readOk) && !unknownAction,
       detail: versionOk
-        ? `hatfield-intake-1 (${actions.join(", ")})`
+        ? `${version || "hatfield-intake-1"} (${actions.join(", ")})`
         : readOk
           ? `readSheet OK${rowCount !== undefined ? ` (${rowCount} unprocessed intake rows)` : ""}${
               probe.getStatus && probe.getStatus !== 200 ? `; GET returned ${probe.getStatus} (ignored)` : ""
@@ -146,6 +147,23 @@ export async function doctorMain(): Promise<number> {
             : probe.error || JSON.stringify(probe.raw ?? probe).slice(0, 240),
     });
   }
+
+  checks.push({
+    name: "WhatsApp Cloud API",
+    ok: true,
+    detail: (() => {
+      const w = config.whatsapp;
+      const url =
+        w.apiUrl ||
+        (w.phoneNumberId
+          ? `https://graph.facebook.com/${w.graphVersion}/${w.phoneNumberId}/messages`
+          : "");
+      if (!url || !w.apiKey) {
+        return `optional — set WHATSAPP_PHONE_NUMBER_ID + WHATSAPP_ACCESS_TOKEN for notify-leads (provider=${w.provider})`;
+      }
+      return `${w.provider} → ${url} templates ${w.approveTemplate}/${w.declineTemplate} lang=${w.templateLanguage}`;
+    })(),
+  });
 
   for (const check of checks) print(check);
   const failed = checks.filter((c) => !c.ok);
