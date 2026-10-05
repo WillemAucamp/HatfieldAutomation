@@ -163,7 +163,7 @@ const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 
 /** Convert sheet dates (`MM DD YYYY`) to the finance form date-picker display (`DD Mon YYYY`). */
 export function formatDateForForm(raw: string | undefined | null): string {
-  const trimmed = String(raw ?? "").trim();
+  const trimmed = coerceToMmDdYyyy(raw);
   const spaced = trimmed.match(/^(\d{2})\s+(\d{2})\s+(\d{4})$/);
   if (spaced) {
     const month = Number(spaced[1]);
@@ -226,17 +226,40 @@ export function validateIdNumber(raw: string | number | undefined | null): Trans
 
 const DATE_PATTERN = /^\d{2}\s+\d{2}\s+\d{4}$/;
 
+/**
+ * Apps Script readSheet formats Google Date cells as `yyyy-MM-dd HH:mm:ss`
+ * (often with a timezone offset like 02:00:00). The form still wants MM DD YYYY.
+ */
+export function coerceToMmDdYyyy(raw: string | undefined | null): string {
+  const value = String(raw ?? "").trim();
+  if (!value) return "";
+  if (DATE_PATTERN.test(value)) return value;
+
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
+  if (iso) {
+    return `${iso[2]} ${iso[3]} ${iso[1]}`;
+  }
+
+  const spacedYmd = value.match(/^(\d{4})\s+(\d{2})\s+(\d{2})$/);
+  if (spacedYmd) {
+    return `${spacedYmd[2]} ${spacedYmd[3]} ${spacedYmd[1]}`;
+  }
+
+  return value;
+}
+
 export function validateDateFormat(
   raw: string | undefined | null,
   fieldLabel: string,
   emptyCode: string,
   formatCode: string
 ): TransformResult {
-  const value = String(raw ?? "").trim();
+  const original = String(raw ?? "").trim();
+  const value = coerceToMmDdYyyy(original);
 
-  if (!value) {
+  if (!value || /^unknown$/i.test(value)) {
     return {
-      value: "",
+      value: original,
       valid: false,
       code: emptyCode,
       message: `${fieldLabel} is empty`,
@@ -245,10 +268,10 @@ export function validateDateFormat(
 
   if (!DATE_PATTERN.test(value)) {
     return {
-      value,
+      value: original,
       valid: false,
       code: formatCode,
-      message: `${fieldLabel} must be MM DD YYYY (got "${value}")`,
+      message: `${fieldLabel} must be MM DD YYYY (got "${original}")`,
     };
   }
 

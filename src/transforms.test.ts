@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandSelectNeedles, formatDateForForm, postalSearchNeedles, restoreIdNumber, restorePostalCode, splitNextOfKinName, validateIdNumber, valuesMatch } from "./transforms.js";
+import { expandSelectNeedles, formatDateForForm, postalSearchNeedles, restoreIdNumber, restorePostalCode, splitNextOfKinName, validateDateFormat, validateIdNumber, valuesMatch } from "./transforms.js";
 
 describe("expandSelectNeedles", () => {
   it("maps FNB to Firstrand search terms", () => {
@@ -97,6 +97,34 @@ describe("formatDateForForm", () => {
   it("converts MM DD YYYY sheet dates to DD Mon YYYY", () => {
     assert.equal(formatDateForForm("08 18 2011"), "18 Aug 2011");
     assert.equal(formatDateForForm("02 18 2015"), "18 Feb 2015");
+  });
+
+  it("converts Apps Script Date cells to the form display", () => {
+    assert.equal(formatDateForForm("2021-10-05 02:00:00"), "05 Oct 2021");
+  });
+});
+
+describe("validateDateFormat", () => {
+  it("accepts MM DD YYYY", () => {
+    const result = validateDateFormat("10 05 2021", "Residency start date", "RESIDENCY_DATE_EMPTY", "RESIDENCY_DATE_FORMAT");
+    assert.equal(result.valid, true);
+    assert.equal(result.value, "10 05 2021");
+  });
+
+  it("coerces Apps Script yyyy-MM-dd HH:mm:ss cells", () => {
+    const result = validateDateFormat(
+      "2021-10-05 02:00:00",
+      "Employment start date",
+      "EMPLOYMENT_DATE_EMPTY",
+      "EMPLOYMENT_DATE_FORMAT"
+    );
+    assert.equal(result.valid, true);
+    assert.equal(result.value, "10 05 2021");
+  });
+
+  it("still rejects Unknown", () => {
+    const result = validateDateFormat("Unknown", "Residency start date", "RESIDENCY_DATE_EMPTY", "RESIDENCY_DATE_FORMAT");
+    assert.equal(result.valid, false);
   });
 });
 

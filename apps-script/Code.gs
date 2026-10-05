@@ -507,9 +507,13 @@ function isIdColumn_(name) {
   return /id number/i.test(String(name || ""));
 }
 
+function isDateColumn_(name) {
+  return /date|mm dd yyyy|year start|started working/i.test(String(name || ""));
+}
+
 function writePlain_(sheet, row, col, name, value) {
   var text = value == null ? "" : String(value);
-  if (isPhoneColumn_(name) || isIdColumn_(name)) {
+  if (isPhoneColumn_(name) || isIdColumn_(name) || isDateColumn_(name)) {
     sheet.getRange(row, col).setNumberFormat("@").setValue(text);
     return;
   }
@@ -549,7 +553,7 @@ function readSheet_(data) {
         if (!h) continue;
         var cell = values[i][c];
         if (cell instanceof Date) {
-          record[h] = Utilities.formatDate(cell, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+          record[h] = Utilities.formatDate(cell, Session.getScriptTimeZone(), "MM dd yyyy");
         } else {
           record[h] = cell == null ? "" : String(cell);
         }
