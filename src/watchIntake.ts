@@ -7,6 +7,64 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export function usableAutomationRows(rows: number[]): number[] {
+  return rows.filter((row) => Number.isInteger(row) && row >= 2);
+}
+
+export interface MelroseLoadPlan {
+  shouldLoad: boolean;
+  /** When true, drop ROW_FILTER so leftover blank-Status rows load too. */
+  clearRowFilter: boolean;
+  log: string;
+}
+
+/** `full` always loads Seriti after ingest, even if this click appended nobody. */
+export function planMelroseLoad(options: {
+  skipLoad: boolean;
+  autoLoad: boolean;
+  dryRun: boolean;
+  skipIngest: boolean;
+  appendedSheetRows: number[];
+}): MelroseLoadPlan {
+  if (options.skipLoad || !options.autoLoad || options.dryRun) {
+    const usable = usableAutomationRows(options.appendedSheetRows);
+    return {
+      shouldLoad: false,
+      clearRowFilter: false,
+      log: usable.length
+        ? `Appended rows ${usable.join(", ")} with blank Status. Skipping Melrose load.`
+        : "",
+    };
+  }
+
+  if (options.skipIngest) {
+    return { shouldLoad: true, clearRowFilter: false, log: "" };
+  }
+
+  const usable = usableAutomationRows(options.appendedSheetRows);
+  if (usable.length > 0) {
+    return {
+      shouldLoad: true,
+      clearRowFilter: true,
+      log: `Ingest appended automation rows ${usable.join(", ")}. Loading every blank-Status row via Melrose.`,
+    };
+  }
+  if (options.appendedSheetRows.length > 0) {
+    return {
+      shouldLoad: true,
+      clearRowFilter: true,
+      log:
+        `Ingest reported sheet rows ${options.appendedSheetRows.join(", ")} which are not usable. ` +
+        "Loading every blank-Status automation row instead.",
+    };
+  }
+  return {
+    shouldLoad: true,
+    clearRowFilter: true,
+    log: "No new intake rows this run. Loading leftover blank-Status automation rows via Melrose.",
+  };
+}
+
 export async function watchIntakeMain(): Promise<void> {
   const once = process.argv.includes("--once");
   const skipLoad = process.argv.includes("--skip-load");
@@ -37,37 +95,30 @@ export async function watchIntakeMain(): Promise<void> {
       );
     }
 
-    const shouldLoad = !skipLoad && config.autoLoad && !config.dryRun;
-    if (shouldLoad) {
-      if (skipIngest) {
-        process.env.HEADLESS = process.env.HEADLESS || "true";
-        await runBatchMain();
-      } else if (appendedSheetRows.length > 0) {
-        const usableRows = appendedSheetRows.filter((row) => Number.isInteger(row) && row >= 2);
-        if (usableRows.length > 0) {
-          process.env.ROW_FILTER = usableRows.join(",");
-          console.log(`Loading automation sheet rows ${process.env.ROW_FILTER} via Melrose autofill…`);
-        } else {
-          delete process.env.ROW_FILTER;
-          console.warn(
-            `Ingest reported sheet rows ${appendedSheetRows.join(", ")} which are not usable. ` +
-              "Loading every blank-Status automation row instead."
-          );
-        }
-        // Public CSV / NR renumber can lag a few seconds behind Apps Script writes.
-        await sleep(4000);
-        process.env.HEADLESS = process.env.HEADLESS || "true";
-        await runBatchMain();
-        delete process.env.ROW_FILTER;
+    const plan = planMelroseLoad({
+      skipLoad,
+      autoLoad: config.autoLoad,
+      dryRun: config.dryRun,
+      skipIngest,
+      appendedSheetRows,
+    });
+    if (plan.log) {
+      if (plan.shouldLoad && appendedSheetRows.length > 0 && usableAutomationRows(appendedSheetRows).length === 0) {
+        console.warn(plan.log);
       } else {
-        console.log(
-          "No new intake rows. Skipping Melrose. Re-run with --skip-ingest (or mode=load-only) to retry blank-Status rows."
-        );
+        console.log(plan.log);
       }
-    } else if (appendedSheetRows.length > 0 && (skipLoad || !config.autoLoad)) {
-      console.log(
-        `Appended rows ${appendedSheetRows.join(", ")} with blank Status. Skipping Melrose load.`
-      );
+    }
+
+    if (plan.shouldLoad) {
+      if (plan.clearRowFilter) {
+        delete process.env.ROW_FILTER;
+      }
+      process.env.HEADLESS = process.env.HEADLESS || "true";
+      await runBatchMain();
+      if (plan.clearRowFilter) {
+        delete process.env.ROW_FILTER;
+      }
     }
 
     if (once) break;

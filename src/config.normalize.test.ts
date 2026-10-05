@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { normalizeEnvValue, parseMaxIntakeRows } from "./config.js";
+import { normalizeEnvValue, parseMaxIntakeRows, parseRowFilter } from "./config.js";
 
 describe("normalizeEnvValue", () => {
   it("strips NAME= prefix from pasted secrets", () => {
@@ -40,5 +40,16 @@ describe("parseMaxIntakeRows", () => {
   it("rejects negative / NaN and falls back", () => {
     assert.equal(parseMaxIntakeRows("-1", 3), 3);
     assert.equal(parseMaxIntakeRows("nope", 3), 3);
+  });
+});
+
+describe("parseRowFilter", () => {
+  it("drops row 0 from an Apps Script 302 and the header row", () => {
+    assert.deepEqual(parseRowFilter("0,1,101,102"), [101, 102]);
+  });
+
+  it("treats blank as no filter", () => {
+    assert.deepEqual(parseRowFilter(""), []);
+    assert.deepEqual(parseRowFilter(undefined), []);
   });
 });

@@ -55,6 +55,75 @@ export function coerceLlmFields(
   return fields;
 }
 
+export function employerSearchColumns(mapping: IntakeMapping): string[] {
+  return mapping.destination_columns.filter((column) => /\(online search\)/i.test(column));
+}
+
+export function needsEmployerSearch(
+  fields: Record<string, string>,
+  mapping: IntakeMapping
+): boolean {
+  return employerSearchColumns(mapping).some((column) => {
+    const value = (fields[column] ?? "").trim();
+    return !value || /^unknown$/i.test(value);
+  });
+}
+
+function requestBody(
+  mapping: IntakeMapping,
+  formText: string,
+  useSearch: boolean
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: `${buildSystemPrompt(mapping)}\n\n${buildUserPrompt(formText)}` }],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      responseMimeType: "application/json",
+    },
+  };
+  if (useSearch) {
+    body.tools = [{ google_search: {} }];
+  }
+  return body;
+}
+
+async function generateOnce(
+  mapping: IntakeMapping,
+  formText: string,
+  options: GeminiClientOptions,
+  useSearch: boolean
+): Promise<{ fields?: Record<string, string>; error: string }> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const model = options.model || "gemini-3.6-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const response = await fetchImpl(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": options.apiKey,
+    },
+    body: JSON.stringify(requestBody(mapping, formText, useSearch)),
+  });
+  const json = (await response.json()) as GeminiResponse;
+  if (!response.ok || json.error) {
+    return { error: json.error?.message || `Gemini HTTP ${response.status}` };
+  }
+  const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+  if (!text.trim()) {
+    return { error: "Gemini returned an empty response" };
+  }
+  try {
+    return { fields: coerceLlmFields(extractJsonObject(text), mapping), error: "" };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function enrichWithGemini(
   mapping: IntakeMapping,
   formText: string,
@@ -63,61 +132,20 @@ export async function enrichWithGemini(
   if (!options.apiKey) {
     throw new Error("GEMINI_API_KEY is not set");
   }
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${options.model}:generateContent`;
-  const attempts: Array<Record<string, unknown>> = [
-    {
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: `${buildSystemPrompt(mapping)}\n\n${buildUserPrompt(formText)}` }],
-        },
-      ],
-      tools: [{ google_search: {} }],
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: "application/json",
-      },
-    },
-    {
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: `${buildSystemPrompt(mapping)}\n\n${buildUserPrompt(formText)}` }],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: "application/json",
-      },
-    },
-  ];
 
-  let lastError = "Gemini returned an empty response";
-  for (const body of attempts) {
-    const response = await fetchImpl(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": options.apiKey,
-      },
-      body: JSON.stringify(body),
-    });
-    const json = (await response.json()) as GeminiResponse;
-    if (!response.ok || json.error) {
-      lastError = json.error?.message || `Gemini HTTP ${response.status}`;
-      continue;
-    }
-    const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-    if (!text.trim()) {
-      lastError = "Gemini returned an empty response";
-      continue;
-    }
-    try {
-      return coerceLlmFields(extractJsonObject(text), mapping);
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
-    }
+  // Web search is ~1 min/row. Try without it first; only search when employer fields are empty.
+  console.log("Gemini: formatting without web search…");
+  const first = await generateOnce(mapping, formText, options, false);
+  if (first.fields && !needsEmployerSearch(first.fields, mapping)) {
+    return first.fields;
   }
-  throw new Error(lastError);
+  if (first.fields) {
+    console.log("Gemini: employer fields still empty/Unknown — retrying with web search…");
+  } else {
+    console.log(`Gemini: first attempt failed (${first.error}) — retrying with web search…`);
+  }
+
+  const second = await generateOnce(mapping, formText, options, true);
+  if (second.fields) return second.fields;
+  throw new Error(second.error || first.error || "Gemini returned an empty response");
 }

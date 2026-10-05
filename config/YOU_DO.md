@@ -33,24 +33,25 @@ If `SHEET_WEBHOOK_URL` currently looks like `SHEET_WEBHOOK_URL=https://script.go
 
 ## 3. First run from GitHub (required)
 
-Until this PR is merged, pick branch **`cursor/manual-pipeline-trigger-df0d`**. After merge, use **`main`**.
+Until this PR is merged, pick branch **`cursor/full-chain-seriti-df0d`**. After merge, use **`main`**.
 
 1. Open https://github.com/WillemAucamp/HatfieldAutomation/actions/workflows/intake-to-melrose.yml
-2. Click **Run workflow**
-3. First test (safe):
+2. Click **Run workflow** and choose:
    - Branch: this PR’s branch (or `main` after merge)
-   - mode: **`ingest-only`**
-   - maxIntakeRows: **`1`**
+   - mode: **`full`**
+   - maxIntakeRows: **`5`** (do not jump to 15 — Gemini is ~1 min/row when it needs web search)
    - dryRun: **unchecked**
-4. Click the green **Run workflow**
-5. Open the run → confirm Gemini appended **one** row on the [automation sheet](https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?gid=0#gid=0) with blank Status
-6. Then **Run workflow** again with mode **`load-only`** (or **`full`** next time)
+3. Open the run. You should see **two jobs** in order:
+   1. **Gemini ingest** — writes automation-sheet rows (Status still blank)
+   2. **Seriti load** — starts automatically after ingest, writes `ZAHTVW…` into Status
 
-`full` = Gemini then Seriti for those new rows only.  
+Do **not** click `load-only` while `full` is still running. The two clicks share a queue; `load-only` will wait until ingest finishes, which is the delay you already hit.
+
+`full` = Gemini, then Seriti for **every blank-Status** automation row (new plus leftovers).  
 `ingest-only` = Gemini → automation sheet, no browser.  
-`load-only` = Seriti for blank Status (or the rowFilter you type).
+`load-only` = Seriti only. Use this when ingest already finished and you need a retry.
 
-A click never processes more than `maxIntakeRows` Form rows (default 5). Leftovers stay unprocessed for the next click.
+A click never processes more than `maxIntakeRows` Form rows (default 5). Leftover Form rows stay unprocessed for the next click.
 
 If Seriti fails in GitHub (blocked datacenter IP), ingest still worked. On your machine:
 
@@ -76,7 +77,7 @@ Only if you want **Hatfield → Process now** inside the spreadsheet instead of 
    | --- | --- |
    | `GITHUB_TOKEN` | a GitHub personal access token with **Actions: Read and write** on this repo |
    | `GITHUB_REPO` | `WillemAucamp/HatfieldAutomation` |
-   | `GITHUB_REF` | `main` after merge; until then `cursor/manual-pipeline-trigger-df0d` |
+   | `GITHUB_REF` | `main` after merge; until then `cursor/full-chain-seriti-df0d` |
    | `MAX_INTAKE_ROWS` | `5` (optional) |
 
    Token: GitHub → Settings → Developer settings → Personal access tokens. Fine-grained: this repo, **Actions: Read and write**. Classic: `repo` + `workflow`.
@@ -119,6 +120,6 @@ npm install
 npm run install-browsers
 
 MAX_INTAKE_ROWS=1 npm run ingest    # Gemini only
-npm run process                     # Gemini then Seriti (new rows only)
+npm run process                     # Gemini then Seriti (blank Status too)
 npm run dev                         # Seriti only, blank Status
 ```
