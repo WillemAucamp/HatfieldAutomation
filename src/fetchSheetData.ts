@@ -227,8 +227,12 @@ function mapRow(
   const nextOfKinPhoneRaw = mapping.nextOfKinPhone
     ? getCell(row, mapping.nextOfKinPhone)
     : "";
-  const nextOfKinPhoneResult = transformMobile(nextOfKinPhoneRaw);
-  pushError(errors, nextOfKinPhoneResult, "nextOfKinPhone", nextOfKinPhoneRaw);
+  const nextOfKinPhoneResult = nextOfKinPhoneRaw
+    ? transformMobile(nextOfKinPhoneRaw)
+    : { value: "", valid: true };
+  if (nextOfKinPhoneRaw) {
+    pushError(errors, nextOfKinPhoneResult, "nextOfKinPhone", nextOfKinPhoneRaw);
+  }
 
   const titleRaw = mapping.title ? getCell(row, mapping.title) : getCell(row, "Title");
   const titleResult = requireText(titleRaw, "TITLE_EMPTY", "Title is missing on the intake sheet");

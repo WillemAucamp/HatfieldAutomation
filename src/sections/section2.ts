@@ -6,6 +6,7 @@ const SECTION = "section2";
 
 export async function runSection2(ctx: FillContext): Promise<void> {
   const { page, form, config } = ctx;
+  const data = ctx.applicant;
 
   await waitForSelectorVisible(form, '[id="ddlcarChoiceInd"], [id="txtVehicleMaxPriceRange"]');
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before", config);

@@ -112,4 +112,61 @@ describe("fetchSheetData", () => {
       []
     );
   });
+
+  it("does not reject a row when next-of-kin phone is blank", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
+    const csvPath = join(dir, "row.csv");
+    const values = [
+      "55",
+      "Mothoka Jefferson Oupa Sekhwela",
+      "sekhwelaoupa83@gmail.com",
+      "Mr",
+      "Mothoka Jefferson Oupa Sekhwela",
+      "South African ID",
+      "8304015345083",
+      "Grade 12",
+      "0629095338",
+      "1528 Park Town, Church Street, Kgapane",
+      "830",
+      "Limpopo",
+      "01 10 1986",
+      "David Moraba",
+      "",
+      "Legal Services / Law Enforcement",
+      "Deputy Sheriff",
+      "Mid-Level",
+      "Sheriff Musina",
+      "0155342200",
+      "112 Irwin Street, Musina",
+      "900",
+      "Limpopo",
+      "12 10 2022",
+      "11000",
+      "11000",
+      "1000",
+      "500",
+      "2000",
+      "Capitec",
+      "Savings/Transactional",
+      "Mothoka Jefferson Oupa Sekhwela",
+      "0629095338",
+      "",
+      "",
+    ];
+    const csv = [HEADERS, values]
+      .map((cols) => cols.map((c) => `"${c.replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    writeFileSync(csvPath, csv);
+
+    const applicants = await fetchSheetData({
+      csvUrl: "",
+      mapping: loadColumnMapping("./mapping.json"),
+      localCsvPath: csvPath,
+      includeCompleted: true,
+    });
+
+    const row = applicants[0]!;
+    assert.equal(row.nextOfKinPhone, "");
+    assert.ok(!row.errors.some((e) => e.field === "nextOfKinPhone"));
+  });
 });

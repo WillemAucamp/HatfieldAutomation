@@ -62,7 +62,7 @@ export async function doctorMain(): Promise<number> {
     const mapping = loadIntakeMapping(config.intakeMappingPath);
     checks.push({
       name: "mapping",
-      ok: mapping.destination_columns.length === 35,
+      ok: mapping.destination_columns.length === mapping.destination.column_count,
       detail: `${mapping.destination_columns.length} destination columns, ${mapping.intake_columns.length} intake fields`,
     });
   } catch (err) {
