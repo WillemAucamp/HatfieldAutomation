@@ -1,5 +1,13 @@
-import { transformMobile, validateIdNumber } from "../transforms.js";
+import { firstFilled } from "./headers.js";
+import { copyColumns } from "./mapping.js";
 import type { IntakeMapping } from "./mapping.js";
+import {
+  isMissingValue,
+  parseDurationToMmDdYyyy,
+  titleFromGender,
+  transformMobile,
+  validateIdNumber,
+} from "../transforms.js";
 
 const BANK_ACCOUNT_TYPE: Record<string, string> = {
   capitec: "Savings/Transactional",
@@ -18,30 +26,60 @@ export function accountTypeForBank(bank: string): string {
   for (const [needle, value] of Object.entries(BANK_ACCOUNT_TYPE)) {
     if (n.includes(needle)) return value;
   }
-  return bank.trim() ? "Cheque/Current" : "Unknown";
+  return bank.trim() ? "Cheque/Current" : "";
 }
 
-export function applyDeterministicFixes(fields: Record<string, string>): Record<string, string> {
+function intakeHeadersFor(
+  mapping: IntakeMapping,
+  source?: string,
+  sources?: string[]
+): string[] {
+  const keys = sources ?? (source ? [source] : []);
+  return keys.map((key) => mapping.intake_headers[key] || key);
+}
+
+export function applyDeterministicFixes(
+  fields: Record<string, string>,
+  intakeValues: Record<string, string> = {},
+  mapping?: IntakeMapping,
+  today: Date = new Date()
+): Record<string, string> {
   const next = { ...fields };
+  const name =
+    (mapping
+      ? firstFilled(intakeValues, intakeHeadersFor(mapping, "name_and_surname"))
+      : "") ||
+    next["Full name"] ||
+    next["First names + surname"] ||
+    "";
+  if (name) {
+    next["Full name"] = name;
+    next["First names + surname"] = name;
+    next["Account holder name and surname (same as client)"] = name;
+  }
+
+  const gender = mapping
+    ? firstFilled(intakeValues, intakeHeadersFor(mapping, "gender"))
+    : next.Title;
+  const title = titleFromGender(gender);
+  if (title.valid) next.Title = title.value;
+
   const bank = next["Bank name"] ?? "";
-  if (bank && (!next["Account type (AI—most likely option based on bank)"] || next["Account type (AI—most likely option based on bank)"] === "Unknown")) {
+  if (bank) {
     next["Account type (AI—most likely option based on bank)"] = accountTypeForBank(bank);
   }
-  const fullName = next["Full name"] || next["First names + surname"] || "";
-  if (fullName) {
-    next["Account holder name and surname (same as client)"] = fullName;
-    if (!next["First names + surname"]) next["First names + surname"] = fullName;
-    if (!next["Full name"]) next["Full name"] = fullName;
-  }
-  const mobile = next["Mobile number"] || next["Client cellphone number (add again at the end)"] || "";
+
+  const mobile =
+    next["Mobile number"] || next["Client cellphone number (add again at the end)"] || "";
   const mobileResult = transformMobile(mobile);
   if (mobileResult.valid) {
     next["Mobile number"] = mobileResult.value;
     next["Client cellphone number (add again at the end)"] = mobileResult.value;
-  } else if (mobile) {
+  } else if (mobile && !isMissingValue(mobile)) {
     next["Mobile number"] = mobile;
     next["Client cellphone number (add again at the end)"] = mobile;
   }
+
   const idResult = validateIdNumber(next["ID number"]);
   if (idResult.valid) {
     next["ID number"] = idResult.value;
@@ -49,16 +87,37 @@ export function applyDeterministicFixes(fields: Record<string, string>): Record<
   } else if (/south african/i.test(next["ID Type"] ?? "")) {
     next["ID Type"] = "RSA ID";
   }
+
+  if (mapping) {
+    const lived = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "years_at_address")
+    );
+    const livedDate = parseDurationToMmDdYyyy(lived, today);
+    if (livedDate) {
+      next["Year start living at address (MM DD YYYY format ONLY)"] = livedDate;
+    }
+    const employed = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "years_at_employer")
+    );
+    const employedDate = parseDurationToMmDdYyyy(employed, today);
+    if (employedDate) {
+      next["Year they started working there (calculate from years provided)"] = employedDate;
+    }
+  }
+
   for (const expense of ["Telephone payment", "Transport cost", "Food cost"]) {
-    const raw = String(next[expense] ?? "").trim();
-    if (!raw || /^unknown$/i.test(raw)) next[expense] = "0";
+    if (isMissingValue(next[expense])) next[expense] = "";
   }
   return next;
 }
 
 export function buildOutputValues(
   mapping: IntakeMapping,
-  llmFields: Record<string, string>
+  llmFields: Record<string, string>,
+  intakeValues: Record<string, string> = {},
+  today: Date = new Date()
 ): Record<string, string> {
   const values: Record<string, string> = {};
   for (const column of mapping.destination_columns) {
@@ -67,7 +126,25 @@ export function buildOutputValues(
       values[column] = "";
       continue;
     }
-    values[column] = String(llmFields[column] ?? "").replace(/\s*\n+\s*/g, " ").trim();
+    values[column] = "";
   }
-  return applyDeterministicFixes(values);
+
+  for (const entry of copyColumns(mapping)) {
+    const copied = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, entry.source, entry.sources)
+    );
+    if (copied) values[entry.destination] = copied.replace(/\s*\n+\s*/g, " ").trim();
+  }
+
+  for (const [column, raw] of Object.entries(llmFields)) {
+    if (!(column in values)) continue;
+    const text = String(raw ?? "").replace(/\s*\n+\s*/g, " ").trim();
+    if (isMissingValue(text)) continue;
+    const entry = mapping.field_map.find((f) => f.destination === column);
+    if (entry && entry.mode === "copy") continue;
+    values[column] = text;
+  }
+
+  return applyDeterministicFixes(values, intakeValues, mapping, today);
 }

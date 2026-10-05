@@ -13,7 +13,7 @@ destination:
   headers_file: config/output-sheet-headers.tsv
   loaded_clients_spreadsheet_id: 1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM
   # LLM / writer must emit exactly this many cells, in this order, one row, no extra columns.
-  column_count: 35
+  column_count: 38
 
 # Exact Form question titles as they appear in the intake sheet (newlines collapsed to spaces).
 intake_columns:
@@ -40,6 +40,9 @@ intake_columns:
   - expenses_summary
   - id_number
   - consent
+  - marital_status
+  - nok_relationship
+  - max_price
 
 intake_headers:
   timestamp: Timestamp
@@ -65,6 +68,9 @@ intake_headers:
   expenses_summary: "Summary of your expenses, what do you pay on the below Food R2000 Accounts R1000 Other R500"
   id_number: ID Number
   consent: "Thank you for the above info provided, looking forward to getting you the best possible deal Are you okay with us processing your information for this finance application, Do we have your permission to apply on your behalf to see what is the best possible deal?"
+  marital_status: Marital status
+  nok_relationship: Next of kin relationship
+  max_price: Max price range
 
 # Exact live output-sheet header row (gid=0). Order is the contract.
 destination_columns:
@@ -101,6 +107,9 @@ destination_columns:
   - Account type (AI—most likely option based on bank)
   - Account holder name and surname (same as client)
   - Client cellphone number (add again at the end)
+  - Marital status
+  - Next of kin relationship
+  - Max price range
   - Status
   - Timing
 
@@ -121,8 +130,8 @@ field_map:
 
   - destination: Title
     source: gender
-    mode: infer
-    notes: Infer Mr/Mrs/Ms from name/gender. Never output Gender as a column.
+    mode: copy
+    notes: Derived in code from Gender (Male→Mr, Female→Ms). Empty gender is an error.
 
   - destination: First names + surname
     source: name_and_surname
@@ -130,8 +139,8 @@ field_map:
 
   - destination: ID Type
     source: id_number
-    mode: infer
-    notes: Exactly "RSA ID" if 13 digits; otherwise Unknown. Never write "South African ID". Never invent an ID.
+    mode: copy
+    notes: Set in code to "RSA ID" when the ID is 13 digits. Never invent an ID.
 
   - destination: ID number
     source: id_number
@@ -145,7 +154,7 @@ field_map:
   - destination: Mobile number
     sources: [whatsapp_phone, call_phone]
     mode: copy
-    notes: Prefer WhatsApp number; else call number. 10 digits starting with 0 (+27 → 0). Never leave empty if a phone exists.
+    notes: Prefer WhatsApp number; else call number. 10 digits starting with 0 (+27 → 0). Empty if the Form has no phone.
 
   - destination: Address line
     source: street_address
@@ -172,7 +181,7 @@ field_map:
   - destination: Next of kin cellphone number
     source: next_of_kin_phone
     mode: copy
-    notes: If NOK number equals client mobile, repeat the client number.
+    notes: Copy the Form next-of-kin number only. Do not reuse the client's number.
 
   - destination: Industry (AI based on employer)
     source: employer_name
@@ -193,22 +202,22 @@ field_map:
   - destination: Employer telephone number (online search)
     sources: [employer_name, city_town, province, street_address]
     mode: infer
-    notes: Web search, cross-reference client location. Fallback to client mobile if no match.
+    notes: Infer from employer + location. Leave empty if not found — do not copy the client mobile.
 
   - destination: Employer street address (online search)
     sources: [employer_name, city_town, province, street_address]
     mode: infer
-    notes: Web search. Fallback to client address line if no match.
+    notes: Infer from employer + location. Leave empty if not found — do not copy the home address.
 
   - destination: Employer postal code (online search)
     sources: [employer_name, city_town, province]
     mode: infer
-    notes: Web search. Fallback to client postal code if no match.
+    notes: Infer from employer + location. Leave empty if not found — do not copy the home postal code.
 
   - destination: Employer province (online search)
     sources: [employer_name, province]
     mode: infer
-    notes: Web search. Fallback to client province if no match.
+    notes: Infer from employer + client province context. Leave empty if not found — do not copy the home province.
 
   - destination: Year they started working there (calculate from years provided)
     source: years_at_employer
@@ -228,7 +237,7 @@ field_map:
   - destination: Telephone payment
     source: expenses_summary
     mode: infer
-    notes: Map accounts/mobile contracts. Split a single total across Telephone/Transport/Food. Numeric only; 0 if missing. Never blank.
+    notes: Map accounts/mobile contracts. Split a single total across Telephone/Transport/Food. Numeric only. Empty if the Form has no expenses.
 
   - destination: Transport cost
     source: expenses_summary
@@ -245,8 +254,8 @@ field_map:
 
   - destination: Account type (AI—most likely option based on bank)
     source: bank_name
-    mode: infer
-    notes: Capitec/Discovery=Savings/Transactional; FNB/ABSA/Nedbank/Standard/Investec=Cheque/Current.
+    mode: copy
+    notes: Mapped in code from Bank name (Capitec/Discovery=Savings/Transactional; FNB/ABSA/Nedbank/Standard/Investec=Cheque/Current).
 
   - destination: Account holder name and surname (same as client)
     source: name_and_surname
@@ -256,6 +265,21 @@ field_map:
     sources: [whatsapp_phone, call_phone]
     mode: copy
     notes: Same value as Mobile number.
+
+  - destination: Marital status
+    source: marital_status
+    mode: copy
+    notes: Copy from the Form. Empty if the Form does not ask. Do not default to Single.
+
+  - destination: Next of kin relationship
+    source: nok_relationship
+    mode: copy
+    notes: Copy from the Form. Empty if the Form does not ask. Do not default to Sibling.
+
+  - destination: Max price range
+    source: max_price
+    mode: copy
+    notes: Copy from the Form. Empty if the Form does not ask. Do not invent 300000.
 
   - destination: Status
     mode: writer
@@ -272,11 +296,13 @@ passthrough_not_on_destination:
   - gender
 
 rules:
-  - Output must be exactly 35 columns in destination_columns order. No extra headings, notes, or columns.
-  - LLM fills columns 2–33 only. Writer sets NR; Status and Timing stay empty so the Melrose loader picks the row up.
-  - Never invent ID numbers or salary figures.
+  - Output must be exactly 38 columns in destination_columns order. No extra headings, notes, or columns.
+  - LLM fills infer columns only. Copy columns come from the Form in code. Writer sets NR; Status and Timing stay empty so the Melrose loader picks the row up.
+  - Never invent ID numbers, salary figures, names, addresses, or phone numbers.
+  - Copy-mode columns are filled from the Form in code. Gemini only fills infer columns.
   - Never output Gender on the destination sheet.
-  - Dates must be MM DD YYYY.
-  - If a value cannot be determined, output Unknown (expenses default to 0; ID Type is RSA ID for 13-digit IDs).
+  - Dates must be MM DD YYYY. Prefer calculating from "X years/months" in code.
+  - If an infer value cannot be determined, leave it empty (not the client's name or home address).
+  - Title, marital status, next-of-kin relationship, industry, occupation, employee level, and max price must come from the intake sheet (or a deterministic mapping of an intake field). Missing values are errors for review — do not invent them.
   - Do not load a row when consent is not given.
   - Single-line cells only (no line breaks inside addresses or names).

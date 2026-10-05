@@ -110,7 +110,7 @@ export async function ingestNewRows(
         model: config.geminiModel,
       });
       console.log(`Gemini finished ${label} in ${((Date.now() - startedMs) / 1000).toFixed(1)}s`);
-      const values = buildOutputValues(mapping, fields);
+      const values = buildOutputValues(mapping, fields, intake.values);
 
       if (dryRun) {
         console.log(`DRY RUN ${label}: would append`, values);

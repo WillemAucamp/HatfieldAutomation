@@ -257,7 +257,7 @@ export function validateDateFormat(
   const original = String(raw ?? "").trim();
   const value = coerceToMmDdYyyy(original);
 
-  if (!value || /^unknown$/i.test(value)) {
+  if (!value || isMissingValue(value)) {
     return {
       value: original,
       valid: false,
@@ -278,12 +278,80 @@ export function validateDateFormat(
   return { value, valid: true };
 }
 
+export function isMissingValue(raw: string | undefined | null): boolean {
+  const value = String(raw ?? "").trim();
+  if (!value) return true;
+  return /^(unknown|n\/a|na|none|-|null|undefined)$/i.test(value);
+}
+
 export interface SplitNameResult {
   firstName: string;
   surname: string;
+  initials: string;
   valid: boolean;
   code?: string;
   message?: string;
+}
+
+export function initialsFromFirstNames(firstName: string): string {
+  return String(firstName ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase())
+    .join("");
+}
+
+/**
+ * Last token is the surname; everything before is first names.
+ * Initials are derived from first-name tokens in code (Willem → W, Willem Christoffel → WC).
+ * A one-letter last token ("Willem A") is not a surname.
+ */
+export function parsePersonName(
+  raw: string | undefined | null,
+  emptyCode = "NAME_EMPTY",
+  surnameCode = "NAME_MISSING_SURNAME",
+  label = "Applicant name"
+): SplitNameResult {
+  const value = String(raw ?? "").trim().replace(/\s+/g, " ");
+  if (!value || isMissingValue(value)) {
+    return {
+      firstName: "",
+      surname: "",
+      initials: "",
+      valid: false,
+      code: emptyCode,
+      message: `${label} is empty`,
+    };
+  }
+
+  const parts = value.split(" ");
+  if (parts.length < 2) {
+    return {
+      firstName: value,
+      surname: "",
+      initials: initialsFromFirstNames(value),
+      valid: false,
+      code: surnameCode,
+      message: `${label} "${value}" has no surname (expected "First Last")`,
+    };
+  }
+
+  const surname = parts[parts.length - 1]!;
+  const firstName = parts.slice(0, -1).join(" ").trim();
+  const initials = initialsFromFirstNames(firstName);
+  if (surname.length < 2) {
+    return {
+      firstName,
+      surname,
+      initials,
+      valid: false,
+      code: surnameCode,
+      message: `${label} "${value}" does not have a full surname`,
+    };
+  }
+
+  return { firstName, surname, initials, valid: true };
 }
 
 /** Split a combined "First Last" cell on the last space. Incomplete names are errors. */
@@ -293,50 +361,68 @@ export function splitFullName(
   surnameCode: string,
   label: string
 ): SplitNameResult {
-  const value = String(raw ?? "").trim().replace(/\s+/g, " ");
-  if (!value) {
-    return {
-      firstName: "",
-      surname: "",
-      valid: false,
-      code: emptyCode,
-      message: `${label} is empty`,
-    };
-  }
-
-  const lastSpace = value.lastIndexOf(" ");
-  if (lastSpace <= 0) {
-    return {
-      firstName: value,
-      surname: "",
-      valid: false,
-      code: surnameCode,
-      message: `${label} "${value}" has no surname (expected "First Last")`,
-    };
-  }
-
-  return {
-    firstName: value.slice(0, lastSpace).trim(),
-    surname: value.slice(lastSpace + 1).trim(),
-    valid: true,
-  };
+  return parsePersonName(raw, emptyCode, surnameCode, label);
 }
 
-/**
- * Next of kin must still have a first name. If the sheet only has one word,
- * reuse it as the surname so the form can be submitted.
- */
+/** Next of kin uses the same split. A single given name is an error, not a duplicated surname. */
 export function splitNextOfKinName(raw: string | undefined | null): SplitNameResult {
-  const split = splitFullName(
+  return parsePersonName(
     raw,
     "NEXT_OF_KIN_EMPTY",
     "NEXT_OF_KIN_MISSING_SURNAME",
     "Next of kin name"
   );
-  if (!split.valid && split.code === "NEXT_OF_KIN_MISSING_SURNAME" && split.firstName) {
-    return { firstName: split.firstName, surname: split.firstName, valid: true };
+}
+
+export function titleFromGender(raw: string | undefined | null): TransformResult {
+  const value = String(raw ?? "").trim();
+  if (isMissingValue(value)) {
+    return {
+      value: "",
+      valid: false,
+      code: "TITLE_EMPTY",
+      message: "Gender/title is missing on the intake sheet",
+    };
   }
-  return split;
+  const g = value.toLowerCase();
+  if (/^(m|male|man|mr)\b/.test(g) || g === "m") return { value: "Mr", valid: true };
+  if (/^mrs\b/.test(g)) return { value: "Mrs", valid: true };
+  if (/^(ms|miss)\b/.test(g)) return { value: "Ms", valid: true };
+  if (/^(f|female|woman)\b/.test(g) || g === "f") return { value: "Ms", valid: true };
+  if (/^(dr|doctor)\b/.test(g)) return { value: "Dr", valid: true };
+  return {
+    value: "",
+    valid: false,
+    code: "TITLE_UNMAPPED",
+    message: `Cannot derive title from intake gender "${value}"`,
+  };
+}
+
+/** "3 years", "6 months", "2 years 3 months" → MM DD YYYY relative to today. */
+export function parseDurationToMmDdYyyy(
+  raw: string | undefined | null,
+  today: Date = new Date()
+): string | null {
+  const coerced = coerceToMmDdYyyy(raw);
+  if (DATE_PATTERN.test(coerced)) return coerced;
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (!value || isMissingValue(value)) return null;
+
+  let years = 0;
+  let months = 0;
+  const yearMatch = value.match(/(\d+)\s*(year|years|yr|yrs)\b/);
+  const monthMatch = value.match(/(\d+)\s*(month|months|mo)\b/);
+  if (yearMatch) years = Number(yearMatch[1]);
+  if (monthMatch) months = Number(monthMatch[1]);
+  if (!yearMatch && !monthMatch) return null;
+
+  const date = new Date(today.getTime());
+  date.setFullYear(date.getFullYear() - years);
+  date.setMonth(date.getMonth() - months);
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const yyyy = String(date.getFullYear());
+  return `${mm} ${dd} ${yyyy}`;
 }
 
 export function requireText(
@@ -345,7 +431,7 @@ export function requireText(
   message: string
 ): TransformResult {
   const value = String(raw ?? "").trim();
-  if (!value) {
+  if (isMissingValue(value)) {
     return { value: "", valid: false, code, message };
   }
   return { value, valid: true };
@@ -373,7 +459,7 @@ export function requireAmount(
   label: string
 ): TransformResult {
   const value = String(raw ?? "").trim();
-  if (!value) {
+  if (isMissingValue(value)) {
     return { value: "", valid: false, code, message: `${label} is empty` };
   }
   return { value, valid: true };

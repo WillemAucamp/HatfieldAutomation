@@ -19,7 +19,7 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["industry"],
     ids: ["ddlIndustry"],
-  }, "Business services", { fallbackToFirst: true });
+  }, data.industry);
 
   await waitForSelectOptions(form.locator('[id="ddlOccupation"]'));
   await fillField(ctx, {
@@ -30,7 +30,7 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["occupation"],
     ids: ["ddlOccupation"],
-  }, "Labourer (Skilled)", { fallbackToFirst: true });
+  }, data.occupation);
 
   await waitForSelectOptions(form.locator('[id="ddlLevel"]'));
   await fillField(ctx, {
@@ -41,7 +41,7 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["level"],
     ids: ["ddlLevel"],
-  }, "Skilled worker", { fallbackToFirst: true });
+  }, data.employeeLevel);
 
   await fillField(ctx, {
     name: "Employer name",
@@ -71,7 +71,7 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientEmpAddressProvince"],
     ids: ["clientEmpAddressDdlClientProvince"],
-  }, data.employerProvince || data.province || "Gauteng");
+  }, data.employerProvince || data.province);
 
   await fillField(ctx, {
     name: "Work postal code",
