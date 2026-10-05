@@ -1,6 +1,12 @@
 import type { Frame, Locator, Page } from "playwright";
 import type { AppConfig } from "./types.js";
-import { expandSelectNeedles, normalizeAddressLine } from "./transforms.js";
+import {
+  firstUsableSelectOption,
+  formatMissingOptionError,
+  pickSelectOption,
+  type SelectOption,
+} from "./selectMatch.js";
+import { normalizeAddressLine } from "./transforms.js";
 import { randomDelay } from "./utils.js";
 
 const FORM_FRAME_PATTERN = /seritisolutions/i;
@@ -189,13 +195,14 @@ export async function fillSelectByVisibleText(
   form: FormScope,
   config: AppConfig,
   selectLocator: string,
-  value: string
+  value: string,
+  fieldName = selectLocator
 ): Promise<void> {
   const select = form.locator(selectLocator).filter({ visible: true }).first();
   await select.waitFor({ state: "visible", timeout: 15000 });
   await select.scrollIntoViewIfNeeded().catch(() => undefined);
 
-  const match = await matchSelectOption(select, value);
+  const match = await matchSelectOption(select, value, { fieldName });
   await select.selectOption({ value: match.value });
   await select.evaluate((el) => {
     el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -204,46 +211,93 @@ export async function fillSelectByVisibleText(
   console.log(`  [formUtils] Selected "${match.text}" in ${selectLocator}`);
 }
 
-export async function matchSelectOption(
-  locator: Locator,
-  value: string
-): Promise<{ value: string; text: string }> {
-  const normalizeSelectText = (s: string): string =>
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim()
-      .replace(/\s+/g, " ");
-
-  const options = await locator.evaluate((el) =>
+async function readSelectOptions(locator: Locator): Promise<SelectOption[]> {
+  return locator.evaluate((el) =>
     Array.from((el as HTMLSelectElement).options).map((opt) => ({
       value: opt.value,
       text: opt.text.trim(),
     }))
   );
-  const usable = options
-    .filter((opt) => opt.text && opt.text !== "......")
-    .map((opt) => ({ ...opt, textNorm: normalizeSelectText(opt.text) }));
-  const needles = expandSelectNeedles(value).map((n) => normalizeSelectText(n));
+}
 
-  for (const needle of needles) {
-    const exact = usable.find((opt) => opt.textNorm === needle);
-    if (exact) return exact;
+export async function waitForSelectOptions(
+  locator: Locator,
+  timeoutMs = 8000
+): Promise<void> {
+  await locator.waitFor({ state: "visible", timeout: timeoutMs }).catch(() => undefined);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const options = await readSelectOptions(locator).catch(() => []);
+    if (firstUsableSelectOption(options)) return;
+    await new Promise((resolve) => setTimeout(resolve, 150));
   }
-  for (const needle of needles) {
-    const partial = usable.find((opt) => opt.textNorm.includes(needle));
-    if (partial) return partial;
+}
+
+export async function matchSelectOption(
+  locator: Locator,
+  value: string,
+  options: { fieldName?: string; fallbackToFirst?: boolean } = {}
+): Promise<{ value: string; text: string }> {
+  let list = await readSelectOptions(locator);
+  if (!firstUsableSelectOption(list)) {
+    await waitForSelectOptions(locator, 5000);
+    list = await readSelectOptions(locator);
   }
-  for (const needle of needles) {
-    const reverse = usable.find(
-      (opt) => needle.includes(opt.textNorm) && opt.textNorm.length >= 4
+
+  const match = pickSelectOption(list, value);
+  if (match) return match;
+
+  if (options.fallbackToFirst) {
+    const fallback = firstUsableSelectOption(list);
+    if (fallback) {
+      console.warn(
+        `  [formUtils] No option matching "${value}" in ${options.fieldName || "dropdown"}; using "${fallback.text}"`
+      );
+      return fallback;
+    }
+  }
+
+  throw new Error(formatMissingOptionError(options.fieldName || "dropdown", value, list));
+}
+
+export async function readVisibleAlerts(form: FormScope): Promise<string> {
+  const locators = [
+    form.locator('[role="alert"]'),
+    form.locator(".field-validation-error"),
+    form.locator(".text-danger"),
+    form.locator(".alert-danger"),
+    form.locator(".help-block"),
+  ];
+  const texts: string[] = [];
+  for (const loc of locators) {
+    const count = await loc.count().catch(() => 0);
+    for (let i = 0; i < Math.min(count, 6); i++) {
+      const raw = await loc.nth(i).innerText().catch(() => "");
+      const text = raw.replace(/\s+/g, " ").trim();
+      if (text && text.length < 160 && !texts.includes(text)) texts.push(text);
+    }
+  }
+  return texts.slice(0, 4).join("; ");
+}
+
+export async function clickNextAndWait(
+  form: FormScope,
+  config: AppConfig,
+  nextSelector: string,
+  sectionLabel: string
+): Promise<void> {
+  await clickNext(form, config);
+  try {
+    await waitForSelectorVisible(form, nextSelector, 20000);
+  } catch (err) {
+    const alerts = await readVisibleAlerts(form);
+    const timeout = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `${sectionLabel} Next did not open the next page.` +
+        (alerts ? ` Form said: ${alerts}.` : "") +
+        ` Waiting for ${nextSelector}. ${timeout}`
     );
-    if (reverse) return reverse;
   }
-
-  throw new Error(
-    `No option matching "${value}". Available: ${options.map((opt) => opt.text).filter(Boolean).join(" | ")}`
-  );
 }
 
 export type FormScope = Page | Frame;

@@ -45,6 +45,12 @@ Until this PR is merged, pick branch **`cursor/full-chain-seriti-df0d`**. After 
    1. **Gemini ingest** — writes automation-sheet rows (Status still blank)
    2. **Seriti load** — starts automatically after ingest, writes `ZAHTVW…` into Status
 
+If **Status** is `error …` after Seriti:
+
+- `DROPDOWN_OPTION_MISSING: Bank/Account type/Province "…"` — change **that sheet column** to one of the listed Seriti names, clear Status, run **load-only**.
+- `DROPDOWN_OPTION_MISSING` naming Industry/Occupation/Salesperson — not a sheet cell. Clear Status and re-run after this PR; the robot now picks a fallback menu item.
+- `WORK_NEXT_FAILED` — **not** telephone or bank. Work & Salary Next did not open expenses (employment date, salary, or a required work field). Clear Status and re-run load-only.
+
 Do **not** click `load-only` while `full` is still running. The two clicks share a queue; `load-only` will wait until ingest finishes, which is the delay you already hit.
 
 `full` = Gemini, then Seriti for **every blank-Status** automation row (new plus leftovers).  

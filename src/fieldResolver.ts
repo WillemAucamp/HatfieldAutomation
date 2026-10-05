@@ -261,26 +261,33 @@ async function selectDropdownByText(
   form: FormScope,
   locator: Locator,
   value: string,
-  config: AppConfig
+  config: AppConfig,
+  fieldName: string,
+  fallbackToFirst = false
 ): Promise<void> {
   await locator.waitFor({ state: "visible", timeout: 15000 });
   const tag = await locator.evaluate((el) => el.tagName.toLowerCase());
 
   if (tag === "select") {
-    const match = await matchSelectOption(locator, value);
+    const match = await matchSelectOption(locator, value, { fieldName, fallbackToFirst });
     await locator.selectOption({ value: match.value });
     await locator.evaluate((el) => {
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    console.log(`  [fieldResolver] Selected "${match.text}"`);
-  } else {
+    console.log(`  [fieldResolver] Selected "${match.text}" for ${fieldName}`);
+    } else {
     await locator.click();
     const option = form.getByRole("option", { name: new RegExp(`^${value}$`, "i") }).first();
     if (await option.isVisible({ timeout: 1500 }).catch(() => false)) {
       await option.click();
     } else {
-      await form.getByText(new RegExp(`^${value}$`, "i")).first().click();
+      const listed = form.getByText(new RegExp(`^${value}$`, "i")).first();
+      if (await listed.isVisible({ timeout: 1500 }).catch(() => false)) {
+        await listed.click();
+      } else {
+        throw new Error(`No option matching "${value}" in ${fieldName}.`);
+      }
     }
   }
 }
@@ -466,7 +473,7 @@ export async function fillField(
   ctx: FillContext,
   target: FieldTarget,
   value: string,
-  options?: { selectByIndex?: number; skipVerify?: boolean }
+  options?: { selectByIndex?: number; skipVerify?: boolean; fallbackToFirst?: boolean }
 ): Promise<boolean> {
   const { page, form, config, screenshotDir, warnings } = ctx;
   const { locator, strategy } = await resolveField(form, target);
@@ -502,7 +509,14 @@ export async function fillField(
             console.log(`  [verify] "${target.name}" => "${selectedText}" (index ${options.selectByIndex})`);
           }
         } else {
-          await selectDropdownByText(form, locator, value, config);
+          await selectDropdownByText(
+            form,
+            locator,
+            value,
+            config,
+            target.name,
+            options?.fallbackToFirst === true
+          );
         }
         break;
       case "radio":

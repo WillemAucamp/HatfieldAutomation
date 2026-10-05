@@ -1,6 +1,6 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
-import { clickNext, screenshotSection, syncAddressFromPostal, waitForSelectorVisible } from "../formUtils.js";
+import { clickNextAndWait, screenshotSection, syncAddressFromPostal, waitForSelectorVisible } from "../formUtils.js";
 
 const SECTION = "section3";
 
@@ -19,7 +19,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientTitle"],
     ids: ["ddlClientTitle"],
-  }, "Mr");
+  }, "Mr", { fallbackToFirst: true });
 
   await fillField(ctx, {
     name: "First name",
@@ -53,7 +53,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["_IdType", "IdType"],
     ids: ["_IdType", "IdType"],
-  }, "RSA");
+  }, "RSA", { fallbackToFirst: true });
 
   await fillField(ctx, {
     name: "ID number",
@@ -73,7 +73,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientEducationLevel"],
     ids: ["ddlClientEducationLevel"],
-  }, "Matric certificate");
+  }, "Matric certificate", { fallbackToFirst: true });
 
   await fillField(ctx, {
     name: "Citizenship country",
@@ -83,7 +83,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientCitizenshipCountryId"],
     ids: ["ddlClientCitizenshipCountryId"],
-  }, "South Africa");
+  }, "South Africa", { fallbackToFirst: true });
 
   await fillField(ctx, {
     name: "Mobile number",
@@ -102,7 +102,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["foreignAffiliationInd"],
     ids: ["foreignAffiliationInd"],
-  }, "No");
+  }, "No", { fallbackToFirst: true });
 
   await fillField(ctx, {
     name: "Province",
@@ -161,7 +161,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientMaritalStatus"],
     ids: ["ddlClientMaritalStatus"],
-  }, "Single");
+  }, "Single", { fallbackToFirst: true });
 
   await fillField(ctx, {
     name: "Next of kin name",
@@ -203,11 +203,16 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["relativeRelation"],
     ids: ["ddlRelativeRelation"],
-  }, "Sibling");
+  }, "Sibling", { fallbackToFirst: true });
 
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 
   if (!config.dryRun) {
-    await clickNext(form, config);
+    await clickNextAndWait(
+      form,
+      config,
+      '[id="txtemployerName"], [id="ddlIndustry"]',
+      "Personal Information"
+    );
   }
 }

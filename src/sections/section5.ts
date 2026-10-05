@@ -92,7 +92,7 @@ export async function runSection5(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientBanklblPayeeEntityNumberIndicator"],
     ids: ["clientBanklblPayeeEntityNumberIndicator"],
-  }, "No");
+  }, "No", { fallbackToFirst: true });
 
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 }
