@@ -1,6 +1,7 @@
 import { firstFilled } from "./headers.js";
 import { copyColumns } from "./mapping.js";
 import type { IntakeMapping } from "./mapping.js";
+import { parseExpenseSummary } from "./expenses.js";
 import {
   isMissingValue,
   parseDurationToMmDdYyyy,
@@ -125,6 +126,24 @@ export function applyDeterministicFixes(
     );
     if (phoneSpend && !isMissingValue(phoneSpend)) {
       next["Telephone payment"] = phoneSpend.replace(/[^\d.]/g, "") || phoneSpend;
+    }
+
+    const summary = firstFilled(intakeValues, intakeHeadersFor(mapping, "expenses_summary"));
+    const parsed = parseExpenseSummary(summary);
+    if ((!next["Food cost"] || isMissingValue(next["Food cost"])) && parsed.food) {
+      next["Food cost"] = parsed.food;
+    }
+    if (
+      (!next["Telephone payment"] || isMissingValue(next["Telephone payment"])) &&
+      parsed.telephone
+    ) {
+      next["Telephone payment"] = parsed.telephone;
+    }
+    if (
+      (!next["Transport cost"] || isMissingValue(next["Transport cost"])) &&
+      parsed.transport
+    ) {
+      next["Transport cost"] = parsed.transport;
     }
   }
 
