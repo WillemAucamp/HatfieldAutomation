@@ -160,6 +160,17 @@ export function applyDeterministicFixes(
       ]);
       next["Marital status"] = spouse && !isMissingValue(spouse) ? "Married" : "Single";
     }
+
+    // Form does not currently ask NOK relationship; Seriti requires a dropdown value.
+    const nokRel = firstFilled(intakeValues, intakeHeadersFor(mapping, "nok_relationship"));
+    if (nokRel && !isMissingValue(nokRel)) {
+      next["Next of kin relationship"] = nokRel;
+    } else if (
+      !next["Next of kin relationship"] ||
+      isMissingValue(next["Next of kin relationship"])
+    ) {
+      next["Next of kin relationship"] = "Distant";
+    }
   }
 
   // Standing rule: every application uses the same Seriti max price.

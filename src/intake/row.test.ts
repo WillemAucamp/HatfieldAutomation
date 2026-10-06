@@ -70,6 +70,7 @@ describe("output row contract", () => {
     assert.equal(values["Next of kin name + Surname"], "Vusi Nel");
     assert.equal(values["Max price range"], DEFAULT_MAX_PRICE);
     assert.equal(values["Marital status"], "Single");
+    assert.equal(values["Next of kin relationship"], "Distant");
     assert.equal(values.NR, undefined);
     assert.equal(mapping.destination_columns.length, 38);
   });

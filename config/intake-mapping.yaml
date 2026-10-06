@@ -290,7 +290,7 @@ field_map:
   - destination: Next of kin relationship
     source: nok_relationship
     mode: copy
-    notes: Copy from the Form. Empty if the Form does not ask. Do not default to Sibling.
+    notes: Copy from the Form when present. If blank, standing default is Distant (Seriti requires a value).
 
   - destination: Max price range
     mode: copy
