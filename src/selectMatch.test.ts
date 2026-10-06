@@ -41,6 +41,16 @@ describe("pickSelectOption", () => {
     ];
     assert.equal(pickSelectOption(industries, "Business services")?.text, "BUSINESS SERVICES SECTOR");
   });
+
+  it("maps Automotive sheet labels onto Seriti industry options", () => {
+    const industries = [
+      { value: "1", text: "ADVERTISING" },
+      { value: "2", text: "BUSINESS SERVICES" },
+      { value: "3", text: "MOTOR TRADE" },
+      { value: "4", text: "TRANSPORT" },
+    ];
+    assert.equal(pickSelectOption(industries, "Automotive")?.text, "MOTOR TRADE");
+  });
 });
 
 describe("firstUsableSelectOption", () => {

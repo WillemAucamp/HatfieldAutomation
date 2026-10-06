@@ -503,6 +503,18 @@ export function expandSelectNeedles(raw: string): string[] {
     { keys: ["labourer", "laborer"], terms: ["LABOURER", "LABORER"] },
     { keys: ["skilled worker"], terms: ["SKILLED"] },
     { keys: ["business services"], terms: ["BUSINESS SERVICES"] },
+    {
+      keys: ["automotive", "motor", "motor trade", "vehicle", "car dealer", "dealership"],
+      terms: ["MOTOR TRADE", "MOTOR", "TRANSPORT", "LOGISTICS", "BUSINESS SERVICES"],
+    },
+    {
+      keys: ["logistics", "transport", "transportation", "logistics transport"],
+      terms: ["LOGISTICS", "TRANSPORT", "TRANSPORTATION"],
+    },
+    { keys: ["mining"], terms: ["MINING"] },
+    { keys: ["healthcare", "health care", "medical"], terms: ["HEALTH", "MEDICAL", "HEALTHCARE"] },
+    { keys: ["retail"], terms: ["RETAIL"] },
+    { keys: ["security"], terms: ["SECURITY"] },
     { keys: ["gauteng", "gp"], terms: ["GAUTENG"] },
     { keys: ["western cape", "wc"], terms: ["WESTERN CAPE"] },
     { keys: ["kwazulu natal", "kwazulu-natal", "kzn"], terms: ["KWAZULU"] },
