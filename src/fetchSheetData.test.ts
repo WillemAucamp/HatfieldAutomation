@@ -104,7 +104,7 @@ describe("fetchSheetData", () => {
     assert.equal(row.telephoneExpense, "1000");
     assert.equal(row.maritalStatus, "");
     assert.equal(row.nextOfKinRelationship, "");
-    assert.equal(row.maxPrice, "");
+    assert.ok(row.errors.some((e) => e.code === "MAX_PRICE_EMPTY"));
     assert.deepEqual(
       row.errors.filter((e) =>
         [
@@ -113,7 +113,6 @@ describe("fetchSheetData", () => {
           "TELEPHONE_EXPENSE_EMPTY",
           "MARITAL_STATUS_EMPTY",
           "NOK_RELATIONSHIP_EMPTY",
-          "MAX_PRICE_EMPTY",
         ].includes(e.code)
       ),
       []

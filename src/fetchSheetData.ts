@@ -302,10 +302,13 @@ function mapRow(
   const maxPriceRaw = mapping.maxPrice
     ? getCell(row, mapping.maxPrice)
     : getCell(row, "Max price range");
-  const maxPriceResult = maxPriceRaw.trim()
-    ? requireText(maxPriceRaw, "MAX_PRICE_EMPTY", "Max price is not on the intake sheet")
-    : { value: "", valid: true };
-  if (maxPriceRaw.trim()) pushError(errors, maxPriceResult, "maxPrice", maxPriceRaw);
+  // Seriti Deal Information cannot proceed without a max price.
+  const maxPriceResult = requireText(
+    maxPriceRaw,
+    "MAX_PRICE_EMPTY",
+    "Max price is not on the intake sheet"
+  );
+  pushError(errors, maxPriceResult, "maxPrice", maxPriceRaw);
 
   const employerNameRaw = getCell(row, mapping.employerName);
   const employerNameResult = requireText(
