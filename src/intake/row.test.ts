@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { loadIntakeMapping } from "./mapping.js";
-import { accountTypeForBank, buildOutputValues } from "./row.js";
+import { accountTypeForBank, buildOutputValues, DEFAULT_MAX_PRICE } from "./row.js";
 
 const mapping = loadIntakeMapping("./config/intake-mapping.yaml");
 
@@ -68,8 +68,19 @@ describe("output row contract", () => {
     assert.equal(values["Account holder name and surname (same as client)"], "Ada Lovelace");
     assert.equal(values["Year start living at address (MM DD YYYY format ONLY)"], "10 05 2023");
     assert.equal(values["Next of kin name + Surname"], "Vusi Nel");
+    assert.equal(values["Max price range"], DEFAULT_MAX_PRICE);
+    assert.equal(values["Marital status"], "Single");
     assert.equal(values.NR, undefined);
     assert.equal(mapping.destination_columns.length, 38);
+  });
+
+  it("sets Married when a spouse is present and always forces max price", () => {
+    const values = buildOutputValues(mapping, {}, {
+      ...intakeAda,
+      "Spouse Name + Surname": "Alan Lovelace",
+    });
+    assert.equal(values["Marital status"], "Married");
+    assert.equal(values["Max price range"], "300000");
   });
 
   it("combines split next-of-kin name columns and prefers dedicated expense fields", () => {

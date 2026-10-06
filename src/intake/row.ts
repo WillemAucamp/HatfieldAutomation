@@ -22,6 +22,9 @@ const BANK_ACCOUNT_TYPE: Record<string, string> = {
   investec: "Cheque/Current",
 };
 
+/** Standing finance rule — always load this Seriti max-price value. */
+export const DEFAULT_MAX_PRICE = "300000";
+
 export function accountTypeForBank(bank: string): string {
   const n = bank.toLowerCase();
   for (const [needle, value] of Object.entries(BANK_ACCOUNT_TYPE)) {
@@ -145,7 +148,22 @@ export function applyDeterministicFixes(
     ) {
       next["Transport cost"] = parsed.transport;
     }
+
+    // Marital status: Form value wins. Else Married if a spouse was given, otherwise Single.
+    const marital = firstFilled(intakeValues, intakeHeadersFor(mapping, "marital_status"));
+    if (marital && !isMissingValue(marital)) {
+      next["Marital status"] = marital;
+    } else if (!next["Marital status"] || isMissingValue(next["Marital status"])) {
+      const spouse = firstFilled(intakeValues, [
+        ...intakeHeadersFor(mapping, "spouse_name"),
+        ...intakeHeadersFor(mapping, "spouse_number"),
+      ]);
+      next["Marital status"] = spouse && !isMissingValue(spouse) ? "Married" : "Single";
+    }
   }
+
+  // Standing rule: every application uses the same Seriti max price.
+  next["Max price range"] = DEFAULT_MAX_PRICE;
 
   for (const expense of ["Telephone payment", "Transport cost", "Food cost"]) {
     if (isMissingValue(next[expense])) next[expense] = "";

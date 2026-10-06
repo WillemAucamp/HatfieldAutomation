@@ -285,7 +285,7 @@ field_map:
   - destination: Marital status
     source: marital_status
     mode: copy
-    notes: Copy from the Form. Empty if the Form does not ask. Do not default to Single.
+    notes: Copy from the Form when present. If blank, code sets Married when a spouse is given, else Single.
 
   - destination: Next of kin relationship
     source: nok_relationship
@@ -293,9 +293,8 @@ field_map:
     notes: Copy from the Form. Empty if the Form does not ask. Do not default to Sibling.
 
   - destination: Max price range
-    source: max_price
     mode: copy
-    notes: Copy from the Form. Empty if the Form does not ask. Do not invent 300000.
+    notes: Standing rule — always 300000 (R300 000). Not taken from the Form.
 
   - destination: Status
     mode: writer
@@ -323,6 +322,6 @@ rules:
   - Never output Gender on the destination sheet.
   - Dates must be MM DD YYYY. Prefer calculating from "X years/months" in code.
   - If an infer value cannot be determined, leave it empty (not the client's name or home address).
-  - Title, marital status, next-of-kin relationship, industry, occupation, employee level, and max price must come from the intake sheet (or a deterministic mapping of an intake field). Missing values are errors for review — do not invent them.
+  - Title, marital status, next-of-kin relationship, industry, occupation, and employee level must come from the intake sheet (or a deterministic mapping of an intake field). Missing marital defaults to Married if a spouse is present, else Single. Max price is always 300000.
   - Do not load a row when consent is not given.
   - Single-line cells only (no line breaks inside addresses or names).
