@@ -90,16 +90,35 @@ describe("output row contract", () => {
       {
         "Food cost": "999",
         "Telephone payment": "888",
+        "Transport cost": "777",
       },
       {
         ...intakeAda,
         "How much do you spend on food?": "R1500",
         "How much do you spend on a cellphone?": "R250",
+        "How much do you spend on a accounts?": "R400",
       }
     );
     assert.equal(values["Next of kin name + Surname"], "Vusi Nel");
     assert.equal(values["Food cost"], "1500");
     assert.equal(values["Telephone payment"], "250");
+    assert.equal(values["Transport cost"], "400");
+  });
+
+  it("leaves Transport blank when accounts spend has no digits", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "How much do you spend on food?": "R1000",
+        "How much do you spend on a cellphone?": "R50",
+        "How much do you spend on a accounts?": "I don't have accounts",
+      }
+    );
+    assert.equal(values["Food cost"], "1000");
+    assert.equal(values["Telephone payment"], "50");
+    assert.equal(values["Transport cost"], "");
   });
 
   it("does not copy the home address into employer fields or invent expense zeros", () => {

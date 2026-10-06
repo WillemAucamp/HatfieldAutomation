@@ -256,8 +256,9 @@ field_map:
     notes: Prefer dedicated cellphone-spend Form column when present; else infer from expenses summary.
 
   - destination: Transport cost
-    source: expenses_summary
+    sources: [expense_accounts, expenses_summary]
     mode: infer
+    notes: Prefer dedicated accounts-spend Form column when present (Seriti's third expense bucket); else infer transport/household from expenses summary.
 
   - destination: Food cost
     sources: [expense_food, expenses_summary]

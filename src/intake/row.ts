@@ -121,14 +121,28 @@ export function applyDeterministicFixes(
     if (nokCombined) next["Next of kin name + Surname"] = nokCombined;
 
     const foodSpend = firstFilled(intakeValues, intakeHeadersFor(mapping, "expense_food"));
-    if (foodSpend && !isMissingValue(foodSpend)) next["Food cost"] = foodSpend.replace(/[^\d.]/g, "") || foodSpend;
+    if (foodSpend && !isMissingValue(foodSpend)) {
+      const digits = foodSpend.replace(/[^\d.]/g, "");
+      if (digits) next["Food cost"] = digits;
+    }
 
     const phoneSpend = firstFilled(
       intakeValues,
       intakeHeadersFor(mapping, "expense_cellphone")
     );
     if (phoneSpend && !isMissingValue(phoneSpend)) {
-      next["Telephone payment"] = phoneSpend.replace(/[^\d.]/g, "") || phoneSpend;
+      const digits = phoneSpend.replace(/[^\d.]/g, "");
+      if (digits) next["Telephone payment"] = digits;
+    }
+
+    // Form's third dedicated spend column → Seriti Transport (Food / Telephone / Transport).
+    const accountsSpend = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "expense_accounts")
+    );
+    if (accountsSpend && !isMissingValue(accountsSpend)) {
+      const digits = accountsSpend.replace(/[^\d.]/g, "");
+      if (digits) next["Transport cost"] = digits;
     }
 
     const summary = firstFilled(intakeValues, intakeHeadersFor(mapping, "expenses_summary"));
@@ -177,7 +191,12 @@ export function applyDeterministicFixes(
   next["Max price range"] = DEFAULT_MAX_PRICE;
 
   for (const expense of ["Telephone payment", "Transport cost", "Food cost"]) {
-    if (isMissingValue(next[expense])) next[expense] = "";
+    if (isMissingValue(next[expense])) {
+      next[expense] = "";
+      continue;
+    }
+    // Seriti expense fields must be numeric; drop "Nothing" / free-text refusals.
+    if (!/\d/.test(next[expense])) next[expense] = "";
   }
   return next;
 }

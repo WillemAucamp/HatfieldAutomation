@@ -99,13 +99,23 @@ async function rebuildBlankAutomationRows(config: ReturnType<typeof loadConfig>)
     }
 
     const values = buildOutputValues(mapping, {}, intakeRow.values);
+    // buildOutputValues already maps dedicated food/cellphone/accounts + summary parse.
+    // Re-apply summary fold only if a bucket is still blank (defensive for older rows).
     const summary = firstFilled(intakeRow.values, [mapping.intake_headers.expenses_summary]);
     const parsed = parseExpenseSummary(summary);
-    if (!values["Food cost"] && parsed.food) values["Food cost"] = parsed.food;
-    if (!values["Telephone payment"] && parsed.telephone) {
+    if ((!values["Food cost"] || isMissingValue(values["Food cost"])) && parsed.food) {
+      values["Food cost"] = parsed.food;
+    }
+    if (
+      (!values["Telephone payment"] || isMissingValue(values["Telephone payment"])) &&
+      parsed.telephone
+    ) {
       values["Telephone payment"] = parsed.telephone;
     }
-    if (!values["Transport cost"] && parsed.transport) {
+    if (
+      (!values["Transport cost"] || isMissingValue(values["Transport cost"])) &&
+      parsed.transport
+    ) {
       values["Transport cost"] = parsed.transport;
     }
 
