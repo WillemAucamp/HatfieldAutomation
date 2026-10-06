@@ -502,6 +502,15 @@ export function expandSelectNeedles(raw: string): string[] {
     { keys: ["rsa id", "rsa"], terms: ["RSA"] },
     { keys: ["labourer", "laborer"], terms: ["LABOURER", "LABORER"] },
     { keys: ["skilled worker"], terms: ["SKILLED"] },
+    {
+      keys: ["associate", "sales associate", "shop assistant"],
+      terms: ["ADMINISTRATIVE PERSONNEL", "ADMINISTRATOR", "ASSISTANT", "AGENT", "CLERK"],
+    },
+    { keys: ["administrator", "admin"], terms: ["ADMINISTRATOR", "ADMINISTRATIVE PERSONNEL"] },
+    { keys: ["driver"], terms: ["DRIVER"] },
+    { keys: ["teacher"], terms: ["TEACHER", "EDUCATOR"] },
+    { keys: ["entry level", "entry-level", "junior"], terms: ["JUNIOR", "ENTRY", "STAFF", "GENERAL"] },
+    { keys: ["mid-level", "mid level", "intermediate"], terms: ["MID", "INTERMEDIATE", "STAFF"] },
     { keys: ["business services"], terms: ["BUSINESS SERVICES"] },
     {
       keys: ["automotive", "motor", "motor trade", "vehicle", "car dealer", "dealership"],
