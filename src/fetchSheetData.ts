@@ -198,11 +198,11 @@ function mapRow(
   pushError(errors, mobileResult, "mobile", mobileRaw);
 
   const addressRaw = getCell(row, mapping.addressLine1);
-  const addressResult = requireText(addressRaw, "ADDRESS_EMPTY", "Address is empty");
+  const addressResult = requireText(addressRaw, "ADDRESS_EMPTY", "Address missing");
   pushError(errors, addressResult, "addressLine1", addressRaw);
 
   const postalRaw = getCell(row, mapping.postalCode);
-  const postalResult = requireText(postalRaw, "POSTAL_EMPTY", "Postal code is empty");
+  const postalResult = requireText(postalRaw, "POSTAL_EMPTY", "Postal code missing");
   pushError(errors, postalResult, "postalCode", postalRaw);
   if (postalResult.valid) postalResult.value = restorePostalCode(postalResult.value);
 
@@ -314,7 +314,7 @@ function mapRow(
   const employerNameResult = requireText(
     employerNameRaw,
     "EMPLOYER_EMPTY",
-    "Employer name is empty"
+    "Employer name missing"
   );
   pushError(errors, employerNameResult, "employerName", employerNameRaw);
 
@@ -334,7 +334,7 @@ function mapRow(
         code,
         message:
           code === "EMPLOYER_PHONE_EMPTY"
-            ? "Employer telephone is empty"
+            ? "Employer telephone missing"
             : employerPhoneResult.message,
       },
       "employerPhone",
@@ -346,7 +346,7 @@ function mapRow(
   const employerAddressResult = requireText(
     employerAddressRaw,
     "EMPLOYER_ADDRESS_EMPTY",
-    "Employer address is empty"
+    "Employer address missing"
   );
   pushError(errors, employerAddressResult, "employerAddress", employerAddressRaw);
 
@@ -354,7 +354,7 @@ function mapRow(
   const employerPostalResult = requireText(
     employerPostalRaw,
     "EMPLOYER_POSTAL_EMPTY",
-    "Employer postal code is empty"
+    "Employer postal code missing"
   );
   pushError(errors, employerPostalResult, "employerPostalCode", employerPostalRaw);
   if (employerPostalResult.valid) {
@@ -362,7 +362,7 @@ function mapRow(
   }
 
   const provinceRaw = mapping.province ? getCell(row, mapping.province) : getCell(row, "Province");
-  const provinceResult = requireText(provinceRaw, "PROVINCE_EMPTY", "Province is empty");
+  const provinceResult = requireText(provinceRaw, "PROVINCE_EMPTY", "Province missing");
   pushError(errors, provinceResult, "province", provinceRaw);
 
   const employerProvinceRaw = mapping.employerProvince
@@ -371,7 +371,7 @@ function mapRow(
   const employerProvinceResult = requireText(
     employerProvinceRaw,
     "EMPLOYER_PROVINCE_EMPTY",
-    "Employer province is empty"
+    "Employer province missing"
   );
   pushError(errors, employerProvinceResult, "employerProvince", employerProvinceRaw);
 
@@ -399,12 +399,12 @@ function mapRow(
   const accountResult = requireText(
     accountRaw,
     "ACCOUNT_HOLDER_EMPTY",
-    "Account holder is empty"
+    "Account holder missing"
   );
   pushError(errors, accountResult, "accountHolder", accountRaw);
 
   const bankRaw = mapping.bank ? getCell(row, mapping.bank) : getCell(row, "Bank name");
-  const bankResult = requireText(bankRaw, "BANK_EMPTY", "Bank name is empty");
+  const bankResult = requireText(bankRaw, "BANK_EMPTY", "Bank name missing");
   pushError(errors, bankResult, "bank", bankRaw);
 
   const accountTypeRaw = mapping.accountType
@@ -413,7 +413,7 @@ function mapRow(
   const accountTypeResult = requireText(
     accountTypeRaw,
     "ACCOUNT_TYPE_EMPTY",
-    "Account type is empty"
+    "Account type missing"
   );
   pushError(errors, accountTypeResult, "accountType", accountTypeRaw);
 
