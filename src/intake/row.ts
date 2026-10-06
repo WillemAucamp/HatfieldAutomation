@@ -25,6 +25,14 @@ const BANK_ACCOUNT_TYPE: Record<string, string> = {
 /** Standing finance rule — always load this Seriti max-price value. */
 export const DEFAULT_MAX_PRICE = "300000";
 
+/** First numeric amount in free text (handles "R1,200 to R1,700" → 1200). */
+export function firstAmountDigits(raw: string): string {
+  const m = String(raw ?? "")
+    .replace(/,/g, "")
+    .match(/(\d+(?:\.\d+)?)/);
+  return m ? m[1] : "";
+}
+
 export function accountTypeForBank(bank: string): string {
   const n = bank.toLowerCase();
   for (const [needle, value] of Object.entries(BANK_ACCOUNT_TYPE)) {
@@ -122,7 +130,7 @@ export function applyDeterministicFixes(
 
     const foodSpend = firstFilled(intakeValues, intakeHeadersFor(mapping, "expense_food"));
     if (foodSpend && !isMissingValue(foodSpend)) {
-      const digits = foodSpend.replace(/[^\d.]/g, "");
+      const digits = firstAmountDigits(foodSpend);
       if (digits) next["Food cost"] = digits;
     }
 
@@ -131,7 +139,7 @@ export function applyDeterministicFixes(
       intakeHeadersFor(mapping, "expense_cellphone")
     );
     if (phoneSpend && !isMissingValue(phoneSpend)) {
-      const digits = phoneSpend.replace(/[^\d.]/g, "");
+      const digits = firstAmountDigits(phoneSpend);
       if (digits) next["Telephone payment"] = digits;
     }
 
@@ -141,7 +149,7 @@ export function applyDeterministicFixes(
       intakeHeadersFor(mapping, "expense_accounts")
     );
     if (accountsSpend && !isMissingValue(accountsSpend)) {
-      const digits = accountsSpend.replace(/[^\d.]/g, "");
+      const digits = firstAmountDigits(accountsSpend);
       if (digits) next["Transport cost"] = digits;
     }
 

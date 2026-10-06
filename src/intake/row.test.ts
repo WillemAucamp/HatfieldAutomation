@@ -121,6 +121,22 @@ describe("output row contract", () => {
     assert.equal(values["Transport cost"], "");
   });
 
+  it("takes the first number from expense ranges like 1200 to 1700", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "How much do you spend on food?": "1200 to 1700",
+        "How much do you spend on a cellphone?": "100",
+        "How much do you spend on a accounts?": "2700",
+      }
+    );
+    assert.equal(values["Food cost"], "1200");
+    assert.equal(values["Telephone payment"], "100");
+    assert.equal(values["Transport cost"], "2700");
+  });
+
   it("does not copy the home address into employer fields or invent expense zeros", () => {
     const values = buildOutputValues(
       mapping,
