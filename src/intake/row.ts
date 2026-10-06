@@ -1,6 +1,7 @@
 import { firstFilled } from "./headers.js";
 import { copyColumns } from "./mapping.js";
 import type { IntakeMapping } from "./mapping.js";
+import { parseExpenseSummary } from "./expenses.js";
 import {
   isMissingValue,
   parseDurationToMmDdYyyy,
@@ -20,6 +21,17 @@ const BANK_ACCOUNT_TYPE: Record<string, string> = {
   discovery: "Savings/Transactional",
   investec: "Cheque/Current",
 };
+
+/** Standing finance rule — always load this Seriti max-price value. */
+export const DEFAULT_MAX_PRICE = "300000";
+
+/** First numeric amount in free text (handles "R1,200 to R1,700" → 1200). */
+export function firstAmountDigits(raw: string): string {
+  const m = String(raw ?? "")
+    .replace(/,/g, "")
+    .match(/(\d+(?:\.\d+)?)/);
+  return m ? m[1] : "";
+}
 
 export function accountTypeForBank(bank: string): string {
   const n = bank.toLowerCase();
@@ -107,8 +119,92 @@ export function applyDeterministicFixes(
     }
   }
 
+  if (mapping) {
+    const nokName = firstFilled(intakeValues, intakeHeadersFor(mapping, "next_of_kin_name"));
+    const nokSurname = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "next_of_kin_surname")
+    );
+    const nokCombined = [nokName, nokSurname].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    if (nokCombined) next["Next of kin name + Surname"] = nokCombined;
+
+    const foodSpend = firstFilled(intakeValues, intakeHeadersFor(mapping, "expense_food"));
+    if (foodSpend && !isMissingValue(foodSpend)) {
+      const digits = firstAmountDigits(foodSpend);
+      if (digits) next["Food cost"] = digits;
+    }
+
+    const phoneSpend = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "expense_cellphone")
+    );
+    if (phoneSpend && !isMissingValue(phoneSpend)) {
+      const digits = firstAmountDigits(phoneSpend);
+      if (digits) next["Telephone payment"] = digits;
+    }
+
+    // Form's third dedicated spend column → Seriti Transport (Food / Telephone / Transport).
+    const accountsSpend = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "expense_accounts")
+    );
+    if (accountsSpend && !isMissingValue(accountsSpend)) {
+      const digits = firstAmountDigits(accountsSpend);
+      if (digits) next["Transport cost"] = digits;
+    }
+
+    const summary = firstFilled(intakeValues, intakeHeadersFor(mapping, "expenses_summary"));
+    const parsed = parseExpenseSummary(summary);
+    if ((!next["Food cost"] || isMissingValue(next["Food cost"])) && parsed.food) {
+      next["Food cost"] = parsed.food;
+    }
+    if (
+      (!next["Telephone payment"] || isMissingValue(next["Telephone payment"])) &&
+      parsed.telephone
+    ) {
+      next["Telephone payment"] = parsed.telephone;
+    }
+    if (
+      (!next["Transport cost"] || isMissingValue(next["Transport cost"])) &&
+      parsed.transport
+    ) {
+      next["Transport cost"] = parsed.transport;
+    }
+
+    // Marital status: Form value wins. Else Married if a spouse was given, otherwise Single.
+    const marital = firstFilled(intakeValues, intakeHeadersFor(mapping, "marital_status"));
+    if (marital && !isMissingValue(marital)) {
+      next["Marital status"] = marital;
+    } else if (!next["Marital status"] || isMissingValue(next["Marital status"])) {
+      const spouse = firstFilled(intakeValues, [
+        ...intakeHeadersFor(mapping, "spouse_name"),
+        ...intakeHeadersFor(mapping, "spouse_number"),
+      ]);
+      next["Marital status"] = spouse && !isMissingValue(spouse) ? "Married" : "Single";
+    }
+
+    // Form does not currently ask NOK relationship; Seriti requires a dropdown value.
+    const nokRel = firstFilled(intakeValues, intakeHeadersFor(mapping, "nok_relationship"));
+    if (nokRel && !isMissingValue(nokRel)) {
+      next["Next of kin relationship"] = nokRel;
+    } else if (
+      !next["Next of kin relationship"] ||
+      isMissingValue(next["Next of kin relationship"])
+    ) {
+      next["Next of kin relationship"] = "Distant";
+    }
+  }
+
+  // Standing rule: every application uses the same Seriti max price.
+  next["Max price range"] = DEFAULT_MAX_PRICE;
+
   for (const expense of ["Telephone payment", "Transport cost", "Food cost"]) {
-    if (isMissingValue(next[expense])) next[expense] = "";
+    if (isMissingValue(next[expense])) {
+      next[expense] = "";
+      continue;
+    }
+    // Seriti expense fields must be numeric; drop "Nothing" / free-text refusals.
+    if (!/\d/.test(next[expense])) next[expense] = "";
   }
   return next;
 }

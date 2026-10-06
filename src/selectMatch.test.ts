@@ -41,6 +41,25 @@ describe("pickSelectOption", () => {
     ];
     assert.equal(pickSelectOption(industries, "Business services")?.text, "BUSINESS SERVICES SECTOR");
   });
+
+  it("maps Automotive sheet labels onto Seriti industry options", () => {
+    const industries = [
+      { value: "1", text: "ADVERTISING" },
+      { value: "2", text: "BUSINESS SERVICES" },
+      { value: "3", text: "MOTOR TRADE" },
+      { value: "4", text: "TRANSPORT" },
+    ];
+    assert.equal(pickSelectOption(industries, "Automotive")?.text, "MOTOR TRADE");
+  });
+
+  it("maps Associate job titles onto Seriti occupation options", () => {
+    const occupations = [
+      { value: "1", text: "ACTOR" },
+      { value: "2", text: "ADMINISTRATIVE PERSONNEL" },
+      { value: "3", text: "AGENT" },
+    ];
+    assert.equal(pickSelectOption(occupations, "Associate")?.text, "ADMINISTRATIVE PERSONNEL");
+  });
 });
 
 describe("firstUsableSelectOption", () => {

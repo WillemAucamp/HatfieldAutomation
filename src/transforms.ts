@@ -23,7 +23,7 @@ export function transformMobile(raw: string | number | undefined | null): Transf
       value: original,
       valid: false,
       code: "MOBILE_EMPTY",
-      message: "Mobile number is empty",
+      message: "Mobile number missing",
     };
   }
 
@@ -208,7 +208,7 @@ export function validateIdNumber(raw: string | number | undefined | null): Trans
       value: original,
       valid: false,
       code: "ID_EMPTY",
-      message: "ID number is empty",
+      message: "ID number missing",
     };
   }
 
@@ -262,7 +262,7 @@ export function validateDateFormat(
       value: original,
       valid: false,
       code: emptyCode,
-      message: `${fieldLabel} is empty`,
+      message: `${fieldLabel} missing`,
     };
   }
 
@@ -321,11 +321,12 @@ export function parsePersonName(
       initials: "",
       valid: false,
       code: emptyCode,
-      message: `${label} is empty`,
+      message: `${label} missing`,
     };
   }
 
   const parts = value.split(" ");
+  const subject = label.replace(/\s+name$/i, "").trim() || label;
   if (parts.length < 2) {
     return {
       firstName: value,
@@ -333,7 +334,7 @@ export function parsePersonName(
       initials: initialsFromFirstNames(value),
       valid: false,
       code: surnameCode,
-      message: `${label} "${value}" has no surname (expected "First Last")`,
+      message: `${subject} surname missing`,
     };
   }
 
@@ -347,7 +348,7 @@ export function parsePersonName(
       initials,
       valid: false,
       code: surnameCode,
-      message: `${label} "${value}" does not have a full surname`,
+      message: `${subject} surname missing`,
     };
   }
 
@@ -440,7 +441,7 @@ export function requireText(
 export function requireEmail(raw: string | undefined | null): TransformResult {
   const value = String(raw ?? "").trim();
   if (!value) {
-    return { value: "", valid: false, code: "EMAIL_EMPTY", message: "Email is empty" };
+    return { value: "", valid: false, code: "EMAIL_EMPTY", message: "Email missing" };
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
     return {
@@ -460,7 +461,7 @@ export function requireAmount(
 ): TransformResult {
   const value = String(raw ?? "").trim();
   if (isMissingValue(value)) {
-    return { value: "", valid: false, code, message: `${label} is empty` };
+    return { value: "", valid: false, code, message: `${label} missing` };
   }
   return { value, valid: true };
 }
@@ -502,7 +503,28 @@ export function expandSelectNeedles(raw: string): string[] {
     { keys: ["rsa id", "rsa"], terms: ["RSA"] },
     { keys: ["labourer", "laborer"], terms: ["LABOURER", "LABORER"] },
     { keys: ["skilled worker"], terms: ["SKILLED"] },
+    {
+      keys: ["associate", "sales associate", "shop assistant"],
+      terms: ["ADMINISTRATIVE PERSONNEL", "ADMINISTRATOR", "ASSISTANT", "AGENT", "CLERK"],
+    },
+    { keys: ["administrator", "admin"], terms: ["ADMINISTRATOR", "ADMINISTRATIVE PERSONNEL"] },
+    { keys: ["driver"], terms: ["DRIVER"] },
+    { keys: ["teacher"], terms: ["TEACHER", "EDUCATOR"] },
+    { keys: ["entry level", "entry-level", "junior"], terms: ["JUNIOR", "ENTRY", "STAFF", "GENERAL"] },
+    { keys: ["mid-level", "mid level", "intermediate"], terms: ["MID", "INTERMEDIATE", "STAFF"] },
     { keys: ["business services"], terms: ["BUSINESS SERVICES"] },
+    {
+      keys: ["automotive", "motor", "motor trade", "vehicle", "car dealer", "dealership"],
+      terms: ["MOTOR TRADE", "MOTOR", "TRANSPORT", "LOGISTICS", "BUSINESS SERVICES"],
+    },
+    {
+      keys: ["logistics", "transport", "transportation", "logistics transport"],
+      terms: ["LOGISTICS", "TRANSPORT", "TRANSPORTATION"],
+    },
+    { keys: ["mining"], terms: ["MINING"] },
+    { keys: ["healthcare", "health care", "medical"], terms: ["HEALTH", "MEDICAL", "HEALTHCARE"] },
+    { keys: ["retail"], terms: ["RETAIL"] },
+    { keys: ["security"], terms: ["SECURITY"] },
     { keys: ["gauteng", "gp"], terms: ["GAUTENG"] },
     { keys: ["western cape", "wc"], terms: ["WESTERN CAPE"] },
     { keys: ["kwazulu natal", "kwazulu-natal", "kzn"], terms: ["KWAZULU"] },

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { loadIntakeMapping } from "./mapping.js";
-import { accountTypeForBank, buildOutputValues } from "./row.js";
+import { accountTypeForBank, buildOutputValues, DEFAULT_MAX_PRICE } from "./row.js";
 
 const mapping = loadIntakeMapping("./config/intake-mapping.yaml");
 
@@ -12,10 +12,11 @@ const intakeAda = {
   "Highest education": "Grade 12",
   "ID Number": "8001015800084",
   "Whatsapp Phone number": "0821234567",
-  "Current street address Example: 1058 Steve Biko Road": "12 Main Road",
+  "Current STREET address and House number Example: 1058 Steve Biko Road": "12 Main Road",
   Province: "Gauteng",
-  "Relative or friend Name & surname Example: Vusi Nel": "Vusi Nel",
-  "Relative or friend number example: 0856475124": "0856475124",
+  "Relative or friend Name Example: Vusi": "Vusi",
+  "Relative or friend surname Example: Nel": "Nel",
+  "Relative or friend number example: 0856475124 CANNOT BE THE SAME AS YOURS": "0856475124",
   "Name of Company you work for?": "Test Shop",
   "Job title?": "Clerk",
   "Gross Income per month (Income on your payslip before any payslip deductions)": "15000",
@@ -66,8 +67,74 @@ describe("output row contract", () => {
     assert.equal(values["Account type (AI—most likely option based on bank)"], "Savings/Transactional");
     assert.equal(values["Account holder name and surname (same as client)"], "Ada Lovelace");
     assert.equal(values["Year start living at address (MM DD YYYY format ONLY)"], "10 05 2023");
+    assert.equal(values["Next of kin name + Surname"], "Vusi Nel");
+    assert.equal(values["Max price range"], DEFAULT_MAX_PRICE);
+    assert.equal(values["Marital status"], "Single");
+    assert.equal(values["Next of kin relationship"], "Distant");
     assert.equal(values.NR, undefined);
     assert.equal(mapping.destination_columns.length, 38);
+  });
+
+  it("sets Married when a spouse is present and always forces max price", () => {
+    const values = buildOutputValues(mapping, {}, {
+      ...intakeAda,
+      "Spouse Name + Surname": "Alan Lovelace",
+    });
+    assert.equal(values["Marital status"], "Married");
+    assert.equal(values["Max price range"], "300000");
+  });
+
+  it("combines split next-of-kin name columns and prefers dedicated expense fields", () => {
+    const values = buildOutputValues(
+      mapping,
+      {
+        "Food cost": "999",
+        "Telephone payment": "888",
+        "Transport cost": "777",
+      },
+      {
+        ...intakeAda,
+        "How much do you spend on food?": "R1500",
+        "How much do you spend on a cellphone?": "R250",
+        "How much do you spend on a accounts?": "R400",
+      }
+    );
+    assert.equal(values["Next of kin name + Surname"], "Vusi Nel");
+    assert.equal(values["Food cost"], "1500");
+    assert.equal(values["Telephone payment"], "250");
+    assert.equal(values["Transport cost"], "400");
+  });
+
+  it("leaves Transport blank when accounts spend has no digits", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "How much do you spend on food?": "R1000",
+        "How much do you spend on a cellphone?": "R50",
+        "How much do you spend on a accounts?": "I don't have accounts",
+      }
+    );
+    assert.equal(values["Food cost"], "1000");
+    assert.equal(values["Telephone payment"], "50");
+    assert.equal(values["Transport cost"], "");
+  });
+
+  it("takes the first number from expense ranges like 1200 to 1700", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "How much do you spend on food?": "1200 to 1700",
+        "How much do you spend on a cellphone?": "100",
+        "How much do you spend on a accounts?": "2700",
+      }
+    );
+    assert.equal(values["Food cost"], "1200");
+    assert.equal(values["Telephone payment"], "100");
+    assert.equal(values["Transport cost"], "2700");
   });
 
   it("does not copy the home address into employer fields or invent expense zeros", () => {

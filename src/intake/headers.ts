@@ -40,9 +40,19 @@ export function hasConsent(raw: string): boolean {
   return /\byes\b|\btrue\b|\bok\b|\bagree\b|\bconsent\b|\bpermission\b|\bi do\b/.test(s);
 }
 
+/** Collapse Form header newlines/spaces so LLM prompts stay one field per line. */
+export function displayHeader(value: string): string {
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function flattenRow(row: Record<string, string>): string {
   return Object.entries(row)
     .filter(([, value]) => String(value ?? "").trim())
-    .map(([key, value]) => `${key}: ${String(value).trim()}`)
+    .map(
+      ([key, value]) =>
+        `${displayHeader(key)}: ${String(value).trim().replace(/\s*\n+\s*/g, " ")}`
+    )
     .join("\n");
 }
