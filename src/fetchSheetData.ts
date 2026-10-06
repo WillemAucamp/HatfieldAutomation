@@ -281,32 +281,31 @@ function mapRow(
   const maritalRaw = mapping.maritalStatus
     ? getCell(row, mapping.maritalStatus)
     : getCell(row, "Marital status");
-  const maritalResult = requireText(
-    maritalRaw,
-    "MARITAL_STATUS_EMPTY",
-    "Marital status is not on the intake sheet"
-  );
-  pushError(errors, maritalResult, "maritalStatus", maritalRaw);
+  // Copy when present. Blank is allowed — live Form often leaves this empty.
+  const maritalResult = maritalRaw.trim()
+    ? requireText(maritalRaw, "MARITAL_STATUS_EMPTY", "Marital status is not on the intake sheet")
+    : { value: "", valid: true };
+  if (maritalRaw.trim()) pushError(errors, maritalResult, "maritalStatus", maritalRaw);
 
   const nokRelRaw = mapping.nextOfKinRelationship
     ? getCell(row, mapping.nextOfKinRelationship)
     : getCell(row, "Next of kin relationship");
-  const nokRelResult = requireText(
-    nokRelRaw,
-    "NOK_RELATIONSHIP_EMPTY",
-    "Next of kin relationship is not on the intake sheet"
-  );
-  pushError(errors, nokRelResult, "nextOfKinRelationship", nokRelRaw);
+  const nokRelResult = nokRelRaw.trim()
+    ? requireText(
+        nokRelRaw,
+        "NOK_RELATIONSHIP_EMPTY",
+        "Next of kin relationship is not on the intake sheet"
+      )
+    : { value: "", valid: true };
+  if (nokRelRaw.trim()) pushError(errors, nokRelResult, "nextOfKinRelationship", nokRelRaw);
 
   const maxPriceRaw = mapping.maxPrice
     ? getCell(row, mapping.maxPrice)
     : getCell(row, "Max price range");
-  const maxPriceResult = requireText(
-    maxPriceRaw,
-    "MAX_PRICE_EMPTY",
-    "Max price is not on the intake sheet"
-  );
-  pushError(errors, maxPriceResult, "maxPrice", maxPriceRaw);
+  const maxPriceResult = maxPriceRaw.trim()
+    ? requireText(maxPriceRaw, "MAX_PRICE_EMPTY", "Max price is not on the intake sheet")
+    : { value: "", valid: true };
+  if (maxPriceRaw.trim()) pushError(errors, maxPriceResult, "maxPrice", maxPriceRaw);
 
   const employerNameRaw = getCell(row, mapping.employerName);
   const employerNameResult = requireText(
@@ -318,7 +317,27 @@ function mapRow(
 
   const employerPhoneRaw = getCell(row, mapping.employerPhone);
   const employerPhoneResult = transformMobile(employerPhoneRaw);
-  pushError(errors, employerPhoneResult, "employerPhone", employerPhoneRaw);
+  if (!employerPhoneResult.valid) {
+    const code =
+      employerPhoneResult.code === "MOBILE_EMPTY"
+        ? "EMPLOYER_PHONE_EMPTY"
+        : employerPhoneResult.code === "MOBILE_NOT_10_DIGITS"
+          ? "EMPLOYER_PHONE_NOT_10_DIGITS"
+          : employerPhoneResult.code;
+    pushError(
+      errors,
+      {
+        ...employerPhoneResult,
+        code,
+        message:
+          code === "EMPLOYER_PHONE_EMPTY"
+            ? "Employer telephone is empty"
+            : employerPhoneResult.message,
+      },
+      "employerPhone",
+      employerPhoneRaw
+    );
+  }
 
   const employerAddressRaw = getCell(row, mapping.employerAddress);
   const employerAddressResult = requireText(

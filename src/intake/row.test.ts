@@ -12,10 +12,11 @@ const intakeAda = {
   "Highest education": "Grade 12",
   "ID Number": "8001015800084",
   "Whatsapp Phone number": "0821234567",
-  "Current street address Example: 1058 Steve Biko Road": "12 Main Road",
+  "Current STREET address and House number Example: 1058 Steve Biko Road": "12 Main Road",
   Province: "Gauteng",
-  "Relative or friend Name & surname Example: Vusi Nel": "Vusi Nel",
-  "Relative or friend number example: 0856475124": "0856475124",
+  "Relative or friend Name Example: Vusi": "Vusi",
+  "Relative or friend surname Example: Nel": "Nel",
+  "Relative or friend number example: 0856475124 CANNOT BE THE SAME AS YOURS": "0856475124",
   "Name of Company you work for?": "Test Shop",
   "Job title?": "Clerk",
   "Gross Income per month (Income on your payslip before any payslip deductions)": "15000",
@@ -66,8 +67,27 @@ describe("output row contract", () => {
     assert.equal(values["Account type (AI—most likely option based on bank)"], "Savings/Transactional");
     assert.equal(values["Account holder name and surname (same as client)"], "Ada Lovelace");
     assert.equal(values["Year start living at address (MM DD YYYY format ONLY)"], "10 05 2023");
+    assert.equal(values["Next of kin name + Surname"], "Vusi Nel");
     assert.equal(values.NR, undefined);
     assert.equal(mapping.destination_columns.length, 38);
+  });
+
+  it("combines split next-of-kin name columns and prefers dedicated expense fields", () => {
+    const values = buildOutputValues(
+      mapping,
+      {
+        "Food cost": "999",
+        "Telephone payment": "888",
+      },
+      {
+        ...intakeAda,
+        "How much do you spend on food?": "R1500",
+        "How much do you spend on a cellphone?": "R250",
+      }
+    );
+    assert.equal(values["Next of kin name + Surname"], "Vusi Nel");
+    assert.equal(values["Food cost"], "1500");
+    assert.equal(values["Telephone payment"], "250");
   });
 
   it("does not copy the home address into employer fields or invent expense zeros", () => {

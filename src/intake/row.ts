@@ -107,6 +107,27 @@ export function applyDeterministicFixes(
     }
   }
 
+  if (mapping) {
+    const nokName = firstFilled(intakeValues, intakeHeadersFor(mapping, "next_of_kin_name"));
+    const nokSurname = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "next_of_kin_surname")
+    );
+    const nokCombined = [nokName, nokSurname].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    if (nokCombined) next["Next of kin name + Surname"] = nokCombined;
+
+    const foodSpend = firstFilled(intakeValues, intakeHeadersFor(mapping, "expense_food"));
+    if (foodSpend && !isMissingValue(foodSpend)) next["Food cost"] = foodSpend.replace(/[^\d.]/g, "") || foodSpend;
+
+    const phoneSpend = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "expense_cellphone")
+    );
+    if (phoneSpend && !isMissingValue(phoneSpend)) {
+      next["Telephone payment"] = phoneSpend.replace(/[^\d.]/g, "") || phoneSpend;
+    }
+  }
+
   for (const expense of ["Telephone payment", "Transport cost", "Food cost"]) {
     if (isMissingValue(next[expense])) next[expense] = "";
   }
