@@ -6,22 +6,60 @@ export function normalizeHeader(value: string): string {
     .trim();
 }
 
-export function cell(row: Record<string, string>, header: string): string {
-  if (Object.prototype.hasOwnProperty.call(row, header)) {
-    return String(row[header] ?? "").trim();
-  }
+/** Drop example / hint suffixes so Form title drift still matches. */
+export function coreHeader(value: string): string {
+  return normalizeHeader(value)
+    .replace(/\bexample\b.*$/i, "")
+    .replace(/\bcannot be the same as yours\b.*$/i, "")
+    .replace(/[?:]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function significantTokens(value: string): string[] {
+  return coreHeader(value)
+    .split(" ")
+    .map((token) => token.replace(/[^a-z0-9]/g, ""))
+    .filter((token) => token.length >= 3)
+    .filter((token) => !["example", "your", "the", "and", "for", "with", "from"].includes(token));
+}
+
+function headersCompatible(have: string, want: string): boolean {
+  const a = coreHeader(have);
+  const b = coreHeader(want);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+
+  const aTokens = significantTokens(have);
+  const bTokens = significantTokens(want);
+  if (!bTokens.length) return false;
+  // Require every significant token from the shorter side to appear in the longer.
+  const [shorter, longer] =
+    aTokens.length <= bTokens.length ? [aTokens, bTokens] : [bTokens, aTokens];
+  if (shorter.length < 2) return false;
+  return shorter.every((token) => longer.includes(token));
+}
+
+export function findHeaderKey(
+  row: Record<string, string>,
+  header: string
+): string | undefined {
+  if (Object.prototype.hasOwnProperty.call(row, header)) return header;
   const want = normalizeHeader(header);
-  for (const [key, value] of Object.entries(row)) {
-    if (normalizeHeader(key) === want) return String(value ?? "").trim();
+  for (const key of Object.keys(row)) {
+    if (normalizeHeader(key) === want) return key;
   }
-  for (const [key, value] of Object.entries(row)) {
-    const have = normalizeHeader(key);
-    if (have.includes(want) || want.includes(have)) {
-      const text = String(value ?? "").trim();
-      if (text) return text;
-    }
+  for (const key of Object.keys(row)) {
+    if (headersCompatible(key, header)) return key;
   }
-  return "";
+  return undefined;
+}
+
+export function cell(row: Record<string, string>, header: string): string {
+  const key = findHeaderKey(row, header);
+  if (!key) return "";
+  return String(row[key] ?? "").trim();
 }
 
 export function firstFilled(row: Record<string, string>, headers: string[]): string {
@@ -30,6 +68,16 @@ export function firstFilled(row: Record<string, string>, headers: string[]): str
     if (value) return value;
   }
   return "";
+}
+
+/** Join several Form columns (e.g. next-of-kin first + surname) with spaces. */
+export function joinFilled(row: Record<string, string>, headers: string[]): string {
+  return headers
+    .map((header) => cell(row, header))
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function hasConsent(raw: string): boolean {
