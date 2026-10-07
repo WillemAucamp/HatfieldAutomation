@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parse } from "yaml";
 
-export type FieldMode = "copy" | "infer" | "writer";
+export type FieldMode = "copy" | "infer" | "writer" | "join";
 
 export interface FieldMapEntry {
   destination: string;
@@ -49,4 +49,8 @@ export function llmColumns(mapping: IntakeMapping): string[] {
 
 export function copyColumns(mapping: IntakeMapping): FieldMapEntry[] {
   return mapping.field_map.filter((f) => f.mode === "copy");
+}
+
+export function joinColumns(mapping: IntakeMapping): FieldMapEntry[] {
+  return mapping.field_map.filter((f) => f.mode === "join");
 }

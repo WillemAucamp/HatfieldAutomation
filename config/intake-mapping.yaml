@@ -35,7 +35,8 @@ intake_columns:
   - gross_monthly
   - nett_monthly
   - bank_name
-  - next_of_kin_name
+  - next_of_kin_first_name
+  - next_of_kin_surname
   - next_of_kin_phone
   - expenses_summary
   - id_number
@@ -53,7 +54,7 @@ intake_headers:
   whatsapp_phone: Whatsapp Phone number
   gender: Gender
   highest_education: Highest education
-  street_address: "Current street address Example: 1058 Steve Biko Road"
+  street_address: "Current STREET address and House number Example: 1058 Steve Biko Road"
   province: Province
   city_town: "City/Town Example: Pretoria/Cape Town/ Kimberley"
   years_at_address: "How long have you lived here? Example: 3 years/ 2 months"
@@ -63,8 +64,9 @@ intake_headers:
   gross_monthly: "Gross Income per month (Income on your payslip before any payslip deductions)"
   nett_monthly: "Net Income per month? (Income paid into your account by your employer)"
   bank_name: Which bank do you use?
-  next_of_kin_name: "Relative or friend Name & surname Example: Vusi Nel"
-  next_of_kin_phone: "Relative or friend number example: 0856475124"
+  next_of_kin_first_name: "Relative or friend Name Example: Vusi"
+  next_of_kin_surname: "Relative or friend surname Example: Nel"
+  next_of_kin_phone: "Relative or friend number example: 0856475124 CANNOT BE THE SAME AS YOURS"
   expenses_summary: "Summary of your expenses, what do you pay on the below Food R2000 Accounts R1000 Other R500"
   id_number: ID Number
   consent: "Thank you for the above info provided, looking forward to getting you the best possible deal Are you okay with us processing your information for this finance application, Do we have your permission to apply on your behalf to see what is the best possible deal?"
@@ -113,7 +115,8 @@ destination_columns:
   - Status
   - Timing
 
-# copy = pass through (normalise only). infer = LLM / search / standing prompt rules.
+# copy = pass through (normalise only). join = concatenate Form columns with spaces.
+# infer = LLM / search / standing prompt rules.
 # writer = filled by the sheet writer / Melrose loader, not by Gemini.
 field_map:
   - destination: NR
@@ -159,6 +162,7 @@ field_map:
   - destination: Address line
     source: street_address
     mode: copy
+    notes: Live Form title is "Current STREET address and House number…".
 
   - destination: Postal code
     sources: [street_address, city_town, province]
@@ -175,8 +179,9 @@ field_map:
     notes: If "X years/months living there", calculate from today as MM DD YYYY. Never use the ID date of birth.
 
   - destination: Next of kin name + Surname
-    source: next_of_kin_name
-    mode: copy
+    sources: [next_of_kin_first_name, next_of_kin_surname]
+    mode: join
+    notes: Form asks for first name and surname in separate columns; join in code.
 
   - destination: Next of kin cellphone number
     source: next_of_kin_phone

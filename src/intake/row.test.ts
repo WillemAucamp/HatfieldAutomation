@@ -12,10 +12,11 @@ const intakeAda = {
   "Highest education": "Grade 12",
   "ID Number": "8001015800084",
   "Whatsapp Phone number": "0821234567",
-  "Current street address Example: 1058 Steve Biko Road": "12 Main Road",
+  "Current STREET address and House number Example: 1058 Steve Biko Road": "12 Main Road",
   Province: "Gauteng",
-  "Relative or friend Name & surname Example: Vusi Nel": "Vusi Nel",
-  "Relative or friend number example: 0856475124": "0856475124",
+  "Relative or friend Name Example: Vusi": "Vusi",
+  "Relative or friend surname Example: Nel": "Nel",
+  "Relative or friend number example: 0856475124 CANNOT BE THE SAME AS YOURS": "0856475124",
   "Name of Company you work for?": "Test Shop",
   "Job title?": "Clerk",
   "Gross Income per month (Income on your payslip before any payslip deductions)": "15000",
@@ -59,6 +60,9 @@ describe("output row contract", () => {
     assert.equal(values.Title, "Ms");
     assert.equal(values.Occupation, "Clerk");
     assert.equal(values["Industry (AI based on employer)"], "Retail");
+    assert.equal(values["Address line"], "12 Main Road");
+    assert.equal(values["Next of kin name + Surname"], "Vusi Nel");
+    assert.equal(values["Next of kin cellphone number"], "0856475124");
     assert.equal(values.Status, "");
     assert.equal(values.Timing, "");
     assert.equal(values["ID Type"], "RSA ID");
@@ -82,5 +86,38 @@ describe("output row contract", () => {
     assert.equal(values["Employer street address (online search)"], "");
     assert.equal(values["Telephone payment"], "");
     assert.equal(values["Address line"], "12 Main Road");
+  });
+
+  it("still fills Address and NOK when Form headers include extra example text or newlines", () => {
+    const fuzzyIntake = {
+      "Name and surname": "Ada Lovelace",
+      "Email address": "ada@example.com",
+      Gender: "Female",
+      "ID Number": "8001015800084",
+      "Whatsapp Phone number": "0821234567",
+      "Current STREET address and House number\nExample: 1058 Steve Biko Road": "88 Oak Ave",
+      Province: "Gauteng",
+      "Relative or friend Name\nExample: Vusi": "Thabo",
+      "Relative or friend surname\nExample: Nel": "Dlamini",
+      "Name of Company you work for?": "Test Shop",
+      "Job title?": "Clerk",
+      "Which bank do you use?": "Capitec",
+    };
+    const out = buildOutputValues(mapping, {}, fuzzyIntake);
+    assert.equal(out["Address line"], "88 Oak Ave");
+    assert.equal(out["Next of kin name + Surname"], "Thabo Dlamini");
+  });
+
+  it("ignores Gemini rewrites of Address line and Next of kin name", () => {
+    const values = buildOutputValues(
+      mapping,
+      {
+        "Address line": "Invented Street",
+        "Next of kin name + Surname": "Invented Kin",
+      },
+      intakeAda
+    );
+    assert.equal(values["Address line"], "12 Main Road");
+    assert.equal(values["Next of kin name + Surname"], "Vusi Nel");
   });
 });

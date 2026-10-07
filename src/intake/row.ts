@@ -1,5 +1,5 @@
-import { firstFilled } from "./headers.js";
-import { copyColumns } from "./mapping.js";
+import { firstFilled, joinFilled } from "./headers.js";
+import { copyColumns, joinColumns } from "./mapping.js";
 import type { IntakeMapping } from "./mapping.js";
 import {
   isMissingValue,
@@ -137,12 +137,20 @@ export function buildOutputValues(
     if (copied) values[entry.destination] = copied.replace(/\s*\n+\s*/g, " ").trim();
   }
 
+  for (const entry of joinColumns(mapping)) {
+    const joined = joinFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, entry.source, entry.sources)
+    );
+    if (joined) values[entry.destination] = joined.replace(/\s*\n+\s*/g, " ").trim();
+  }
+
   for (const [column, raw] of Object.entries(llmFields)) {
     if (!(column in values)) continue;
     const text = String(raw ?? "").replace(/\s*\n+\s*/g, " ").trim();
     if (isMissingValue(text)) continue;
     const entry = mapping.field_map.find((f) => f.destination === column);
-    if (entry && entry.mode === "copy") continue;
+    if (entry && (entry.mode === "copy" || entry.mode === "join")) continue;
     values[column] = text;
   }
 
