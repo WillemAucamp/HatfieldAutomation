@@ -9,7 +9,12 @@
 import { loadColumnMapping, loadConfig } from "./config.js";
 import { fetchSheetData } from "./fetchSheetData.js";
 import { cell, firstFilled, flattenRow } from "./intake/headers.js";
-import { enrichWithGemini } from "./intake/gemini.js";
+import {
+  enrichEmployerWithSearch,
+  enrichWithGemini,
+  needsEmployerPhone,
+  normalizeEmployerPhone,
+} from "./intake/gemini.js";
 import { loadIntakeMapping } from "./intake/mapping.js";
 import { buildOutputValues, normalizeEmail } from "./intake/row.js";
 import {
@@ -38,8 +43,13 @@ const PATCH_COLUMNS = [
   "Email",
   "Educational level",
   "Marital status",
+  "Employer telephone number (online search)",
+  "Employer street address (online search)",
+  "Employer postal code (online search)",
   "Employer province (online search)",
 ] as const;
+
+const EMPLOYER_PHONE_COLUMN = "Employer telephone number (online search)";
 
 function norm(value: string): string {
   return String(value ?? "")
@@ -198,6 +208,46 @@ async function main(): Promise<void> {
     } else if (needsFormCopy && !intake) {
       console.warn(`No Form match for ${label} — cannot refill address/NOK`);
       skipped += 1;
+    }
+
+    // Brute-force employer telephone via google_search even when other cells look fine.
+    if (needsEmployerPhone(next) && intake && !dryRun) {
+      console.log(`Employer google_search for ${label} (${employerName || "no name"})…`);
+      try {
+        const found = await enrichEmployerWithSearch(
+          mapping,
+          flattenRow(intake),
+          {
+            apiKey: config.geminiApiKey,
+            model: config.geminiModel,
+            employerSearchAttempts: 3,
+          },
+          next
+        );
+        for (const col of [
+          EMPLOYER_PHONE_COLUMN,
+          "Employer street address (online search)",
+          "Employer postal code (online search)",
+          "Employer province (online search)",
+        ] as const) {
+          const value = found[col] ?? "";
+          if (col === EMPLOYER_PHONE_COLUMN) {
+            const phone = normalizeEmployerPhone(value);
+            if (phone) next[col] = phone;
+          } else if (!isMissingValue(value)) {
+            next[col] = value;
+          }
+        }
+        reenriched += 1;
+      } catch (err) {
+        console.warn(
+          `Employer search failed for ${label}: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      }
+    } else if (needsEmployerPhone(next) && !intake) {
+      console.warn(`No Form match for ${label} — cannot search employer phone`);
     }
 
     for (const col of PATCH_COLUMNS) {

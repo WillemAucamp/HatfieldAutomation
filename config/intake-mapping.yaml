@@ -254,7 +254,7 @@ field_map:
   - destination: Employer telephone number (online search)
     sources: [employer_name, city_town, province, street_address]
     mode: infer
-    notes: Infer from employer + location. Leave empty if not found — do not copy the client mobile.
+    notes: Dedicated google_search pass looks up the business name online and picks the most likely SA telephone. Leave empty in the first pass if unsure — do not copy the client mobile.
 
   - destination: Employer street address (online search)
     sources: [employer_name, city_town, province, street_address]
