@@ -131,22 +131,33 @@ export function postalSearchNeedles(
   province = ""
 ): string[] {
   const code = restorePostalCode(postalCode);
-  const needles: string[] = [code];
+  const codeDigits = String(code).replace(/\D/g, "");
+  const hasRealCode = codeDigits.length === 4;
+  const needles: string[] = [];
   const address = String(addressLine ?? "").trim();
+
+  // Sheet may store a city/town name when the real code is unknown — search that first.
+  if (!hasRealCode && /[A-Za-z]/.test(code)) {
+    needles.push(code);
+  }
+  if (hasRealCode) needles.push(code);
 
   const townAtEnd = address.match(/\b([A-Za-z][A-Za-z\s-]+?)\s+\d{4}\s*$/);
   if (townAtEnd) {
     const town = townAtEnd[1].trim().split(/\s+/).pop() ?? townAtEnd[1].trim();
-    needles.push(`${code} ${town}`, `${town}, ${code}`, town);
+    if (hasRealCode) needles.push(`${code} ${town}`, `${town}, ${code}`);
+    needles.push(town);
   }
 
   for (const token of placeTokensFromAddress(address)) {
-    needles.push(`${code} ${token}`, token);
+    if (hasRealCode) needles.push(`${code} ${token}`);
+    needles.push(token);
   }
 
   const cities = PROVINCE_CITY_HINTS[province.trim().toLowerCase()] ?? [];
   for (const city of cities) {
-    needles.push(`${code} ${city}`);
+    if (hasRealCode) needles.push(`${code} ${city}`);
+    needles.push(city);
   }
 
   return [...new Set(needles.filter(Boolean))];
@@ -414,7 +425,12 @@ export function parseDurationToMmDdYyyy(
   const monthMatch = value.match(/(\d+)\s*(month|months|mo)\b/);
   if (yearMatch) years = Number(yearMatch[1]);
   if (monthMatch) months = Number(monthMatch[1]);
-  if (!yearMatch && !monthMatch) return null;
+  // Bare number with no unit → years (Form clients often write "3" meaning 3 years).
+  if (!yearMatch && !monthMatch) {
+    const bare = value.match(/^(\d{1,2})$/);
+    if (!bare) return null;
+    years = Number(bare[1]);
+  }
 
   const date = new Date(today.getTime());
   date.setFullYear(date.getFullYear() - years);
@@ -501,8 +517,17 @@ export function expandSelectNeedles(raw: string): string[] {
     { keys: ["matric", "grade 12", "grade12"], terms: ["MATRIC", "GRADE 12"] },
     { keys: ["rsa id", "rsa"], terms: ["RSA"] },
     { keys: ["labourer", "laborer"], terms: ["LABOURER", "LABORER"] },
-    { keys: ["skilled worker"], terms: ["SKILLED"] },
-    { keys: ["business services"], terms: ["BUSINESS SERVICES"] },
+    { keys: ["skilled worker"], terms: ["SKILLED WORKER", "SKILLED"] },
+    { keys: ["semi skilled", "semi-skilled"], terms: ["SEMI-SKILLED WORKER", "SEMI SKILLED"] },
+    { keys: ["unskilled"], terms: ["UNSKILLED WORKER", "UNSKILLED"] },
+    { keys: ["junior", "entry level", "entry-level"], terms: ["JUNIOR POSITION", "JUNIOR"] },
+    { keys: ["manager", "management"], terms: ["MANAGEMENT"] },
+    { keys: ["executive", "senior management"], terms: ["SENIOR MANAGEMENT"] },
+    { keys: ["supervisor"], terms: ["SUPERVISOR"] },
+    { keys: ["business services", "consulting"], terms: ["BUSINESS SERVICES"] },
+    { keys: ["logistics", "transportation"], terms: ["TRANSPORT"] },
+    { keys: ["healthcare", "health care"], terms: ["HEALTH"] },
+    { keys: ["financial services", "banking"], terms: ["FINANCE"] },
     { keys: ["gauteng", "gp"], terms: ["GAUTENG"] },
     { keys: ["western cape", "wc"], terms: ["WESTERN CAPE"] },
     { keys: ["kwazulu natal", "kwazulu-natal", "kzn"], terms: ["KWAZULU"] },

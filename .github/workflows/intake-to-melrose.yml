@@ -1,7 +1,8 @@
-# Manual operator trigger. No schedule. No Cursor agent.
+# Manual operator trigger + daily schedule. No Cursor agent.
 # Actions → Intake to Melrose → Run workflow
 #
 # One job: Gemini ingest then Seriti load (same runner, Playwright installed once).
+# On schedule, workflow_dispatch inputs are empty — defaults below keep the backlog capped.
 
 name: Intake to Melrose
 
@@ -28,6 +29,9 @@ on:
         description: "Gemini mapping only — do not write sheets or open Seriti"
         type: boolean
         default: false
+  schedule:
+    # 06:00 UTC daily. GitHub disables schedules after 60 days without repo activity.
+    - cron: "0 6 * * *"
 
 concurrency:
   group: hatfield-pipeline
@@ -52,34 +56,35 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Cache Playwright browsers
-        if: ${{ github.event.inputs.mode != 'ingest-only' && github.event.inputs.dryRun != 'true' }}
+        if: ${{ (github.event_name == 'schedule' || github.event.inputs.mode != 'ingest-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
       - name: Install Playwright Chromium
-        if: ${{ github.event.inputs.mode != 'ingest-only' && github.event.inputs.dryRun != 'true' }}
+        if: ${{ (github.event_name == 'schedule' || github.event.inputs.mode != 'ingest-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
         run: npx playwright install --with-deps chromium
       - name: Enrich Form rows onto the automation sheet
-        if: ${{ github.event.inputs.mode != 'load-only' }}
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.mode != 'load-only' }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
-          MODE: ${{ github.event.inputs.mode }}
-          MAX_INTAKE_ROWS: ${{ github.event.inputs.maxIntakeRows }}
-          DRY_RUN: ${{ github.event.inputs.dryRun }}
+          # schedule has empty inputs — force safe defaults (never process the whole backlog).
+          MODE: ${{ github.event.inputs.mode || 'full' }}
+          MAX_INTAKE_ROWS: ${{ github.event.inputs.maxIntakeRows || '5' }}
+          DRY_RUN: ${{ github.event.inputs.dryRun || 'false' }}
         run: |
           set -euo pipefail
-          echo "mode=${MODE} maxIntakeRows=${MAX_INTAKE_ROWS} dryRun=${DRY_RUN}"
+          echo "mode=${MODE} maxIntakeRows=${MAX_INTAKE_ROWS} dryRun=${DRY_RUN} event=${{ github.event_name }}"
           AUTO_LOAD=false npm run ingest
       - name: Load blank-Status rows into Seriti
-        if: ${{ github.event.inputs.mode != 'ingest-only' && github.event.inputs.dryRun != 'true' }}
+        if: ${{ (github.event_name == 'schedule' || github.event.inputs.mode != 'ingest-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
-          MODE: ${{ github.event.inputs.mode }}
-          ROW_FILTER: ${{ github.event.inputs.rowFilter }}
-          DRY_RUN: ${{ github.event.inputs.dryRun }}
+          MODE: ${{ github.event.inputs.mode || 'full' }}
+          ROW_FILTER: ${{ github.event.inputs.rowFilter || '' }}
+          DRY_RUN: ${{ github.event.inputs.dryRun || 'false' }}
         run: |
           set -euo pipefail
           echo "mode=${MODE} dryRun=${DRY_RUN} rowFilter=${ROW_FILTER:-}"

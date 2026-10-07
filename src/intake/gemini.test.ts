@@ -22,7 +22,8 @@ describe("gemini json parse", () => {
     );
     assert.equal(fields["Postal code"], "2196");
     assert.equal(fields["Industry (AI based on employer)"], "Retail");
-    assert.equal(fields["Telephone payment"], "");
+    assert.equal(fields["Employee level"], "");
+    assert.equal(Object.prototype.hasOwnProperty.call(fields, "Telephone payment"), false);
     assert.equal(Object.prototype.hasOwnProperty.call(fields, "Full name"), false);
     assert.equal(Object.prototype.hasOwnProperty.call(fields, "NR"), false);
   });

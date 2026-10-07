@@ -1,6 +1,13 @@
-import { firstFilled } from "./headers.js";
-import { copyColumns } from "./mapping.js";
+import { firstFilled, joinFilled } from "./headers.js";
+import { copyColumns, joinColumns } from "./mapping.js";
 import type { IntakeMapping } from "./mapping.js";
+import {
+  isSelfEmployed,
+  loadSeritiOptions,
+  mapIndustry,
+  mapLevel,
+  mapOccupation,
+} from "./seritiOptions.js";
 import {
   isMissingValue,
   parseDurationToMmDdYyyy,
@@ -38,6 +45,37 @@ function intakeHeadersFor(
   return keys.map((key) => mapping.intake_headers[key] || key);
 }
 
+/** Fix doubled domains like user@gmail.com@gmail.com from Form typos. */
+export function normalizeEmail(raw: string): string {
+  let value = String(raw ?? "").trim().replace(/\s+/g, "");
+  const match = value.match(/^([^@]+)@([^@]+@.+)$/);
+  if (!match) return value;
+  const local = match[1]!;
+  const rest = match[2]!;
+  const parts = rest.split("@");
+  if (parts.length === 2 && parts[0]!.toLowerCase() === parts[1]!.toLowerCase()) {
+    return `${local}@${parts[0]}`;
+  }
+  // user@gmail.com@gmail.com → keep the last domain segment pair
+  if (parts.length >= 2) {
+    return `${local}@${parts[parts.length - 1]}`;
+  }
+  return value;
+}
+
+function applyStandingDefaults(
+  fields: Record<string, string>,
+  mapping: IntakeMapping
+): void {
+  const defaults = mapping.standing_defaults ?? {};
+  for (const [column, value] of Object.entries(defaults)) {
+    if (!(column in fields)) continue;
+    if (!isMissingValue(fields[column])) continue;
+    if (value === "") continue;
+    fields[column] = value;
+  }
+}
+
 export function applyDeterministicFixes(
   fields: Record<string, string>,
   intakeValues: Record<string, string> = {},
@@ -63,6 +101,8 @@ export function applyDeterministicFixes(
     : next.Title;
   const title = titleFromGender(gender);
   if (title.valid) next.Title = title.value;
+
+  if (next.Email) next.Email = normalizeEmail(next.Email);
 
   const bank = next["Bank name"] ?? "";
   if (bank) {
@@ -105,11 +145,65 @@ export function applyDeterministicFixes(
     if (employedDate) {
       next["Year they started working there (calculate from years provided)"] = employedDate;
     }
+
+    const food = firstFilled(intakeValues, intakeHeadersFor(mapping, "food_spend"));
+    if (food && isMissingValue(next["Food cost"])) next["Food cost"] = food;
+    const cellphone = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "cellphone_spend")
+    );
+    if (cellphone && isMissingValue(next["Telephone payment"])) {
+      next["Telephone payment"] = cellphone;
+    }
+    const accounts = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "accounts_spend")
+    );
+    if (accounts && isMissingValue(next["Transport cost"])) {
+      next["Transport cost"] = accounts;
+    }
+
+    const seriti = loadSeritiOptions();
+    const employment = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "employment")
+    );
+    const jobTitle = firstFilled(intakeValues, intakeHeadersFor(mapping, "job_title"));
+    const employerName = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "employer_name")
+    );
+
+    if (isSelfEmployed(employment, jobTitle, employerName)) {
+      next["Industry (AI based on employer)"] = seriti.self_employed_industry;
+    } else {
+      next["Industry (AI based on employer)"] = mapIndustry(
+        next["Industry (AI based on employer)"] || "",
+        seriti
+      );
+    }
+
+    next.Occupation = mapOccupation(jobTitle || next.Occupation || "", seriti);
+    next["Employee level"] = mapLevel(next["Employee level"] || "", seriti);
+
+    // Employer province falls back to client province — not fabrication of an unknown site.
+    if (isMissingValue(next["Employer province (online search)"])) {
+      const province = next.Province || firstFilled(intakeValues, intakeHeadersFor(mapping, "province"));
+      if (province) next["Employer province (online search)"] = province;
+    }
+
+    // When Gemini leaves postal empty, use city/town as a Seriti place-search needle.
+    if (isMissingValue(next["Postal code"])) {
+      const city = firstFilled(intakeValues, intakeHeadersFor(mapping, "city_town"));
+      if (city) next["Postal code"] = city;
+    }
   }
 
   for (const expense of ["Telephone payment", "Transport cost", "Food cost"]) {
     if (isMissingValue(next[expense])) next[expense] = "";
   }
+
+  if (mapping) applyStandingDefaults(next, mapping);
   return next;
 }
 
@@ -137,12 +231,20 @@ export function buildOutputValues(
     if (copied) values[entry.destination] = copied.replace(/\s*\n+\s*/g, " ").trim();
   }
 
+  for (const entry of joinColumns(mapping)) {
+    const joined = joinFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, entry.source, entry.sources)
+    );
+    if (joined) values[entry.destination] = joined.replace(/\s*\n+\s*/g, " ").trim();
+  }
+
   for (const [column, raw] of Object.entries(llmFields)) {
     if (!(column in values)) continue;
     const text = String(raw ?? "").replace(/\s*\n+\s*/g, " ").trim();
     if (isMissingValue(text)) continue;
     const entry = mapping.field_map.find((f) => f.destination === column);
-    if (entry && entry.mode === "copy") continue;
+    if (entry && (entry.mode === "copy" || entry.mode === "join")) continue;
     values[column] = text;
   }
 

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parse } from "yaml";
 
-export type FieldMode = "copy" | "infer" | "writer";
+export type FieldMode = "copy" | "infer" | "writer" | "join";
 
 export interface FieldMapEntry {
   destination: string;
@@ -24,6 +24,8 @@ export interface IntakeMapping {
   };
   intake_columns: string[];
   intake_headers: Record<string, string>;
+  required_intake_headers?: string[];
+  standing_defaults?: Record<string, string>;
   destination_columns: string[];
   field_map: FieldMapEntry[];
   passthrough_not_on_destination?: string[];
@@ -35,6 +37,11 @@ export function loadIntakeMapping(mappingPath: string): IntakeMapping {
   const raw = parse(readFileSync(absolute, "utf-8")) as IntakeMapping;
   if (!raw?.destination_columns?.length || !raw?.field_map?.length) {
     throw new Error(`Invalid intake mapping at ${absolute}`);
+  }
+  for (const entry of raw.field_map) {
+    if (!["copy", "infer", "writer", "join"].includes(entry.mode)) {
+      throw new Error(`Invalid field mode "${entry.mode}" for ${entry.destination}`);
+    }
   }
   return raw;
 }
@@ -49,4 +56,14 @@ export function llmColumns(mapping: IntakeMapping): string[] {
 
 export function copyColumns(mapping: IntakeMapping): FieldMapEntry[] {
   return mapping.field_map.filter((f) => f.mode === "copy");
+}
+
+export function joinColumns(mapping: IntakeMapping): FieldMapEntry[] {
+  return mapping.field_map.filter((f) => f.mode === "join");
+}
+
+/** Form header strings that must exist on the live intake sheet. */
+export function requiredIntakeHeaderLabels(mapping: IntakeMapping): string[] {
+  const keys = mapping.required_intake_headers ?? [];
+  return keys.map((key) => mapping.intake_headers[key] || key).filter(Boolean);
 }

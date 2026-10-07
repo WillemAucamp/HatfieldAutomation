@@ -1,7 +1,7 @@
 import type { AppConfig } from "../types.js";
 import { enrichWithGemini } from "./gemini.js";
-import { cell, firstFilled, flattenRow, hasConsent } from "./headers.js";
-import { loadIntakeMapping } from "./mapping.js";
+import { assertIntakeHeadersPresent, cell, firstFilled, flattenRow, hasConsent } from "./headers.js";
+import { loadIntakeMapping, requiredIntakeHeaderLabels } from "./mapping.js";
 import { buildOutputValues } from "./row.js";
 import { appendAutomationRow, markIntakeStatus, readUnprocessedIntake } from "./sheets.js";
 
@@ -45,6 +45,12 @@ export async function ingestNewRows(
     statusColumn: config.intakeStatusColumn,
   });
   result.scanned = allIntakeRows.length;
+  if (allIntakeRows.length > 0) {
+    assertIntakeHeadersPresent(
+      Object.keys(allIntakeRows[0]!.values),
+      requiredIntakeHeaderLabels(mapping)
+    );
+  }
   const capped = capIntakeRows(allIntakeRows, config.maxIntakeRows);
   result.remaining = capped.remaining;
   const intakeRows = capped.rows;

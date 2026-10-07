@@ -298,15 +298,11 @@ function mapRow(
   );
   pushError(errors, nokRelResult, "nextOfKinRelationship", nokRelRaw);
 
+  // Form does not ask max price. Empty is allowed; Seriti gets "" (operator can set a standing default).
   const maxPriceRaw = mapping.maxPrice
     ? getCell(row, mapping.maxPrice)
     : getCell(row, "Max price range");
-  const maxPriceResult = requireText(
-    maxPriceRaw,
-    "MAX_PRICE_EMPTY",
-    "Max price is not on the intake sheet"
-  );
-  pushError(errors, maxPriceResult, "maxPrice", maxPriceRaw);
+  const maxPriceResult = { value: maxPriceRaw, valid: true };
 
   const employerNameRaw = getCell(row, mapping.employerName);
   const employerNameResult = requireText(
@@ -316,28 +312,24 @@ function mapRow(
   );
   pushError(errors, employerNameResult, "employerName", employerNameRaw);
 
+  // Employer phone/address/postal are online-search fields. Empty does not block the row;
+  // the loader falls back to client province / personal postal place-search.
   const employerPhoneRaw = getCell(row, mapping.employerPhone);
-  const employerPhoneResult = transformMobile(employerPhoneRaw);
-  pushError(errors, employerPhoneResult, "employerPhone", employerPhoneRaw);
+  const employerPhoneResult = employerPhoneRaw
+    ? transformMobile(employerPhoneRaw)
+    : { value: "", valid: true };
+  if (employerPhoneRaw) {
+    pushError(errors, employerPhoneResult, "employerPhone", employerPhoneRaw);
+  }
 
   const employerAddressRaw = getCell(row, mapping.employerAddress);
-  const employerAddressResult = requireText(
-    employerAddressRaw,
-    "EMPLOYER_ADDRESS_EMPTY",
-    "Employer address is empty"
-  );
-  pushError(errors, employerAddressResult, "employerAddress", employerAddressRaw);
+  const employerAddressResult = { value: employerAddressRaw, valid: true };
 
   const employerPostalRaw = getCell(row, mapping.employerPostalCode);
-  const employerPostalResult = requireText(
-    employerPostalRaw,
-    "EMPLOYER_POSTAL_EMPTY",
-    "Employer postal code is empty"
-  );
-  pushError(errors, employerPostalResult, "employerPostalCode", employerPostalRaw);
-  if (employerPostalResult.valid) {
-    employerPostalResult.value = restorePostalCode(employerPostalResult.value);
-  }
+  const employerPostalResult = {
+    value: employerPostalRaw ? restorePostalCode(employerPostalRaw) : "",
+    valid: true,
+  };
 
   const provinceRaw = mapping.province ? getCell(row, mapping.province) : getCell(row, "Province");
   const provinceResult = requireText(provinceRaw, "PROVINCE_EMPTY", "Province is empty");
@@ -346,12 +338,10 @@ function mapRow(
   const employerProvinceRaw = mapping.employerProvince
     ? getCell(row, mapping.employerProvince)
     : getCell(row, "Employer province (online search)");
-  const employerProvinceResult = requireText(
-    employerProvinceRaw,
-    "EMPLOYER_PROVINCE_EMPTY",
-    "Employer province is empty"
-  );
-  pushError(errors, employerProvinceResult, "employerProvince", employerProvinceRaw);
+  const employerProvinceResult = {
+    value: employerProvinceRaw || provinceResult.value,
+    valid: true,
+  };
 
   const grossRaw = getCell(row, mapping.grossMonthly);
   const grossResult = requireAmount(grossRaw, "GROSS_EMPTY", "Gross monthly salary");

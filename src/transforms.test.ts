@@ -81,6 +81,7 @@ describe("parseDurationToMmDdYyyy", () => {
     const today = new Date(2026, 9, 5);
     assert.equal(parseDurationToMmDdYyyy("3 years", today), "10 05 2023");
     assert.equal(parseDurationToMmDdYyyy("6 months", today), "04 05 2026");
+    assert.equal(parseDurationToMmDdYyyy("3", today), "10 05 2023");
   });
 });
 
@@ -191,5 +192,11 @@ describe("postalSearchNeedles", () => {
   it("still extracts town before a trailing postal code in the address", () => {
     const needles = postalSearchNeedles("7580", "18 sunridge street wesbank kuilsriver 7580", "Western Cape");
     assert.ok(needles.some((n) => /7580/i.test(n) && /kuilsriver/i.test(n)));
+  });
+
+  it("treats a city/town name as a place-search needle when no 4-digit code exists", () => {
+    const needles = postalSearchNeedles("Pretoria", "12 Main Road Pretoria", "Gauteng");
+    assert.ok(needles[0] === "Pretoria" || needles.includes("Pretoria"));
+    assert.ok(!needles.includes("2000"));
   });
 });
