@@ -211,12 +211,24 @@ async function main(): Promise<void> {
     }
 
     // Brute-force employer telephone via google_search even when other cells look fine.
-    if (needsEmployerPhone(next) && intake && !dryRun) {
-      console.log(`Employer google_search for ${label} (${employerName || "no name"})…`);
+    // Prefer Form text; fall back to Employer name + location already on the automation row.
+    if (needsEmployerPhone(next) && employerName && !dryRun) {
+      const searchText = intake
+        ? flattenRow(intake)
+        : [
+            `Name of Company you work for?: ${employerName}`,
+            `Job title?: ${jobTitle}`,
+            `Province: ${next.Province || ""}`,
+            `City/Town: ${next["City/Town"] || ""}`,
+            `Address: ${next["Address line"] || ""}`,
+          ].join("\n");
+      console.log(
+        `Employer google_search for ${label} (${employerName}) source=${intake ? "form" : "sheet"}…`
+      );
       try {
         const found = await enrichEmployerWithSearch(
           mapping,
-          flattenRow(intake),
+          searchText,
           {
             apiKey: config.geminiApiKey,
             model: config.geminiModel,
@@ -246,8 +258,8 @@ async function main(): Promise<void> {
           }`
         );
       }
-    } else if (needsEmployerPhone(next) && !intake) {
-      console.warn(`No Form match for ${label} — cannot search employer phone`);
+    } else if (needsEmployerPhone(next) && !employerName) {
+      console.warn(`No employer name for ${label} — cannot search employer phone`);
     }
 
     for (const col of PATCH_COLUMNS) {
