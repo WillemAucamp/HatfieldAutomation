@@ -53,17 +53,15 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     ids: ["txtemployerName"],
   }, data.employerName);
 
-  if (data.employerPhone) {
-    await fillField(ctx, {
-      name: "Telephone number",
-      section: SECTION,
-      labels: ["Telephone number", "Work telephone", "Employer phone", "Work phone"],
-      role: "textbox",
-      type: "text",
-      names: ["workTelephoneNumber"],
-      ids: ["txtempTelephoneNumber"],
-    }, data.employerPhone);
-  }
+  await fillField(ctx, {
+    name: "Telephone number",
+    section: SECTION,
+    labels: ["Telephone number", "Work telephone", "Employer phone", "Work phone"],
+    role: "textbox",
+    type: "text",
+    names: ["workTelephoneNumber"],
+    ids: ["txtempTelephoneNumber"],
+  }, data.employerPhone);
 
   await fillField(ctx, {
     name: "Work province",

@@ -12,6 +12,7 @@ export async function readSheetRows(options: {
   unprocessedOnly?: boolean;
   statusColumn?: string;
   processableStatuses?: string[];
+  sheetName?: string;
 }): Promise<IntakeSheetRow[]> {
   const parsed = await postWebhookJson(options.webhookUrl, {
     action: "readSheet",
@@ -19,6 +20,7 @@ export async function readSheetRows(options: {
     unprocessedOnly: Boolean(options.unprocessedOnly),
     statusColumn: options.statusColumn || "",
     processableStatuses: options.processableStatuses || ["", "new", "retry"],
+    ...(options.sheetName ? { sheetName: options.sheetName } : {}),
   });
   if (parsed.ok === false) {
     throw new Error(String(parsed.error || "readSheet failed"));

@@ -8,6 +8,8 @@
   "occupation": "Occupation",
   "employeeLevel": "Employee level",
   "maritalStatus": "Marital status",
+  "spouseFullName": "Spouse Name + Surname",
+  "spousePhone": "Spouse number",
   "nextOfKinRelationship": "Next of kin relationship",
   "maxPrice": "Max price range",
   "idNumber": "ID number",

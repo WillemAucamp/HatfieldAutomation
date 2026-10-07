@@ -430,11 +430,18 @@ export function parseDurationToMmDdYyyy(
     const bare = value.match(/^(\d{1,2})$/);
     if (!bare) return null;
     years = Number(bare[1]);
+    // "0" / empty duration is not a usable residency start — leave unset.
+    if (years === 0 && months === 0) return null;
   }
 
   const date = new Date(today.getTime());
   date.setFullYear(date.getFullYear() - years);
   date.setMonth(date.getMonth() - months);
+  // Seriti rejects residency / employment starts on or after today.
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (date.getTime() >= todayStart.getTime()) {
+    date.setFullYear(date.getFullYear() - 1);
+  }
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
   const yyyy = String(date.getFullYear());

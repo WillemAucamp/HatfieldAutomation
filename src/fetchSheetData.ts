@@ -288,6 +288,21 @@ function mapRow(
   );
   pushError(errors, maritalResult, "maritalStatus", maritalRaw);
 
+  const spouseFullNameRaw = mapping.spouseFullName
+    ? getCell(row, mapping.spouseFullName)
+    : getCell(row, "Spouse Name + Surname");
+  const spousePhoneRaw = mapping.spousePhone
+    ? getCell(row, mapping.spousePhone)
+    : getCell(row, "Spouse number");
+  if (/married/i.test(maritalRaw) && !spouseFullNameRaw.trim()) {
+    errors.push({
+      code: "SPOUSE_NAME_EMPTY",
+      field: "spouseFullName",
+      message: "Marital status is Married but Spouse Name + Surname is empty",
+      value: "",
+    });
+  }
+
   const nokRelRaw = mapping.nextOfKinRelationship
     ? getCell(row, mapping.nextOfKinRelationship)
     : getCell(row, "Next of kin relationship");
@@ -298,11 +313,14 @@ function mapRow(
   );
   pushError(errors, nokRelResult, "nextOfKinRelationship", nokRelRaw);
 
-  // Form does not ask max price. Empty is allowed; Seriti gets "" (operator can set a standing default).
+  // Form does not ask max price. Loader applies standing default 350000 when empty.
   const maxPriceRaw = mapping.maxPrice
     ? getCell(row, mapping.maxPrice)
     : getCell(row, "Max price range");
-  const maxPriceResult = { value: maxPriceRaw, valid: true };
+  const maxPriceResult = {
+    value: maxPriceRaw.trim() || "350000",
+    valid: true,
+  };
 
   const employerNameRaw = getCell(row, mapping.employerName);
   const employerNameResult = requireText(
@@ -312,16 +330,12 @@ function mapRow(
   );
   pushError(errors, employerNameResult, "employerName", employerNameRaw);
 
-  // Employer phone/address/postal are online-search fields. Empty does not block the row;
-  // the loader falls back to client province / personal postal place-search.
+  // Seriti requires work telephone — empty employer phone blocks Work Next.
   const employerPhoneRaw = getCell(row, mapping.employerPhone);
-  const employerPhoneResult = employerPhoneRaw
-    ? transformMobile(employerPhoneRaw)
-    : { value: "", valid: true };
-  if (employerPhoneRaw) {
-    pushError(errors, employerPhoneResult, "employerPhone", employerPhoneRaw);
-  }
+  const employerPhoneResult = transformMobile(employerPhoneRaw);
+  pushError(errors, employerPhoneResult, "employerPhone", employerPhoneRaw);
 
+  // Address/postal remain soft: loader falls back to client province / personal postal search.
   const employerAddressRaw = getCell(row, mapping.employerAddress);
   const employerAddressResult = { value: employerAddressRaw, valid: true };
 
@@ -408,6 +422,8 @@ function mapRow(
     occupation: occupationResult.value,
     employeeLevel: levelResult.value,
     maritalStatus: maritalResult.value,
+    spouseFullName: spouseFullNameRaw,
+    spousePhone: spousePhoneRaw,
     maxPrice: maxPriceResult.value,
     employerName: employerNameResult.value,
     employerPhone: employerPhoneResult.valid ? employerPhoneResult.value : employerPhoneRaw,

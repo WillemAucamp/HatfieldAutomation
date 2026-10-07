@@ -20,6 +20,8 @@ export async function runSection2(ctx: FillContext): Promise<void> {
     ids: ["ddlcarChoiceInd"],
   }, "No", { fallbackToFirst: true });
 
+  // Seriti requires a numeric max price; Form often omits it. Standing default unblocks Next.
+  const maxPrice = String(data.maxPrice || "").trim() || "350000";
   await fillField(ctx, {
     name: "Max price range",
     section: SECTION,
@@ -29,7 +31,7 @@ export async function runSection2(ctx: FillContext): Promise<void> {
     type: "text",
     names: ["VehicleMaxPriceRange"],
     ids: ["txtVehicleMaxPriceRange"],
-  }, data.maxPrice);
+  }, maxPrice);
 
   await fillField(ctx, {
     name: "Payment day",

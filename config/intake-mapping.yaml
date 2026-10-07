@@ -115,7 +115,8 @@ required_intake_headers:
 # Standing defaults for Seriti fields the Form does not ask. Not client personal data.
 standing_defaults:
   "Next of kin relationship": Friend
-  "Max price range": ""
+  # Form does not ask; Seriti marks Max Price Range required (red) and blocks Next.
+  "Max price range": "350000"
   "Transport cost": "0"
 
 # Exact live output-sheet header row (gid=0). Order is the contract.
