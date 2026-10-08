@@ -314,6 +314,19 @@ export function isMissingValue(raw: string | undefined | null): boolean {
   return /^(unknown|n\/a|na|none|-|null|undefined)$/i.test(value);
 }
 
+/**
+ * Form answers sometimes land in the ID column ("Yes" from consent).
+ * Only digit-like values are usable as RSA IDs (12–13 digits after restore).
+ */
+export function usableIdDigits(raw: string | number | undefined | null): string {
+  const checked = validateIdNumber(raw);
+  if (checked.valid) return checked.value;
+  let digits = digitsOnly(raw);
+  if (digits.length === 12) digits = restoreIdNumber(digits);
+  if (digits.length === 13) return digits;
+  return "";
+}
+
 export interface SplitNameResult {
   firstName: string;
   surname: string;

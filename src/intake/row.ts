@@ -16,6 +16,7 @@ import {
   restorePostalCode,
   titleFromGender,
   transformMobile,
+  usableIdDigits,
   validateIdNumber,
 } from "../transforms.js";
 
@@ -152,9 +153,20 @@ export function applyDeterministicFixes(
       next["Marital status"] = "Married";
     }
   }
-  if (mapping && isMissingValue(next["ID number"])) {
-    const formId = firstFilled(intakeValues, intakeHeadersFor(mapping, "id_number"));
-    if (formId) next["ID number"] = formId;
+  // Never keep Form leaks like consent "Yes" in the ID column.
+  {
+    const currentUsable = usableIdDigits(next["ID number"]);
+    const formId = mapping
+      ? usableIdDigits(firstFilled(intakeValues, intakeHeadersFor(mapping, "id_number")))
+      : "";
+    if (currentUsable) {
+      next["ID number"] = currentUsable;
+    } else if (formId) {
+      next["ID number"] = formId;
+    } else if (!isMissingValue(next["ID number"])) {
+      // Drop non-digit garbage so load reports ID_EMPTY instead of a fake value.
+      next["ID number"] = "";
+    }
   }
   const idResult = validateIdNumber(next["ID number"]);
   if (idResult.valid) {

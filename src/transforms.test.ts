@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandSelectNeedles, formatDateForForm, initialsFromFirstNames, parseDurationToMmDdYyyy, parsePersonName, postalSearchNeedles, restoreIdNumber, restorePostalCode, splitNextOfKinName, titleFromGender, validateDateFormat, validateIdNumber, valuesMatch } from "./transforms.js";
+import { expandSelectNeedles, formatDateForForm, initialsFromFirstNames, parseDurationToMmDdYyyy, parsePersonName, postalSearchNeedles, restoreIdNumber, restorePostalCode, splitNextOfKinName, titleFromGender, usableIdDigits, validateDateFormat, validateIdNumber, valuesMatch } from "./transforms.js";
 
 describe("expandSelectNeedles", () => {
   it("maps FNB to Firstrand search terms", () => {
@@ -128,6 +128,15 @@ describe("restoreIdNumber", () => {
 
   it("leaves a 13-digit ID unchanged", () => {
     assert.equal(restoreIdNumber("9301255297080"), "9301255297080");
+  });
+});
+
+
+describe("usableIdDigits", () => {
+  it("accepts valid RSA IDs and rejects consent Yes", () => {
+    assert.equal(usableIdDigits("8603206249081"), "8603206249081");
+    assert.equal(usableIdDigits("Yes"), "");
+    assert.equal(usableIdDigits(""), "");
   });
 });
 

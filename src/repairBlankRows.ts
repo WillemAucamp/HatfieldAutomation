@@ -12,18 +12,19 @@
  */
 import { loadColumnMapping, loadConfig } from "./config.js";
 import { fetchSheetData } from "./fetchSheetData.js";
-import { cell, flattenRow } from "./intake/headers.js";
+import { flattenRow } from "./intake/headers.js";
 import {
   enrichEmployerWithSearch,
   needsEmployerPhone,
   normalizeEmployerPhone,
 } from "./intake/gemini.js";
+import { matchIntakeRow } from "./intake/matchIntake.js";
 import { loadIntakeMapping } from "./intake/mapping.js";
 import { applyDeterministicFixes, buildOutputValues } from "./intake/row.js";
 import { readSheetRows } from "./intake/sheets.js";
 import { formatErrorCell } from "./outcome.js";
 import { postWebhookJson } from "./sheetWriter.js";
-import { isMissingValue } from "./transforms.js";
+import { isMissingValue, usableIdDigits } from "./transforms.js";
 
 /** Client typos Seriti will never accept — stamp Status so GHA stops retrying.
  *  Do not stamp ID_EMPTY: blank IDs are often Sheets/Form match gaps that repair can refill. */
@@ -71,13 +72,6 @@ const PATCH_COLUMNS = [
 
 const EMPLOYER_PHONE_COLUMN = "Employer telephone number (online search)";
 
-function norm(value: string): string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-}
-
 function parseRowFilter(argv: string[]): number[] {
   const idx = argv.indexOf("--rows");
   if (idx === -1 || !argv[idx + 1]) return [];
@@ -90,21 +84,10 @@ function parseRowFilter(argv: string[]): number[] {
 function matchIntake(
   auto: Record<string, string>,
   intakeRows: Array<{ rowIndex: number; values: Record<string, string> }>,
-  mapping: ReturnType<typeof loadIntakeMapping>
+  mapping: ReturnType<typeof loadIntakeMapping>,
+  autoRowIndex?: number
 ): Record<string, string> | null {
-  const email = norm(auto.Email || "");
-  const id = String(auto["ID number"] || "").replace(/\D/g, "");
-  const name = norm(auto["Full name"] || auto["First names + surname"] || "");
-
-  for (const row of intakeRows) {
-    const iEmail = norm(cell(row.values, mapping.intake_headers.email));
-    const iId = cell(row.values, mapping.intake_headers.id_number).replace(/\D/g, "");
-    const iName = norm(cell(row.values, mapping.intake_headers.name_and_surname));
-    if (email && iEmail && email === iEmail) return row.values;
-    if (id && iId && id === iId) return row.values;
-    if (name && iName && name === iName) return row.values;
-  }
-  return null;
+  return matchIntakeRow(auto, intakeRows, mapping, autoRowIndex)?.values ?? null;
 }
 
 async function readWithRetry<T>(
@@ -162,7 +145,7 @@ async function main(): Promise<void> {
 
   for (const auto of autoRows) {
     const label = `row ${auto.rowIndex}`;
-    const intake = matchIntake(auto.values, intakeRows, mapping);
+    const intake = matchIntake(auto.values, intakeRows, mapping, auto.rowIndex);
     let next = { ...auto.values };
 
     if (intake) {
@@ -205,6 +188,18 @@ async function main(): Promise<void> {
               col === "Full name" ||
               col === "First names + surname")
           ) {
+            continue;
+          }
+          // Never overwrite a real ID with Form leaks like consent "Yes".
+          if (col === "ID number") {
+            const rebuiltId = usableIdDigits(rebuilt[col] || "");
+            const sheetId = usableIdDigits(next[col] || "");
+            if (!rebuiltId && sheetId) continue;
+            if (!rebuiltId) {
+              next[col] = "";
+              continue;
+            }
+            next[col] = rebuiltId;
             continue;
           }
           next[col] = rebuilt[col]!;
