@@ -34,9 +34,11 @@ var LEADS_STATUS_HEADER = "Status";
 var LEADS_WHATSAPP_SENT_HEADER = "WhatsApp sent";
 
 function doGet() {
+  // Client code (postWebhookJson) retries when a 302 confirmation wrongly
+  // returns this probe instead of the doPost JSON — keep shape stable.
   return json_({
     ok: true,
-    version: "hatfield-intake-1",
+    version: "hatfield-intake-2",
     actions: [
       "appendLoaded",
       "writeStatus",
@@ -568,7 +570,13 @@ function readSheet_(data) {
       var status = statusIdx >= 0 ? String(values[i][statusIdx] || "").trim().toLowerCase() : "";
       if (data.unprocessedOnly) {
         if (intakeEnrichmentCol) {
-          if (/^(enriched\b|skipped_|processing\b|error\b)/i.test(status)) continue;
+          // enriched row 0 = lost append confirmation — keep processable.
+          if (
+            /^(enriched\b|skipped_|processing\b|error\b)/i.test(status) &&
+            !/^enriched row 0\b/i.test(status)
+          ) {
+            continue;
+          }
         } else if (processable.indexOf(status) === -1) {
           continue;
         }

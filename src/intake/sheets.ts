@@ -9,11 +9,20 @@ export interface IntakeSheetRow {
 /**
  * Melrose wrote these Enrichment Status values. Anything else in that column
  * (Form answers, operator notes) must not block ingest.
+ *
+ * `enriched row 0` is not terminal: Apps Script 302 confirmation failed after
+ * the row was (or was not) written, so a later click must recover or retry.
  */
 export function isTerminalIntakeStatus(status: string | undefined | null): boolean {
   const s = String(status ?? "").trim();
   if (!s) return false;
+  if (/^enriched row 0\b/i.test(s)) return false;
   return /^(enriched\b|skipped_|processing\b|error\b)/i.test(s);
+}
+
+/** True when Enrichment Status claims success but the sheet row number was lost. */
+export function isFailedEnrichmentRowZero(status: string | undefined | null): boolean {
+  return /^enriched row 0\b/i.test(String(status ?? "").trim());
 }
 
 const DEFAULT_INTAKE_SHEET_NAME = "Form Responses 1";
@@ -40,7 +49,12 @@ export async function readSheetRows(options: {
   if (parsed.ok === false) {
     throw new Error(String(parsed.error || "readSheet failed"));
   }
-  const rows = Array.isArray(parsed.rows) ? parsed.rows : [];
+  if (!Array.isArray(parsed.rows)) {
+    throw new Error(
+      String(parsed.error || "readSheet returned no rows array (Apps Script confirmation failed)")
+    );
+  }
+  const rows = parsed.rows;
   return rows.map((row) => {
     const rec = row as { rowIndex?: number; status?: string; values?: Record<string, string> };
     const values: Record<string, string> = {};
@@ -65,14 +79,31 @@ export async function readUnprocessedIntake(options: {
 
   // Full-sheet scan (not Enrichment Status allowlist). Form answers that landed
   // in Enrichment Status used to make scanned=0 even for brand-new submissions.
-  const scanned = await readSheetRows({
-    webhookUrl: options.webhookUrl,
-    spreadsheetId: options.spreadsheetId,
-    sheetName,
-    unprocessedOnly: true,
-    statusColumn: INTAKE_SCAN_COLUMN,
-    processableStatuses: [""],
-  });
+  let scanned: IntakeSheetRow[];
+  try {
+    scanned = await readSheetRows({
+      webhookUrl: options.webhookUrl,
+      spreadsheetId: options.spreadsheetId,
+      sheetName,
+      unprocessedOnly: true,
+      statusColumn: INTAKE_SCAN_COLUMN,
+      processableStatuses: [""],
+    });
+  } catch (err) {
+    // Large scans sometimes lose every 302 confirmation to the doGet probe.
+    // Fall back to Enrichment Status filtering so blank/new/retry rows still move.
+    console.warn(
+      `Full intake scan failed (${err instanceof Error ? err.message : err}); falling back to Enrichment Status allowlist`
+    );
+    scanned = await readSheetRows({
+      webhookUrl: options.webhookUrl,
+      spreadsheetId: options.spreadsheetId,
+      sheetName,
+      unprocessedOnly: true,
+      statusColumn: options.statusColumn,
+      processableStatuses: ["", "new", "retry"],
+    });
+  }
 
   const pending: IntakeSheetRow[] = [];
   const leaked: IntakeSheetRow[] = [];
@@ -83,7 +114,9 @@ export async function readUnprocessedIntake(options: {
       ...row,
       status: enrich.toLowerCase(),
     });
-    if (enrich && !/^(new|retry)$/i.test(enrich)) {
+    // Keep `enriched row 0` so ingest can recover the automation row by identity
+    // instead of clearing the marker and appending a duplicate.
+    if (enrich && !/^(new|retry)$/i.test(enrich) && !isFailedEnrichmentRowZero(enrich)) {
       leaked.push(row);
     }
   }
@@ -167,6 +200,22 @@ export function matchAppendedSheetRow(
   return { row: hit.rowIndex, nr: Number(hit.values.NR || 0) };
 }
 
+/** Full-sheet lookup (any Status). Used when append confirmation returns row 0. */
+export async function recoverAppendedAutomationRow(options: {
+  webhookUrl: string;
+  spreadsheetId: string;
+  values: Record<string, string>;
+}): Promise<{ row: number; nr: number } | null> {
+  const rows = await readSheetRows({
+    webhookUrl: options.webhookUrl,
+    spreadsheetId: options.spreadsheetId,
+    unprocessedOnly: true,
+    statusColumn: INTAKE_SCAN_COLUMN,
+    processableStatuses: [""],
+  });
+  return matchAppendedSheetRow(rows, options.values);
+}
+
 export async function appendAutomationRow(options: {
   webhookUrl: string;
   spreadsheetId: string;
@@ -187,23 +236,16 @@ export async function appendAutomationRow(options: {
   if (isUsableSheetRow(written.row)) return written;
 
   // Apps Script web apps often 302; the POST already wrote the row but the
-  // confirmation GET comes back empty → parsed.row is 0.
+  // confirmation GET comes back as the doGet probe or empty → parsed.row is 0.
   console.warn(
     "appendApplicant did not return a sheet row number; looking up the row we just wrote"
   );
-  const rows = await readSheetRows({
-    webhookUrl: options.webhookUrl,
-    spreadsheetId: options.spreadsheetId,
-    unprocessedOnly: true,
-    statusColumn: "Status",
-  });
-  const recovered = matchAppendedSheetRow(rows, options.values);
+  const recovered = await recoverAppendedAutomationRow(options);
   if (recovered) {
     console.log(`Recovered automation sheet row ${recovered.row} (NR ${recovered.nr})`);
     return recovered;
   }
-  console.warn(
-    "Could not recover the automation sheet row number; the loader will use blank-Status rows"
+  throw new Error(
+    "appendApplicant confirmation failed (row 0) and recovery found no matching automation row"
   );
-  return written;
 }
