@@ -108,7 +108,7 @@ describe("output row contract", () => {
     assert.equal(values["Industry (AI based on employer)"], "BUSINESS SERVICES");
   });
 
-  it("does not copy the home address into employer fields or invent expense zeros from Unknown", () => {
+  it("does not copy the home address into employer fields; empty expenses default to 0", () => {
     const values = buildOutputValues(
       mapping,
       {
@@ -117,15 +117,64 @@ describe("output row contract", () => {
       },
       {
         ...intakeAda,
+        "How much do you spend on food?": "",
+        "How much do you spend on a cellphone?": "",
+        "How much do you spend on a accounts?": "",
         "Food spend": "",
         "Cellphone spend": "",
         "Accounts spend": "",
       }
     );
     assert.equal(values["Employer street address (online search)"], "");
-    assert.equal(values["Telephone payment"], "");
+    assert.equal(values["Telephone payment"], "0");
     assert.equal(values["Transport cost"], "0");
+    assert.equal(values["Food cost"], "0");
     assert.match(values["Address line"], /12 Main Road/);
+  });
+
+  it("defaults None education to Grade 12 and remaps free-text level/occupation", () => {
+    const values = buildOutputValues(
+      mapping,
+      {
+        "Employee level": "Operational",
+        "Industry (AI based on employer)": "Logistics",
+      },
+      {
+        ...intakeAda,
+        "Highest education": "None",
+        "Job title?": "RDT operator",
+        "How much do you spend on a accounts?": "",
+      },
+      new Date(2026, 9, 5)
+    );
+    assert.equal(values["Educational level"], "Grade 12");
+    assert.equal(values["Employee level"], "SKILLED WORKER");
+    assert.equal(values.Occupation, "OPERATOR");
+    assert.equal(values["Industry (AI based on employer)"], "TRANSPORT");
+    assert.equal(values["ID Type"], "RSA ID");
+    assert.equal(values["Transport cost"], "0");
+  });
+
+  it("pads Sheets-stripped postal codes and coerces ISO date cells", () => {
+    const values = buildOutputValues(
+      mapping,
+      {
+        "Postal code": "83",
+        "Year start living at address (MM DD YYYY format ONLY)": "2021-10-08 02:00:00",
+        "Year they started working there (calculate from years provided)": "2023-10-08 02:00:00",
+      },
+      {
+        ...intakeAda,
+        "How long have you lived here? Example: 3 years/ 2 months": "",
+        "How long have you been working here? Example: 2 Years /6 Months": "",
+      }
+    );
+    assert.equal(values["Postal code"], "0083");
+    assert.equal(values["Year start living at address (MM DD YYYY format ONLY)"], "10 08 2021");
+    assert.equal(
+      values["Year they started working there (calculate from years provided)"],
+      "10 08 2023"
+    );
   });
 
   it("uses city/town as the postal place needle when Gemini leaves postal empty", () => {

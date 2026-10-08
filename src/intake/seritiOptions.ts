@@ -8,7 +8,9 @@ export interface SeritiOptions {
   occupations: string[];
   industry_aliases: Record<string, string>;
   level_aliases: Record<string, string>;
+  occupation_aliases?: Record<string, string>;
   occupation_fallback: string;
+  level_fallback?: string;
   self_employed_industry: string;
 }
 
@@ -33,7 +35,12 @@ function aliasLookup(aliases: Record<string, string>, raw: string): string {
   // Prefer longer alias keys so "senior management" wins over "senior".
   const entries = Object.entries(aliases).sort((a, b) => b[0].length - a[0].length);
   for (const [alias, value] of entries) {
-    if (key === alias || key.startsWith(`${alias} `) || key.includes(` ${alias} `) || key.endsWith(` ${alias}`)) {
+    if (
+      key === alias ||
+      key.startsWith(`${alias} `) ||
+      key.includes(` ${alias} `) ||
+      key.endsWith(` ${alias}`)
+    ) {
       return value;
     }
   }
@@ -58,12 +65,18 @@ export function mapIndustry(raw: string, options: SeritiOptions = loadSeritiOpti
   return matchFromList(value, options.industries);
 }
 
+/**
+ * Map free-text level onto exact Seriti Level strings.
+ * Unmatched / empty → level_fallback (SKILLED WORKER) so Seriti never sees "skilled"
+ * or "operational".
+ */
 export function mapLevel(raw: string, options: SeritiOptions = loadSeritiOptions()): string {
+  const fallback = options.level_fallback || "SKILLED WORKER";
   const value = String(raw ?? "").trim();
-  if (!value) return "";
+  if (!value) return fallback;
   const aliased = aliasLookup(options.level_aliases, value);
   if (aliased) return aliased;
-  return matchFromList(value, options.levels);
+  return matchFromList(value, options.levels) || fallback;
 }
 
 export function mapOccupation(
@@ -72,6 +85,9 @@ export function mapOccupation(
 ): string {
   const value = String(raw ?? "").trim();
   if (!value) return options.occupation_fallback;
+  const aliases = options.occupation_aliases ?? {};
+  const aliased = aliasLookup(aliases, value);
+  if (aliased) return aliased;
   const matched = matchFromList(value, options.occupations);
   return matched || options.occupation_fallback;
 }

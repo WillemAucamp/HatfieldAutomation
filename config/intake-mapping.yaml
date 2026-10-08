@@ -85,9 +85,10 @@ intake_headers:
   marital_status: Marital Status
   spouse_name: Spouse Name + Surname
   spouse_number: Spouse number
-  food_spend: Food spend
-  cellphone_spend: Cellphone spend
-  accounts_spend: Accounts spend
+  # Live Form titles (fuzzy cell() still matches older "Food spend" wording).
+  food_spend: "How much do you spend on food?"
+  cellphone_spend: "How much do you spend on a cellphone?"
+  accounts_spend: "How much do you spend on a accounts?"
   employment: Employment
 
 # Headers that must exist on the live Form sheet. Missing any aborts the ingest run.
@@ -112,12 +113,20 @@ required_intake_headers:
   - cellphone_spend
   - employment
 
-# Standing defaults for Seriti fields the Form does not ask. Not client personal data.
+# Standing defaults for Seriti fields the Form does not ask / leaves unusable.
+# These are operator-defined defaults — not fabricated client identity data.
 standing_defaults:
   "Next of kin relationship": Friend
   # Form does not ask; Seriti marks Max Price Range required (red) and blocks Next.
   "Max price range": "350000"
+  # Empty expense cells fail Seriti Work/Expenses Next.
   "Transport cost": "0"
+  "Food cost": "0"
+  "Telephone payment": "0"
+  # "None" / blank education is not a Seriti option — Grade 12 is the operator default.
+  "Educational level": "Grade 12"
+  # SA finance apps on this Form are RSA ID holders.
+  "ID Type": "RSA ID"
 
 # Exact live output-sheet header row (gid=0). Order is the contract.
 destination_columns:
@@ -186,18 +195,18 @@ field_map:
     mode: copy
 
   - destination: ID Type
-    source: id_number
-    mode: copy
-    notes: Set in code to "RSA ID" when the ID is 13 digits. Never invent an ID.
+    mode: writer
+    notes: Always "RSA ID" (standing default + code). Never invent an ID number here.
 
   - destination: ID number
     source: id_number
     mode: copy
-    notes: Strip spaces. Never invent.
+    notes: Strip spaces; restore leading zero if Sheets stripped it. Never invent.
 
   - destination: Educational level
     source: highest_education
     mode: copy
+    notes: Copy Form education; None/blank → Grade 12 standing default.
 
   - destination: Mobile number
     sources: [whatsapp_phone, call_phone]

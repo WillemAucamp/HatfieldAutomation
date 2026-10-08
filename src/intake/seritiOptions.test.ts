@@ -25,6 +25,10 @@ describe("seriti option mapping", () => {
     assert.equal(mapLevel("Entry level", options), "JUNIOR POSITION");
     assert.equal(mapLevel("Mid Level", options), "SKILLED WORKER");
     assert.equal(mapLevel("Executive", options), "SENIOR MANAGEMENT");
+    assert.equal(mapLevel("skilled", options), "SKILLED WORKER");
+    assert.equal(mapLevel("Operational", options), "SKILLED WORKER");
+    assert.equal(mapLevel("Employee", options), "SKILLED WORKER");
+    assert.equal(mapLevel("not-a-real-level", options), "SKILLED WORKER");
   });
 
   it("maps Occupation job titles and falls back to LABOURER (SKILLED)", () => {
@@ -32,6 +36,9 @@ describe("seriti option mapping", () => {
     assert.equal(mapOccupation("plumber", options), "PLUMBER");
     assert.equal(mapOccupation("Warehouse picker", options), "LABOURER (SKILLED)");
     assert.equal(mapOccupation("", options), "LABOURER (SKILLED)");
+    assert.equal(mapOccupation("RDT operator", options), "OPERATOR");
+    assert.equal(mapOccupation("Loan consultant", options), "CONSULTANT");
+    assert.equal(mapOccupation("Truck driver", options), "DRIVER");
   });
 
   it("detects self-employed Employment answers", () => {

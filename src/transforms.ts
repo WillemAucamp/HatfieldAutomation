@@ -410,6 +410,16 @@ export function titleFromGender(raw: string | undefined | null): TransformResult
 }
 
 /** "3 years", "6 months", "2 years 3 months" → MM DD YYYY relative to today. */
+/** Strip currency noise (R2000, R 500) so expense cells stay numeric for Seriti. */
+export function normalizeExpenseAmount(raw: string | undefined | null): string {
+  const value = String(raw ?? "").trim();
+  if (!value || isMissingValue(value)) return "";
+  const cleaned = value.replace(/,/g, "").replace(/^[rR]\s*/, "").trim();
+  if (/^\d+(\.\d+)?$/.test(cleaned)) return cleaned;
+  const match = cleaned.match(/(\d+(?:\.\d+)?)/);
+  return match ? match[1]! : "";
+}
+
 export function parseDurationToMmDdYyyy(
   raw: string | undefined | null,
   today: Date = new Date()
@@ -421,8 +431,9 @@ export function parseDurationToMmDdYyyy(
 
   let years = 0;
   let months = 0;
-  const yearMatch = value.match(/(\d+)\s*(year|years|yr|yrs)\b/);
-  const monthMatch = value.match(/(\d+)\s*(month|months|mo)\b/);
+  // Allow glued forms like "14years" / "6months".
+  const yearMatch = value.match(/(\d+)\s*(years|year|yrs|yr)\b/);
+  const monthMatch = value.match(/(\d+)\s*(months|month|mo)\b/);
   if (yearMatch) years = Number(yearMatch[1]);
   if (monthMatch) months = Number(monthMatch[1]);
   // Bare number with no unit → years (Form clients often write "3" meaning 3 years).

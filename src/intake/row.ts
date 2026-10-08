@@ -9,8 +9,11 @@ import {
   mapOccupation,
 } from "./seritiOptions.js";
 import {
+  coerceToMmDdYyyy,
   isMissingValue,
+  normalizeExpenseAmount,
   parseDurationToMmDdYyyy,
+  restorePostalCode,
   titleFromGender,
   transformMobile,
   validateIdNumber,
@@ -27,6 +30,13 @@ const BANK_ACCOUNT_TYPE: Record<string, string> = {
   discovery: "Savings/Transactional",
   investec: "Cheque/Current",
 };
+
+const DATE_COLUMNS = [
+  "Year start living at address (MM DD YYYY format ONLY)",
+  "Year they started working there (calculate from years provided)",
+] as const;
+
+const EXPENSE_COLUMNS = ["Telephone payment", "Transport cost", "Food cost"] as const;
 
 export function accountTypeForBank(bank: string): string {
   const n = bank.toLowerCase();
@@ -76,6 +86,16 @@ function applyStandingDefaults(
   }
 }
 
+function protectPostal(raw: string): string {
+  const value = String(raw ?? "").trim();
+  if (!value || isMissingValue(value)) return "";
+  // City/town needles stay as text for Seriti place search.
+  if (/[A-Za-z]/.test(value) && !/^\d+$/.test(value.replace(/\s/g, ""))) {
+    return value;
+  }
+  return restorePostalCode(value);
+}
+
 export function applyDeterministicFixes(
   fields: Record<string, string>,
   intakeValues: Record<string, string> = {},
@@ -120,12 +140,23 @@ export function applyDeterministicFixes(
     next["Client cellphone number (add again at the end)"] = mobile;
   }
 
+  // RSA ID type is always set for this Form; never leave Gemini free text here.
+  next["ID Type"] = "RSA ID";
+  if (mapping && isMissingValue(next["ID number"])) {
+    const formId = firstFilled(intakeValues, intakeHeadersFor(mapping, "id_number"));
+    if (formId) next["ID number"] = formId;
+  }
   const idResult = validateIdNumber(next["ID number"]);
   if (idResult.valid) {
     next["ID number"] = idResult.value;
-    next["ID Type"] = "RSA ID";
-  } else if (/south african/i.test(next["ID Type"] ?? "")) {
-    next["ID Type"] = "RSA ID";
+  }
+
+  // Coerce Gemini/Sheets date serials (2021-10-08 02:00:00) back to MM DD YYYY.
+  for (const column of DATE_COLUMNS) {
+    const coerced = coerceToMmDdYyyy(next[column]);
+    if (/^\d{2}\s+\d{2}\s+\d{4}$/.test(coerced)) {
+      next[column] = coerced;
+    }
   }
 
   if (mapping) {
@@ -146,21 +177,68 @@ export function applyDeterministicFixes(
       next["Year they started working there (calculate from years provided)"] = employedDate;
     }
 
-    const food = firstFilled(intakeValues, intakeHeadersFor(mapping, "food_spend"));
-    if (food && isMissingValue(next["Food cost"])) next["Food cost"] = food;
-    const cellphone = firstFilled(
-      intakeValues,
-      intakeHeadersFor(mapping, "cellphone_spend")
+    // Prefer Form expense columns; strip R prefixes; empty → standing default 0 later.
+    const food = normalizeExpenseAmount(
+      firstFilled(intakeValues, intakeHeadersFor(mapping, "food_spend")) || next["Food cost"]
     );
-    if (cellphone && isMissingValue(next["Telephone payment"])) {
-      next["Telephone payment"] = cellphone;
+    if (food) next["Food cost"] = food;
+    const cellphone = normalizeExpenseAmount(
+      firstFilled(intakeValues, intakeHeadersFor(mapping, "cellphone_spend")) ||
+        next["Telephone payment"]
+    );
+    if (cellphone) next["Telephone payment"] = cellphone;
+    const accounts = normalizeExpenseAmount(
+      firstFilled(intakeValues, intakeHeadersFor(mapping, "accounts_spend")) ||
+        next["Transport cost"]
+    );
+    if (accounts) next["Transport cost"] = accounts;
+
+    // Re-assert Form joins when Gemini/writer left them blank.
+    if (isMissingValue(next["Address line"])) {
+      const joined = joinFilled(
+        intakeValues,
+        intakeHeadersFor(mapping, undefined, ["street_address", "city_town"])
+      );
+      if (joined) next["Address line"] = joined;
     }
-    const accounts = firstFilled(
+    if (isMissingValue(next["Next of kin name + Surname"])) {
+      const nok = joinFilled(
+        intakeValues,
+        intakeHeadersFor(mapping, undefined, [
+          "next_of_kin_first_name",
+          "next_of_kin_surname",
+        ])
+      );
+      if (nok) next["Next of kin name + Surname"] = nok;
+    }
+    if (isMissingValue(next["Next of kin cellphone number"])) {
+      const nokPhone = firstFilled(
+        intakeValues,
+        intakeHeadersFor(mapping, "next_of_kin_phone")
+      );
+      if (nokPhone) next["Next of kin cellphone number"] = nokPhone;
+    }
+    if (isMissingValue(next["Educational level"])) {
+      const edu = firstFilled(
+        intakeValues,
+        intakeHeadersFor(mapping, "highest_education")
+      );
+      if (edu && !isMissingValue(edu)) next["Educational level"] = edu;
+    }
+
+    // Spouse lives on the automation sheet (loader mapping) even though it is
+    // outside the 38-column Gemini contract — copy from Form when present.
+    const spouseName = firstFilled(
       intakeValues,
-      intakeHeadersFor(mapping, "accounts_spend")
+      intakeHeadersFor(mapping, "spouse_name")
     );
-    if (accounts && isMissingValue(next["Transport cost"])) {
-      next["Transport cost"] = accounts;
+    if (spouseName) next["Spouse Name + Surname"] = spouseName;
+    const spousePhone = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "spouse_number")
+    );
+    if (spousePhone && !/^wife|husband|spouse$/i.test(spousePhone.trim())) {
+      next["Spouse number"] = spousePhone;
     }
 
     const seriti = loadSeritiOptions();
@@ -184,11 +262,16 @@ export function applyDeterministicFixes(
     }
 
     next.Occupation = mapOccupation(jobTitle || next.Occupation || "", seriti);
-    next["Employee level"] = mapLevel(next["Employee level"] || "", seriti);
+    // Prefer Gemini level when it maps; else derive from job title; else SKILLED WORKER.
+    next["Employee level"] = mapLevel(
+      next["Employee level"] || jobTitle || "",
+      seriti
+    );
 
     // Employer province falls back to client province — not fabrication of an unknown site.
     if (isMissingValue(next["Employer province (online search)"])) {
-      const province = next.Province || firstFilled(intakeValues, intakeHeadersFor(mapping, "province"));
+      const province =
+        next.Province || firstFilled(intakeValues, intakeHeadersFor(mapping, "province"));
       if (province) next["Employer province (online search)"] = province;
     }
 
@@ -199,11 +282,32 @@ export function applyDeterministicFixes(
     }
   }
 
-  for (const expense of ["Telephone payment", "Transport cost", "Food cost"]) {
-    if (isMissingValue(next[expense])) next[expense] = "";
+  // Pad Sheets-stripped postal codes (83 → 0083). City needles pass through.
+  if (!isMissingValue(next["Postal code"])) {
+    next["Postal code"] = protectPostal(next["Postal code"]!);
+  }
+  if (!isMissingValue(next["Employer postal code (online search)"])) {
+    next["Employer postal code (online search)"] = protectPostal(
+      next["Employer postal code (online search)"]!
+    );
+  }
+
+  for (const expense of EXPENSE_COLUMNS) {
+    const normalized = normalizeExpenseAmount(next[expense]);
+    next[expense] = normalized;
   }
 
   if (mapping) applyStandingDefaults(next, mapping);
+
+  // After standing defaults, expenses must still be numeric for Seriti.
+  for (const expense of EXPENSE_COLUMNS) {
+    if (isMissingValue(next[expense])) next[expense] = "0";
+  }
+  if (isMissingValue(next["Educational level"])) {
+    next["Educational level"] = "Grade 12";
+  }
+  next["ID Type"] = "RSA ID";
+
   return next;
 }
 
@@ -244,7 +348,9 @@ export function buildOutputValues(
     const text = String(raw ?? "").replace(/\s*\n+\s*/g, " ").trim();
     if (isMissingValue(text)) continue;
     const entry = mapping.field_map.find((f) => f.destination === column);
-    if (entry && (entry.mode === "copy" || entry.mode === "join")) continue;
+    if (entry && (entry.mode === "copy" || entry.mode === "join" || entry.mode === "writer")) {
+      continue;
+    }
     values[column] = text;
   }
 

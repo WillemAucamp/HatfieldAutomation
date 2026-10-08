@@ -312,6 +312,12 @@
     "semi-skilled worker": "SEMI-SKILLED WORKER",
     "unskilled": "UNSKILLED WORKER",
     "unskilled worker": "UNSKILLED WORKER",
+    "operational": "SKILLED WORKER",
+    "operations": "SKILLED WORKER",
+    "employee": "SKILLED WORKER",
+    "staff": "SKILLED WORKER",
+    "worker": "SKILLED WORKER",
+    "general worker": "UNSKILLED WORKER",
     "manager": "MANAGEMENT",
     "management": "MANAGEMENT",
     "supervisor": "SUPERVISOR",
@@ -324,6 +330,14 @@
     "self employed": "SENIOR MANAGEMENT",
     "self-employed": "SENIOR MANAGEMENT"
   },
+  "occupation_aliases": {
+    "rdt operator": "OPERATOR",
+    "loan consultant": "CONSULTANT",
+    "truck driver": "DRIVER",
+    "owner": "OWNER OF BUSINESS (NON PROFESSIONAL)",
+    "business owner": "OWNER OF BUSINESS (NON PROFESSIONAL)"
+  },
   "occupation_fallback": "LABOURER (SKILLED)",
+  "level_fallback": "SKILLED WORKER",
   "self_employed_industry": "BUSINESS SERVICES"
 }

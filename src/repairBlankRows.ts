@@ -2,35 +2,41 @@
  * Repair blank-Status automation rows using live Form data + Seriti mappings,
  * then report which rows are ready to load.
  *
+ * Always rebuilds matched rows through buildOutputValues so Seriti menus,
+ * dates, address/NOK joins, expenses, and ID Type stick permanently.
+ *
  *   npx tsx src/repairBlankRows.ts
  *   npx tsx src/repairBlankRows.ts --dry-run
  *   npx tsx src/repairBlankRows.ts --load
+ *   npx tsx src/repairBlankRows.ts --rows 320,321,322
  */
 import { loadColumnMapping, loadConfig } from "./config.js";
 import { fetchSheetData } from "./fetchSheetData.js";
-import { cell, firstFilled, flattenRow } from "./intake/headers.js";
+import { cell, flattenRow } from "./intake/headers.js";
 import {
   enrichEmployerWithSearch,
-  enrichWithGemini,
   needsEmployerPhone,
   normalizeEmployerPhone,
 } from "./intake/gemini.js";
 import { loadIntakeMapping } from "./intake/mapping.js";
-import { buildOutputValues, normalizeEmail } from "./intake/row.js";
-import {
-  isSelfEmployed,
-  loadSeritiOptions,
-  mapIndustry,
-  mapLevel,
-  mapOccupation,
-} from "./intake/seritiOptions.js";
+import { applyDeterministicFixes, buildOutputValues } from "./intake/row.js";
 import { readSheetRows } from "./intake/sheets.js";
 import { postWebhookJson } from "./sheetWriter.js";
 import { isMissingValue } from "./transforms.js";
 
 const PATCH_COLUMNS = [
+  "Full name",
+  "First names + surname",
+  "Title",
+  "ID Type",
+  "ID number",
+  "Educational level",
+  "Mobile number",
   "Address line",
   "Postal code",
+  "Province",
+  "Year start living at address (MM DD YYYY format ONLY)",
+  "Year they started working there (calculate from years provided)",
   "Next of kin name + Surname",
   "Next of kin cellphone number",
   "Next of kin relationship",
@@ -41,12 +47,18 @@ const PATCH_COLUMNS = [
   "Occupation",
   "Employee level",
   "Email",
-  "Educational level",
   "Marital status",
+  "Spouse Name + Surname",
+  "Spouse number",
+  "Max price range",
+  "Employer name",
   "Employer telephone number (online search)",
   "Employer street address (online search)",
   "Employer postal code (online search)",
   "Employer province (online search)",
+  "Account type (AI—most likely option based on bank)",
+  "Account holder name and surname (same as client)",
+  "Client cellphone number (add again at the end)",
 ] as const;
 
 const EMPLOYER_PHONE_COLUMN = "Employer telephone number (online search)";
@@ -56,6 +68,15 @@ function norm(value: string): string {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
+}
+
+function parseRowFilter(argv: string[]): number[] {
+  const idx = argv.indexOf("--rows");
+  if (idx === -1 || !argv[idx + 1]) return [];
+  return argv[idx + 1]!
+    .split(",")
+    .map((p) => parseInt(p.trim(), 10))
+    .filter((n) => !Number.isNaN(n) && n >= 2);
 }
 
 function matchIntake(
@@ -78,33 +99,53 @@ function matchIntake(
   return null;
 }
 
+async function readWithRetry<T>(
+  label: string,
+  fn: () => Promise<T[]>,
+  attempts = 5
+): Promise<T[]> {
+  for (let i = 1; i <= attempts; i++) {
+    const rows = await fn();
+    console.log(`${label} attempt ${i}: ${rows.length}`);
+    if (rows.length) return rows;
+    await new Promise((r) => setTimeout(r, 2000 * i));
+  }
+  return [];
+}
+
 async function main(): Promise<void> {
   const dryRun = process.argv.includes("--dry-run");
   const doLoad = process.argv.includes("--load");
+  const onlyRows = parseRowFilter(process.argv);
   const config = loadConfig();
   const mapping = loadIntakeMapping(config.intakeMappingPath);
-  const seriti = loadSeritiOptions();
 
   if (!config.sheetWebhookUrl) throw new Error("SHEET_WEBHOOK_URL is required");
 
   console.log("Reading automation sheet (blank Status)…");
-  const autoRows = await readSheetRows({
-    webhookUrl: config.sheetWebhookUrl,
-    spreadsheetId: config.sheetId,
-    unprocessedOnly: true,
-    statusColumn: "Status",
-    processableStatuses: [""],
-  });
-  console.log(`Blank-Status rows: ${autoRows.length}`);
+  let autoRows = await readWithRetry("auto", () =>
+    readSheetRows({
+      webhookUrl: config.sheetWebhookUrl!,
+      spreadsheetId: config.sheetId,
+      unprocessedOnly: true,
+      statusColumn: "Status",
+      processableStatuses: [""],
+    })
+  );
+  if (onlyRows.length) {
+    autoRows = autoRows.filter((r) => onlyRows.includes(r.rowIndex));
+  }
+  console.log(`Blank-Status rows to repair: ${autoRows.length}`);
 
   console.log("Reading Form intake sheet…");
-  const intakeRows = await readSheetRows({
-    webhookUrl: config.sheetWebhookUrl,
-    spreadsheetId: config.intakeSpreadsheetId,
-    sheetName: "Form Responses 1",
-    unprocessedOnly: false,
-  });
-  console.log(`Intake rows: ${intakeRows.length}`);
+  const intakeRows = await readWithRetry("intake", () =>
+    readSheetRows({
+      webhookUrl: config.sheetWebhookUrl!,
+      spreadsheetId: config.intakeSpreadsheetId,
+      sheetName: "Form Responses 1",
+      unprocessedOnly: false,
+    })
+  );
 
   let patched = 0;
   let reenriched = 0;
@@ -116,110 +157,54 @@ async function main(): Promise<void> {
     const intake = matchIntake(auto.values, intakeRows, mapping);
     let next = { ...auto.values };
 
-    // Always apply cheap standing defaults / Seriti remaps on the existing cells.
-    if (isMissingValue(next["Next of kin relationship"])) {
-      next["Next of kin relationship"] =
-        mapping.standing_defaults?.["Next of kin relationship"] || "Friend";
-    }
-    if (isMissingValue(next["Transport cost"])) {
-      next["Transport cost"] = mapping.standing_defaults?.["Transport cost"] || "0";
-    }
-    if (next.Email) next.Email = normalizeEmail(next.Email);
-
-    const jobTitle =
-      (intake
-        ? firstFilled(intake, [mapping.intake_headers.job_title || "Job title?"])
-        : "") || next.Occupation || "";
-    const employment = intake
-      ? firstFilled(intake, [mapping.intake_headers.employment || "Employment"])
-      : "";
-    const employerName =
-      (intake
-        ? firstFilled(intake, [mapping.intake_headers.employer_name || ""])
-        : "") || next["Employer name"] || "";
-
-    if (isSelfEmployed(employment, jobTitle, employerName)) {
-      next["Industry (AI based on employer)"] = seriti.self_employed_industry;
-    } else {
-      next["Industry (AI based on employer)"] = mapIndustry(
-        next["Industry (AI based on employer)"] || "",
-        seriti
-      );
-    }
-    // Prefer mapping the existing sheet Occupation when it already hits a Seriti option.
-    const sheetOcc = next.Occupation || "";
-    const mappedSheetOcc = mapOccupation(sheetOcc, seriti);
-    if (sheetOcc && mappedSheetOcc !== seriti.occupation_fallback) {
-      next.Occupation = mappedSheetOcc;
-    } else {
-      next.Occupation = mapOccupation(jobTitle || sheetOcc, seriti);
-    }
-    next["Employee level"] = mapLevel(next["Employee level"] || "", seriti);
-
-    if (isMissingValue(next["Employer province (online search)"])) {
-      next["Employer province (online search)"] = next.Province || "";
-    }
-
-    const needsFormCopy =
-      isMissingValue(next["Address line"]) ||
-      isMissingValue(next["Next of kin name + Surname"]) ||
-      isMissingValue(next["Educational level"]) ||
-      isMissingValue(next["Telephone payment"]) ||
-      isMissingValue(next["Food cost"]) ||
-      isMissingValue(next["Marital status"]);
-
-    if (needsFormCopy && intake) {
-      // Deterministic Form copy/join first (address, NOK, expenses, dates).
-      const copied = buildOutputValues(mapping, {}, intake);
+    if (intake) {
+      // Seed LLM fields from whatever is already on the sheet so employer search
+      // and industry inference can reuse prior work, then rebuild deterministically.
+      const seed: Record<string, string> = {};
+      for (const col of [
+        "Postal code",
+        "Industry (AI based on employer)",
+        "Employee level",
+        "Employer telephone number (online search)",
+        "Employer street address (online search)",
+        "Employer postal code (online search)",
+        "Employer province (online search)",
+        "Year start living at address (MM DD YYYY format ONLY)",
+        "Year they started working there (calculate from years provided)",
+      ]) {
+        if (!isMissingValue(next[col] || "")) seed[col] = next[col]!;
+      }
+      const rebuilt = buildOutputValues(mapping, seed, intake);
       for (const col of PATCH_COLUMNS) {
-        if (!isMissingValue(copied[col])) next[col] = copied[col]!;
-      }
-
-      const needsGemini =
-        isMissingValue(next["Postal code"]) ||
-        isMissingValue(next["Industry (AI based on employer)"]) ||
-        isMissingValue(next["Employee level"]) ||
-        isMissingValue(next["Year start living at address (MM DD YYYY format ONLY)"]) ||
-        isMissingValue(next["Year they started working there (calculate from years provided)"]);
-
-      if (needsGemini && !dryRun) {
-        console.log(`Gemini infer for ${label}…`);
-        try {
-          const llm = await enrichWithGemini(mapping, flattenRow(intake), {
-            apiKey: config.geminiApiKey,
-            model: config.geminiModel,
-          });
-          const rebuilt = buildOutputValues(mapping, llm, intake);
-          for (const col of PATCH_COLUMNS) {
-            if (!isMissingValue(rebuilt[col])) next[col] = rebuilt[col]!;
+        if (col in rebuilt && rebuilt[col] !== undefined) {
+          // Keep a usable employer phone already on the sheet unless rebuilt has one.
+          if (
+            col === EMPLOYER_PHONE_COLUMN &&
+            isMissingValue(rebuilt[col] || "") &&
+            !isMissingValue(next[col] || "")
+          ) {
+            continue;
           }
-          reenriched += 1;
-        } catch (err) {
-          console.warn(
-            `Gemini failed for ${label}; keeping Form copy (${
-              err instanceof Error ? err.message : String(err)
-            })`
-          );
+          next[col] = rebuilt[col]!;
         }
-      } else {
-        console.log(`Form-copy repaired ${label}${dryRun ? " (dry-run)" : ""}`);
-        reenriched += 1;
       }
-    } else if (needsFormCopy && !intake) {
-      console.warn(`No Form match for ${label} — cannot refill address/NOK`);
+      console.log(`Form-rebuild ${label}`);
+      reenriched += 1;
+    } else {
+      // No Form match — still remap Seriti menus / defaults on sheet values alone.
+      next = applyDeterministicFixes(next, {}, mapping);
+      console.warn(`No Form match for ${label} — applied sheet-only Seriti remaps`);
       skipped += 1;
     }
 
-    // Brute-force employer telephone via google_search even when other cells look fine.
-    // Prefer Form text; fall back to Employer name + location already on the automation row.
+    const employerName = String(next["Employer name"] || "").trim();
     if (needsEmployerPhone(next) && employerName && !dryRun) {
       const searchText = intake
         ? flattenRow(intake)
         : [
             `Name of Company you work for?: ${employerName}`,
-            `Job title?: ${jobTitle}`,
+            `Job title?: ${next.Occupation || ""}`,
             `Province: ${next.Province || ""}`,
-            `City/Town: ${next["City/Town"] || ""}`,
             `Address: ${next["Address line"] || ""}`,
           ].join("\n");
       console.log(
@@ -250,7 +235,6 @@ async function main(): Promise<void> {
             next[col] = value;
           }
         }
-        reenriched += 1;
       } catch (err) {
         console.warn(
           `Employer search failed for ${label}: ${
@@ -261,6 +245,9 @@ async function main(): Promise<void> {
     } else if (needsEmployerPhone(next) && !employerName) {
       console.warn(`No employer name for ${label} — cannot search employer phone`);
     }
+
+    // Final pass so Seriti exact strings / defaults always win.
+    next = applyDeterministicFixes(next, intake || {}, mapping);
 
     for (const col of PATCH_COLUMNS) {
       const before = String(auto.values[col] ?? "").trim();
@@ -273,18 +260,17 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `Prepared ${updates.length} cell update(s) across ${patched} row(s); re-enriched=${reenriched}; no-form-match=${skipped}`
+    `Prepared ${updates.length} cell update(s) across ${patched} row(s); rebuilt=${reenriched}; no-form-match=${skipped}`
   );
 
   if (dryRun) {
-    console.log("DRY RUN — first 40 updates:");
-    for (const u of updates.slice(0, 40)) {
+    console.log("DRY RUN — updates:");
+    for (const u of updates) {
       console.log(`  row ${u.row} ${u.column}=${JSON.stringify(u.value)}`);
     }
     return;
   }
 
-  // Batch updates to keep Apps Script payloads manageable.
   const chunkSize = 40;
   for (let i = 0; i < updates.length; i += chunkSize) {
     const chunk = updates.slice(i, i + chunkSize);
@@ -306,6 +292,7 @@ async function main(): Promise<void> {
     mapping: columnMapping,
     webhookUrl: config.sheetWebhookUrl,
     spreadsheetId: config.sheetId,
+    ...(onlyRows.length ? { rowFilter: onlyRows } : {}),
   });
   const ready = applicants.filter((a) => a.errors.length === 0);
   const blocked = applicants.filter((a) => a.errors.length > 0);
