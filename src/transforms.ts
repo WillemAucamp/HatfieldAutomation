@@ -232,6 +232,25 @@ export function validateIdNumber(raw: string | number | undefined | null): Trans
     };
   }
 
+  // Official RSA ID check-digit (Luhn-style). Seriti rejects invalid IDs on Personal Next.
+  let checksum = 0;
+  for (let i = 0; i < 13; i++) {
+    let n = Number(digits[i]);
+    if (i % 2 === 0) checksum += n;
+    else {
+      const doubled = n * 2;
+      checksum += Math.floor(doubled / 10) + (doubled % 10);
+    }
+  }
+  if (checksum % 10 !== 0) {
+    return {
+      value: digits,
+      valid: false,
+      code: "ID_CHECKSUM_INVALID",
+      message: `ID number fails RSA check digit (got "${digits}")`,
+    };
+  }
+
   return { value: digits, valid: true };
 }
 

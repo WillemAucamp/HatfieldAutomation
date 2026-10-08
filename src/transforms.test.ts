@@ -142,6 +142,12 @@ describe("validateIdNumber", () => {
     assert.equal(validateIdNumber("12345").valid, false);
     assert.equal(validateIdNumber("12345").code, "ID_NOT_13_DIGITS");
   });
+
+  it("rejects 13-digit IDs that fail the RSA check digit", () => {
+    const result = validateIdNumber("9910125324080");
+    assert.equal(result.valid, false);
+    assert.equal(result.code, "ID_CHECKSUM_INVALID");
+  });
 });
 
 describe("formatDateForForm", () => {

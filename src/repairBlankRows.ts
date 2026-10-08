@@ -252,6 +252,8 @@ async function main(): Promise<void> {
     for (const col of PATCH_COLUMNS) {
       const before = String(auto.values[col] ?? "").trim();
       const after = String(next[col] ?? "").trim();
+      // Always write Seriti menu columns when the mapped value differs, including
+      // replacing free-text leftovers like "Petroleum" / "Skilled".
       if (after && after !== before) {
         updates.push({ row: auto.rowIndex, column: col, value: after });
       }

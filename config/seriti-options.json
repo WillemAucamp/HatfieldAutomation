@@ -294,7 +294,19 @@
     "marketing": "ADVERTISING",
     "community services": "COMMUNITY SERVICES",
     "business services": "BUSINESS SERVICES",
-    "business": "BUSINESS SERVICES"
+    "business": "BUSINESS SERVICES",
+    "petroleum": "ENERGY",
+    "oil": "ENERGY",
+    "fuel": "ENERGY",
+    "petrol": "ENERGY",
+    "transportation": "TRANSPORT",
+    "logistics and transport": "TRANSPORT",
+    "entertainment & hospitality": "ENTERTAINMENT",
+    "entertainment and hospitality": "ENTERTAINMENT",
+    "hospitality": "TOURISM",
+    "engineering": "ENGINEERING",
+    "financial services": "FINANCE",
+    "heavy equipment manufacturing": "MANUFACTURING"
   },
   "level_aliases": {
     "entry level": "JUNIOR POSITION",
@@ -328,7 +340,9 @@
     "director": "SENIOR MANAGEMENT",
     "owner": "SENIOR MANAGEMENT",
     "self employed": "SENIOR MANAGEMENT",
-    "self-employed": "SENIOR MANAGEMENT"
+    "self-employed": "SENIOR MANAGEMENT",
+    "self employed owner": "SENIOR MANAGEMENT",
+    "owner operator": "SENIOR MANAGEMENT"
   },
   "occupation_aliases": {
     "rdt operator": "OPERATOR",

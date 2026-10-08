@@ -77,6 +77,14 @@ jobs:
           set -euo pipefail
           echo "mode=${MODE} maxIntakeRows=${MAX_INTAKE_ROWS} dryRun=${DRY_RUN} event=${{ github.event_name }}"
           AUTO_LOAD=false npm run ingest
+      # Rebuild blank-Status rows through deterministic Seriti maps + employer search
+      # so free-text Gemini leftovers never reach the loader.
+      - name: Repair blank-Status rows (Seriti maps + employer phone search)
+        if: ${{ (github.event_name == 'schedule' || github.event.inputs.mode != 'load-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
+        run: npx tsx src/repairBlankRows.ts
       - name: Load blank-Status rows into Seriti
         if: ${{ (github.event_name == 'schedule' || github.event.inputs.mode != 'ingest-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
         env:
