@@ -196,6 +196,27 @@ describe("output row contract", () => {
     assert.equal(values["Postal code"], "Pretoria");
   });
 
+  it("rejects consent Yes leaked into Form ID Number", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "ID Number": "Yes",
+      }
+    );
+    assert.equal(values["ID number"], "");
+  });
+
+  it("recovers a real Form ID when the sheet seed has consent Yes", () => {
+    const values = buildOutputValues(
+      mapping,
+      { "ID number": "Yes" },
+      intakeAda
+    );
+    assert.equal(values["ID number"], "8705135782080");
+  });
+
   it("clears address text leaked into next-of-kin phone", () => {
     const values = buildOutputValues(
       mapping,
