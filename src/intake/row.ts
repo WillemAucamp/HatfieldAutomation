@@ -160,11 +160,14 @@ export function applyDeterministicFixes(
   }
 
   if (mapping) {
+    const formIdForDates =
+      next["ID number"] ||
+      firstFilled(intakeValues, intakeHeadersFor(mapping, "id_number"));
     const lived = firstFilled(
       intakeValues,
       intakeHeadersFor(mapping, "years_at_address")
     );
-    const livedDate = parseDurationToMmDdYyyy(lived, today);
+    const livedDate = parseDurationToMmDdYyyy(lived, today, { idNumber: formIdForDates });
     if (livedDate) {
       next["Year start living at address (MM DD YYYY format ONLY)"] = livedDate;
     }
@@ -175,6 +178,18 @@ export function applyDeterministicFixes(
     const employedDate = parseDurationToMmDdYyyy(employed, today);
     if (employedDate) {
       next["Year they started working there (calculate from years provided)"] = employedDate;
+    }
+
+    // Re-copy mobile from Form when the sheet cell is empty / Sheets-stripped.
+    if (isMissingValue(next["Mobile number"])) {
+      const formMobile = firstFilled(intakeValues, [
+        ...intakeHeadersFor(mapping, undefined, ["whatsapp_phone", "call_phone"]),
+      ]);
+      const formMobileResult = transformMobile(formMobile);
+      if (formMobileResult.valid) {
+        next["Mobile number"] = formMobileResult.value;
+        next["Client cellphone number (add again at the end)"] = formMobileResult.value;
+      }
     }
 
     // Prefer Form expense columns; strip R prefixes; empty → standing default 0 later.
@@ -273,6 +288,21 @@ export function applyDeterministicFixes(
       const province =
         next.Province || firstFilled(intakeValues, intakeHeadersFor(mapping, "province"));
       if (province) next["Employer province (online search)"] = province;
+    }
+
+    // Self-employed with no public listing: work telephone is the client's own mobile.
+    if (
+      isSelfEmployed(employment, jobTitle, employerName) &&
+      isMissingValue(next["Employer telephone number (online search)"])
+    ) {
+      const own =
+        next["Mobile number"] ||
+        next["Client cellphone number (add again at the end)"] ||
+        "";
+      const ownMobile = transformMobile(own);
+      if (ownMobile.valid) {
+        next["Employer telephone number (online search)"] = ownMobile.value;
+      }
     }
 
     // When Gemini leaves postal empty, use city/town as a Seriti place-search needle.

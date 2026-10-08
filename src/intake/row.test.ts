@@ -155,6 +155,20 @@ describe("output row contract", () => {
     assert.equal(values["Transport cost"], "0");
   });
 
+  it("maps since-birth residency using RSA ID age", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "ID Number": "8503185608085",
+        "How long have you lived here? Example: 3 years/ 2 months": "Since i Born",
+      },
+      new Date(2026, 9, 8)
+    );
+    assert.equal(values["Year start living at address (MM DD YYYY format ONLY)"], "03 18 1985");
+  });
+
   it("pads Sheets-stripped postal codes and coerces ISO date cells", () => {
     const values = buildOutputValues(
       mapping,

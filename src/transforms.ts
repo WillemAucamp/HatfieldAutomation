@@ -420,14 +420,47 @@ export function normalizeExpenseAmount(raw: string | undefined | null): string {
   return match ? match[1]! : "";
 }
 
+/**
+ * RSA ID YYMMDD → MM DD YYYY birth date. Used when the client says they have
+ * lived at the address since birth (not for inventing employment dates).
+ */
+export function birthDateMmDdYyyyFromSaId(
+  idRaw: string | undefined | null,
+  today: Date = new Date()
+): string | null {
+  const digits = String(idRaw ?? "").replace(/\D/g, "");
+  if (digits.length !== 13) return null;
+  const yy = Number(digits.slice(0, 2));
+  const mm = Number(digits.slice(2, 4));
+  const dd = Number(digits.slice(4, 6));
+  if (!mm || mm > 12 || !dd || dd > 31) return null;
+  const currentYy = today.getFullYear() % 100;
+  const century = yy > currentYy + 1 ? 1900 : 2000;
+  const year = century + yy;
+  const born = new Date(year, mm - 1, dd);
+  if (Number.isNaN(born.getTime())) return null;
+  if (born.getTime() >= today.getTime()) return null;
+  return `${String(mm).padStart(2, "0")} ${String(dd).padStart(2, "0")} ${year}`;
+}
+
 export function parseDurationToMmDdYyyy(
   raw: string | undefined | null,
-  today: Date = new Date()
+  today: Date = new Date(),
+  extras: { idNumber?: string } = {}
 ): string | null {
   const coerced = coerceToMmDdYyyy(raw);
   if (DATE_PATTERN.test(coerced)) return coerced;
   const value = String(raw ?? "").trim().toLowerCase();
   if (!value || isMissingValue(value)) return null;
+
+  // "Since I was born" / "whole life" → RSA ID birth date when available.
+  if (
+    /since\s*(i\s*)?(was\s*)?born|from\s*birth|whole\s*life|all\s*my\s*life|lifetime/.test(
+      value
+    )
+  ) {
+    return birthDateMmDdYyyyFromSaId(extras.idNumber, today);
+  }
 
   let years = 0;
   let months = 0;
