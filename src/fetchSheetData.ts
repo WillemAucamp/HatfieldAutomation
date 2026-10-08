@@ -294,12 +294,22 @@ function mapRow(
   const spousePhoneRaw = mapping.spousePhone
     ? getCell(row, mapping.spousePhone)
     : getCell(row, "Spouse number");
+  const spousePhoneResult = transformMobile(spousePhoneRaw);
   if (/married/i.test(maritalRaw) && !spouseFullNameRaw.trim()) {
     errors.push({
       code: "SPOUSE_NAME_EMPTY",
       field: "spouseFullName",
       message: "Marital status is Married but Spouse Name + Surname is empty",
       value: "",
+    });
+  }
+  if (/married/i.test(maritalRaw) && !spousePhoneResult.valid) {
+    errors.push({
+      code: "SPOUSE_PHONE_EMPTY",
+      field: "spousePhone",
+      message:
+        "Marital status is Married but Spouse number is missing or not a valid mobile",
+      value: spousePhoneRaw,
     });
   }
 
@@ -423,7 +433,7 @@ function mapRow(
     employeeLevel: levelResult.value,
     maritalStatus: maritalResult.value,
     spouseFullName: spouseFullNameRaw,
-    spousePhone: spousePhoneRaw,
+    spousePhone: spousePhoneResult.valid ? spousePhoneResult.value : spousePhoneRaw,
     maxPrice: maxPriceResult.value,
     employerName: employerNameResult.value,
     employerPhone: employerPhoneResult.valid ? employerPhoneResult.value : employerPhoneRaw,

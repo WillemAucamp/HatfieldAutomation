@@ -42,7 +42,8 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     ids: ["txtClientLastName"],
   }, data.surname);
 
-  if (data.initials) {
+  async function fillInitials(): Promise<void> {
+    if (!data.initials) return;
     await fillField(ctx, {
       name: "Initials",
       section: SECTION,
@@ -53,6 +54,8 @@ export async function runSection3(ctx: FillContext): Promise<void> {
       ids: ["txtClientInitials", "txtInitials"],
     }, data.initials);
   }
+
+  await fillInitials();
 
   // Name entry recreates identity controls with a new numeric prefix (71_IdType → 72_IdType).
   await waitForSelectorVisible(form, '[id$="_IdType"], [id$="_IdNumber"]');
@@ -76,6 +79,9 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     names: ["_IdNumber", "IdNumber"],
     ids: ["_IdNumber", "IdNumber"],
   }, data.idNumber);
+
+  // Seriti often blanks Initials when identity controls recreate — fill again.
+  await fillInitials();
 
   await fillField(ctx, {
     name: "Educational level",

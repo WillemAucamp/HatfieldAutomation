@@ -209,11 +209,18 @@ export function applyDeterministicFixes(
     if (accounts) next["Transport cost"] = accounts;
 
     // Re-assert Form joins when Gemini/writer left them blank.
-    if (isMissingValue(next["Address line"])) {
-      const joined = joinFilled(
+    // Ignore placeholder streets like "No" / "N/A" so we still keep the city.
+    if (isMissingValue(next["Address line"]) || /^(no|n\/a|na|none|-)\b/i.test(next["Address line"] || "")) {
+      const street = firstFilled(
         intakeValues,
-        intakeHeadersFor(mapping, undefined, ["street_address", "city_town"])
+        intakeHeadersFor(mapping, "street_address")
       );
+      const city = firstFilled(intakeValues, intakeHeadersFor(mapping, "city_town"));
+      const usableStreet =
+        street && !isMissingValue(street) && !/^(no|n\/a|na|none|-)$/i.test(street.trim())
+          ? street
+          : "";
+      const joined = [usableStreet, city].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
       if (joined) next["Address line"] = joined;
     }
     if (isMissingValue(next["Next of kin name + Surname"])) {
@@ -253,7 +260,8 @@ export function applyDeterministicFixes(
       intakeHeadersFor(mapping, "spouse_number")
     );
     if (spousePhone && !/^wife|husband|spouse$/i.test(spousePhone.trim())) {
-      next["Spouse number"] = spousePhone;
+      const spouseMobile = transformMobile(spousePhone);
+      if (spouseMobile.valid) next["Spouse number"] = spouseMobile.value;
     }
 
     const seriti = loadSeritiOptions();
