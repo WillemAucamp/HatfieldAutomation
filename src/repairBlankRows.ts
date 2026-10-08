@@ -26,11 +26,15 @@ import { formatErrorCell } from "./outcome.js";
 import { postWebhookJson } from "./sheetWriter.js";
 import { isMissingValue, usableIdDigits } from "./transforms.js";
 
-/** Client typos Seriti will never accept — stamp Status so GHA stops retrying.
+/** Client typos / Form gaps Seriti will never accept — stamp Status so GHA stops retrying.
  *  Do not stamp ID_EMPTY: blank IDs are often Sheets/Form match gaps that repair can refill. */
 const UNRECOVERABLE_CODES = new Set([
   "ID_CHECKSUM_INVALID",
   "ID_NOT_13_DIGITS",
+  // Form does not collect spouse RSA ID; cannot invent one for Seriti Married.
+  "SPOUSE_ID_EMPTY",
+  // Form put a numeric code in the bank column (e.g. "3800").
+  "BANK_NOT_NAME",
 ]);
 
 const PATCH_COLUMNS = [
