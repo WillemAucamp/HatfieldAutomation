@@ -21,8 +21,16 @@ import {
 import { loadIntakeMapping } from "./intake/mapping.js";
 import { applyDeterministicFixes, buildOutputValues } from "./intake/row.js";
 import { readSheetRows } from "./intake/sheets.js";
+import { formatErrorCell } from "./outcome.js";
 import { postWebhookJson } from "./sheetWriter.js";
 import { isMissingValue } from "./transforms.js";
+
+/** Client typos Seriti will never accept — stamp Status so GHA stops retrying.
+ *  Do not stamp ID_EMPTY: blank IDs are often Sheets/Form match gaps that repair can refill. */
+const UNRECOVERABLE_CODES = new Set([
+  "ID_CHECKSUM_INVALID",
+  "ID_NOT_13_DIGITS",
+]);
 
 const PATCH_COLUMNS = [
   "Full name",
@@ -185,6 +193,20 @@ async function main(): Promise<void> {
           ) {
             continue;
           }
+          // Never wipe identity/contact cells with empty Form rebuild values.
+          // Wrong Form matches or blank Form ID columns were clearing sheet IDs.
+          if (
+            isMissingValue(rebuilt[col] || "") &&
+            !isMissingValue(next[col] || "") &&
+            (col === "ID number" ||
+              col === "Mobile number" ||
+              col === "Email" ||
+              col === "Client cellphone number (add again at the end)" ||
+              col === "Full name" ||
+              col === "First names + surname")
+          ) {
+            continue;
+          }
           next[col] = rebuilt[col]!;
         }
       }
@@ -308,6 +330,41 @@ async function main(): Promise<void> {
     console.log(
       `  BLOCKED row ${a.rowIndex} ${a.firstName} ${a.surname}: ${a.errors.map((e) => e.code).join(", ")}`
     );
+  }
+
+  // Permanent: bad RSA IDs must not keep burning Seriti Personal Next attempts.
+  const stampUpdates: Array<{ row: number; column: string; value: string }> = [];
+  for (const a of blocked) {
+    const fatalCodes = [
+      ...new Set(
+        a.errors.map((e) => e.code).filter((c) => UNRECOVERABLE_CODES.has(c))
+      ),
+    ];
+    if (fatalCodes.length === 0) continue;
+    stampUpdates.push({
+      row: a.rowIndex,
+      column: "Status",
+      value: formatErrorCell(fatalCodes),
+    });
+  }
+  if (stampUpdates.length && !dryRun) {
+    console.log(`Stamping ${stampUpdates.length} unrecoverable ID error(s) onto Status…`);
+    const parsed = await postWebhookJson(config.sheetWebhookUrl, {
+      action: "updateSheet",
+      spreadsheetId: config.sheetId,
+      updates: stampUpdates,
+    });
+    if (parsed.ok === false) {
+      throw new Error(String(parsed.error || "stamp Status failed"));
+    }
+    for (const u of stampUpdates) {
+      console.log(`  row ${u.row} Status=${u.value}`);
+    }
+  } else if (stampUpdates.length && dryRun) {
+    console.log("DRY RUN — would stamp Status:");
+    for (const u of stampUpdates) {
+      console.log(`  row ${u.row} Status=${u.value}`);
+    }
   }
 
   if (doLoad && ready.length > 0) {

@@ -558,11 +558,21 @@ function readSheet_(data) {
     return String(s).trim().toLowerCase();
   });
   var statusIdx = statusColumn ? headers.indexOf(statusColumn) : -1;
+  // Enrichment Status on the Form sheet: only Melrose pipeline values are terminal.
+  // Form answers that leaked into that column (e.g. "Im not sure, but it should be GOOD")
+  // must not hide new submissions. Other sheets keep processableStatuses allowlist.
+  var intakeEnrichmentCol = /enrichment\s*status/i.test(statusColumn);
   if (lastRow >= 2) {
     var values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
     for (var i = 0; i < values.length; i++) {
       var status = statusIdx >= 0 ? String(values[i][statusIdx] || "").trim().toLowerCase() : "";
-      if (data.unprocessedOnly && processable.indexOf(status) === -1) continue;
+      if (data.unprocessedOnly) {
+        if (intakeEnrichmentCol) {
+          if (/^(enriched\b|skipped_|processing\b|error\b)/i.test(status)) continue;
+        } else if (processable.indexOf(status) === -1) {
+          continue;
+        }
+      }
       var record = {};
       for (var c = 0; c < headers.length; c++) {
         var h = String(headers[c] || "");

@@ -196,6 +196,35 @@ describe("output row contract", () => {
     assert.equal(values["Postal code"], "Pretoria");
   });
 
+  it("clears address text leaked into next-of-kin phone", () => {
+    const values = buildOutputValues(
+      mapping,
+      {
+        "Next of kin cellphone number": "230 Avondale Road Morningside Durban",
+      },
+      {
+        ...intakeAda,
+        "Relative or friend number example: 0856475124 CANNOT BE THE SAME AS YOURS":
+          "230 Avondale Road Morningside Durban",
+      }
+    );
+    assert.equal(values["Next of kin cellphone number"], "");
+  });
+
+  it("rejects Wife placeholders as spouse mobile", () => {
+    const values = buildOutputValues(
+      mapping,
+      { "Spouse number": "Wife", "Marital status": "Married" },
+      {
+        ...intakeAda,
+        "Marital Status": "Married",
+        "Spouse number": "Wife",
+      }
+    );
+    assert.equal(values["Spouse number"], "");
+  });
+
+
   it("repairs a doubled email domain", () => {
     assert.equal(normalizeEmail("ada@gmail.com@gmail.com"), "ada@gmail.com");
   });
