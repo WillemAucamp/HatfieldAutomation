@@ -66,4 +66,14 @@ describe("intake headers", () => {
     assert.equal(hasConsent("No"), false);
     assert.equal(hasConsent(""), false);
   });
+
+  it("does not treat applicant Name and surname as Spouse Name + Surname", () => {
+    const row = {
+      "Name and surname": "Ada Lovelace",
+      "Spouse Name + Surname": "Frieda Tobias",
+    };
+    assert.equal(cell(row, "Spouse Name + Surname"), "Frieda Tobias");
+    assert.equal(cell(row, "Name and surname"), "Ada Lovelace");
+    assert.equal(cell({ "Name and surname": "Ada Lovelace" }, "Spouse Name + Surname"), "");
+  });
 });

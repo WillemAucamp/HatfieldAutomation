@@ -299,6 +299,13 @@ export function applyDeterministicFixes(
         next["Spouse number"] = spouseMobile.valid ? spouseMobile.value : "";
       }
     }
+    // Blank Form marital: Married when spouse data exists, else standing Single.
+    if (isMissingValue(next["Marital status"])) {
+      const hasSpouse =
+        !isMissingValue(next["Spouse Name + Surname"]) ||
+        !isMissingValue(next["Spouse number"]);
+      if (hasSpouse) next["Marital status"] = "Married";
+    }
 
     const seriti = loadSeritiOptions();
     const employment = firstFilled(

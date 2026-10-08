@@ -127,6 +127,8 @@ standing_defaults:
   "Educational level": "Grade 12"
   # SA finance apps on this Form are RSA ID holders.
   "ID Type": "RSA ID"
+  # Form often leaves Marital Status blank; Single unblocks Personal Next when no spouse data.
+  "Marital status": "Single"
 
 # Exact live output-sheet header row (gid=0). Order is the contract.
 destination_columns:
@@ -331,7 +333,10 @@ field_map:
   - destination: Marital status
     source: marital_status
     mode: copy
-    notes: Copy from the Form. Empty if the Form does not ask. Do not default to Single.
+    notes: >-
+      Copy from the Form. When Form marital is blank and there is no spouse
+      name/phone, loader applies standing default Single so Seriti Personal Next
+      is not blocked. Rows with spouse data stay Married.
 
   - destination: Next of kin relationship
     mode: writer

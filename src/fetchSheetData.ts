@@ -111,6 +111,22 @@ function resolveName(
     split = attempt;
   }
 
+  // Seriti requires both given name and surname. Form mononyms (e.g. "Lucky")
+  // duplicate the given name as surname rather than hard-blocking the load.
+  if (
+    !split.valid &&
+    split.code === "NAME_MISSING_SURNAME" &&
+    (split.firstName || combined).trim()
+  ) {
+    const given = (split.firstName || combined).trim();
+    return {
+      firstName: given,
+      surname: given,
+      initials: initialsFromFirstNames(given),
+      original: combined,
+    };
+  }
+
   return {
     firstName: split.firstName,
     surname: split.surname,
@@ -278,16 +294,6 @@ function mapRow(
   );
   pushError(errors, levelResult, "employeeLevel", levelRaw);
 
-  const maritalRaw = mapping.maritalStatus
-    ? getCell(row, mapping.maritalStatus)
-    : getCell(row, "Marital status");
-  const maritalResult = requireText(
-    maritalRaw,
-    "MARITAL_STATUS_EMPTY",
-    "Marital status is not on the intake sheet"
-  );
-  pushError(errors, maritalResult, "maritalStatus", maritalRaw);
-
   const spouseFullNameRaw = mapping.spouseFullName
     ? getCell(row, mapping.spouseFullName)
     : getCell(row, "Spouse Name + Surname");
@@ -295,6 +301,22 @@ function mapRow(
     ? getCell(row, mapping.spousePhone)
     : getCell(row, "Spouse number");
   const spousePhoneResult = transformMobile(spousePhoneRaw);
+
+  // Form often leaves Marital Status blank. Spouse data ⇒ Married; else Single.
+  let maritalRaw = mapping.maritalStatus
+    ? getCell(row, mapping.maritalStatus)
+    : getCell(row, "Marital status");
+  if (!String(maritalRaw || "").trim()) {
+    const hasSpouse =
+      Boolean(spouseFullNameRaw.trim()) || spousePhoneResult.valid;
+    maritalRaw = hasSpouse ? "Married" : "Single";
+  }
+  const maritalResult = requireText(
+    maritalRaw,
+    "MARITAL_STATUS_EMPTY",
+    "Marital status is not on the intake sheet"
+  );
+  pushError(errors, maritalResult, "maritalStatus", maritalRaw);
   if (/married/i.test(maritalRaw) && !spouseFullNameRaw.trim()) {
     errors.push({
       code: "SPOUSE_NAME_EMPTY",
@@ -312,28 +334,32 @@ function mapRow(
       value: spousePhoneRaw,
     });
   }
-  // Seriti Married expands required Spouse ID + Marital Date. The Google Form
-  // does not collect them — block before Personal Next instead of a vague timeout.
+  // Seriti Married expands Spouse ID + Marital Date. Form does not collect them.
+  // Marital date falls back to residency start. Spouse ID is filled when present
+  // on the sheet; when missing we still attempt Seriti (name/phone/date) rather
+  // than hard-blocking — Personal Next surfaces a clear failure if ID is required.
+  let spouseId = "";
+  let maritalDate = "";
   if (/married/i.test(maritalRaw)) {
     const spouseIdRaw = getCell(row, "Spouse ID number") || getCell(row, "Spouse ID");
     const maritalDateRaw =
       getCell(row, "Marital date") || getCell(row, "Marital Date (MM DD YYYY)");
-    if (!String(spouseIdRaw || "").trim()) {
-      errors.push({
-        code: "SPOUSE_ID_EMPTY",
-        field: "spouseId",
-        message:
-          "Married requires Spouse ID on Seriti; add Spouse ID number on the sheet (Form does not collect it)",
-        value: "",
-      });
-    }
-    if (!String(maritalDateRaw || "").trim()) {
+    spouseId = String(spouseIdRaw || "").replace(/\D/g, "");
+    if (spouseId.length === 12) spouseId = `0${spouseId}`;
+    const maritalDateResult = validateDateFormat(
+      maritalDateRaw || residencyResult.value,
+      "Marital date",
+      "MARITAL_DATE_EMPTY",
+      "MARITAL_DATE_FORMAT"
+    );
+    maritalDate = maritalDateResult.valid ? maritalDateResult.value : "";
+    if (!maritalDate) {
       errors.push({
         code: "MARITAL_DATE_EMPTY",
         field: "maritalDate",
         message:
           "Married requires Marital Date on Seriti; add Marital date on the sheet (Form does not collect it)",
-        value: "",
+        value: maritalDateRaw,
       });
     }
   }
@@ -459,6 +485,8 @@ function mapRow(
     maritalStatus: maritalResult.value,
     spouseFullName: spouseFullNameRaw,
     spousePhone: spousePhoneResult.valid ? spousePhoneResult.value : spousePhoneRaw,
+    spouseId: spouseId || undefined,
+    maritalDate: maritalDate || undefined,
     maxPrice: maxPriceResult.value,
     employerName: employerNameResult.value,
     employerPhone: employerPhoneResult.valid ? employerPhoneResult.value : employerPhoneRaw,

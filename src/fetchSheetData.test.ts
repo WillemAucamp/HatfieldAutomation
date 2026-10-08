@@ -102,7 +102,9 @@ describe("fetchSheetData", () => {
     assert.equal(row.idNumber, "8304015345083");
     assert.equal(row.mobile, "0629095338");
     assert.equal(row.telephoneExpense, "1000");
-    assert.ok(row.errors.some((e) => e.code === "MARITAL_STATUS_EMPTY"));
+    // Blank marital + no spouse ⇒ Single (Form often omits marital).
+    assert.equal(row.maritalStatus, "Single");
+    assert.ok(!row.errors.some((e) => e.code === "MARITAL_STATUS_EMPTY"));
     assert.ok(row.errors.some((e) => e.code === "NOK_RELATIONSHIP_EMPTY"));
     // Max price is optional (Form does not ask). Empty must not block the row.
     assert.ok(!row.errors.some((e) => e.code === "MAX_PRICE_EMPTY"));
@@ -114,6 +116,133 @@ describe("fetchSheetData", () => {
       ),
       []
     );
+  });
+
+  it("duplicates a mononym as surname and does not hard-block", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
+    const csvPath = join(dir, "mono.csv");
+    const values = [
+      "351",
+      "Lucky",
+      "lucky@example.com",
+      "Mr",
+      "Lucky",
+      "South African ID",
+      "9204015306086",
+      "Grade 12",
+      "0821234567",
+      "1 Main Road",
+      "2196",
+      "Gauteng",
+      "10 08 1996",
+      "Friend Name",
+      "0821234568",
+      "Retail",
+      "Clerk",
+      "Staff",
+      "Shop",
+      "0111234567",
+      "2 Work Ave",
+      "2196",
+      "Gauteng",
+      "10 08 2024",
+      "10000",
+      "8000",
+      "200",
+      "300",
+      "500",
+      "Capitec",
+      "Savings/Transactional",
+      "Lucky",
+      "0821234567",
+      "",
+      "",
+    ];
+    const csv = [HEADERS, values]
+      .map((cols) => cols.map((c) => `"${c.replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    writeFileSync(csvPath, csv);
+
+    const applicants = await fetchSheetData({
+      csvUrl: "",
+      mapping: loadColumnMapping("./mapping.json"),
+      localCsvPath: csvPath,
+      includeCompleted: true,
+    });
+    const row = applicants[0]!;
+    assert.equal(row.firstName, "Lucky");
+    assert.equal(row.surname, "Lucky");
+    assert.ok(!row.errors.some((e) => e.code === "NAME_MISSING_SURNAME"));
+  });
+
+  it("treats Married without spouse ID as loadable when marital date can fall back", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
+    const csvPath = join(dir, "married.csv");
+    const headers = [
+      ...HEADERS.slice(0, 18),
+      "Marital status",
+      "Spouse Name + Surname",
+      "Spouse number",
+      ...HEADERS.slice(18),
+    ];
+    const values = [
+      "350",
+      "Hendrik Sylvester Tobias",
+      "hendrik@example.com",
+      "Mr",
+      "Hendrik Sylvester Tobias",
+      "South African ID",
+      "8606045216088",
+      "Grade 12",
+      "0821234567",
+      "1 Main Road",
+      "2196",
+      "Gauteng",
+      "10 08 2020",
+      "Friend Name",
+      "0821234568",
+      "Retail",
+      "Clerk",
+      "Staff",
+      "Married",
+      "Frieda Tobias",
+      "0786454285",
+      "Shop",
+      "0111234567",
+      "2 Work Ave",
+      "2196",
+      "Gauteng",
+      "04 08 2025",
+      "10000",
+      "8000",
+      "200",
+      "300",
+      "500",
+      "Capitec",
+      "Savings/Transactional",
+      "Hendrik Sylvester Tobias",
+      "0821234567",
+      "",
+      "",
+    ];
+    const csv = [headers, values]
+      .map((cols) => cols.map((c) => `"${c.replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    writeFileSync(csvPath, csv);
+
+    const applicants = await fetchSheetData({
+      csvUrl: "",
+      mapping: loadColumnMapping("./mapping.json"),
+      localCsvPath: csvPath,
+      includeCompleted: true,
+    });
+    const row = applicants[0]!;
+    assert.equal(row.maritalStatus, "Married");
+    assert.equal(row.spouseFullName, "Frieda Tobias");
+    assert.equal(row.spousePhone, "0786454285");
+    assert.equal(row.maritalDate, "10 08 2020");
+    assert.ok(!row.errors.some((e) => e.code === "SPOUSE_ID_EMPTY"));
+    assert.ok(!row.errors.some((e) => e.code === "MARITAL_DATE_EMPTY"));
   });
 
   it("does not reject a row when next-of-kin phone is blank", async () => {

@@ -220,6 +220,28 @@ export async function runSection3(ctx: FillContext): Promise<void> {
         ids: ["txtSpouseMobileNumber", "txtClientSpouseMobileNumber"],
       }, data.spousePhone);
     }
+    if (data.spouseId) {
+      await fillField(ctx, {
+        name: "Spouse ID number",
+        section: SECTION,
+        labels: ["Spouse ID number", "Spouse ID", "Partner ID number"],
+        role: "textbox",
+        type: "text",
+        names: ["spouseIdNumber", "clientSpouseIdNumber", "_SpouseIdNumber"],
+        ids: ["txtSpouseIdNumber", "txtClientSpouseIdNumber", "_SpouseIdNumber"],
+      }, data.spouseId);
+    }
+    if (data.maritalDate) {
+      await fillField(ctx, {
+        name: "Marital date",
+        section: SECTION,
+        labels: ["Marital date", "Date of marriage", "Marriage date"],
+        role: "textbox",
+        type: "date",
+        names: ["maritalDate", "clientMaritalDate", "spouseMaritalDate"],
+        ids: ["txtMaritalDate", "txtClientMaritalDate", "txtSpouseMaritalDate"],
+      }, data.maritalDate);
+    }
   }
 
   await fillField(ctx, {

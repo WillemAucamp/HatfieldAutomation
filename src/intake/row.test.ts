@@ -245,6 +245,33 @@ describe("output row contract", () => {
     assert.equal(values["Spouse number"], "");
   });
 
+  it("defaults blank Form marital to Single when there is no spouse data", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "Marital Status": "",
+      }
+    );
+    assert.equal(values["Marital status"], "Single");
+  });
+
+  it("sets Married when Form marital is blank but spouse name is present", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "Marital Status": "",
+        "Spouse Name + Surname": "Frieda Tobias",
+        "Spouse number": "0786454285",
+      }
+    );
+    assert.equal(values["Marital status"], "Married");
+    assert.equal(values["Spouse Name + Surname"], "Frieda Tobias");
+    assert.equal(values["Spouse number"], "0786454285");
+  });
 
   it("repairs a doubled email domain", () => {
     assert.equal(normalizeEmail("ada@gmail.com@gmail.com"), "ada@gmail.com");
