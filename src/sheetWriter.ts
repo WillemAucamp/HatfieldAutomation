@@ -178,10 +178,67 @@ export function removeProcessedRowIds(rowIds: string[]): number {
   return removed;
 }
 
-export async function postWebhookJson(
-  url: string,
-  payload: Record<string, unknown>
-): Promise<Record<string, unknown> & { ok?: boolean; skipped?: boolean; updated?: boolean; error?: string; row?: number; count?: number; nr?: number; rows?: unknown[]; headers?: string[] }> {
+export type WebhookJson = Record<string, unknown> & {
+  ok?: boolean;
+  skipped?: boolean;
+  updated?: boolean;
+  error?: string;
+  row?: number;
+  count?: number;
+  nr?: number;
+  rows?: unknown[];
+  headers?: string[];
+  /** Set when the 302 confirmation GET failed or returned the doGet probe. */
+  confirmationMissing?: boolean;
+};
+
+/**
+ * Apps Script web apps 302 to an echo URL after doPost. That GET sometimes
+ * returns the doGet probe (`version` + `actions`) instead of the doPost JSON.
+ * Treating that as a successful readSheet yields scanned=0 / append row 0.
+ */
+export function isAppsScriptProbeResponse(
+  parsed: Record<string, unknown> | null | undefined
+): boolean {
+  if (!parsed || typeof parsed !== "object") return false;
+  if (typeof parsed.version !== "string") return false;
+  if (!Array.isArray(parsed.actions)) return false;
+  if (Array.isArray(parsed.rows)) return false;
+  if (parsed.row != null) return false;
+  if (parsed.updated != null) return false;
+  if (parsed.count != null) return false;
+  if (parsed.spreadsheetId != null) return false;
+  return true;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWebhookConfirmation(location: string, attempts = 4): Promise<WebhookJson> {
+  let last: WebhookJson = { ok: true, confirmationMissing: true };
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const followed = await fetch(location, { method: "GET", redirect: "follow" });
+      const body = await followed.text().catch(() => "");
+      if (followed.ok && body.trim()) {
+        const parsed = parseWebhookBody(body);
+        if (!isAppsScriptProbeResponse(parsed)) {
+          return parsed;
+        }
+        last = { ...parsed, confirmationMissing: true };
+      } else {
+        last = { ok: true, confirmationMissing: true };
+      }
+    } catch {
+      last = { ok: true, confirmationMissing: true };
+    }
+    if (i < attempts) await sleep(250 * i);
+  }
+  return last;
+}
+
+async function postWebhookJsonOnce(url: string, payload: Record<string, unknown>): Promise<WebhookJson> {
   // Apps Script web apps 302 to googleusercontent.com. Following that
   // redirect with POST yields 405; the JSON result must be fetched with GET.
   const response = await fetch(url, {
@@ -194,48 +251,68 @@ export async function postWebhookJson(
   if (response.status >= 300 && response.status < 400) {
     const location = response.headers.get("location");
     if (location) {
-      try {
-        const followed = await fetch(location, { method: "GET", redirect: "follow" });
-        const body = await followed.text().catch(() => "");
-        if (followed.ok) {
-          return parseWebhookBody(body);
-        }
-      } catch {
-        // doPost already ran on the original POST; confirmation GET is best-effort.
-      }
+      return fetchWebhookConfirmation(location);
     }
-    return { ok: true };
+    return { ok: true, confirmationMissing: true };
   }
 
   const body = await response.text().catch(() => "");
   if (!response.ok) {
     throw new Error(`Webhook ${response.status}: ${body.slice(0, 300)}`);
   }
-  return parseWebhookBody(body);
+  const parsed = parseWebhookBody(body);
+  if (isAppsScriptProbeResponse(parsed)) {
+    return { ...parsed, confirmationMissing: true };
+  }
+  return parsed;
 }
 
-function parseWebhookBody(body: string): Record<string, unknown> & {
-  ok?: boolean;
-  skipped?: boolean;
-  updated?: boolean;
-  error?: string;
-  row?: number;
-  count?: number;
-  nr?: number;
-} {
+function webhookResultUsable(action: string, parsed: WebhookJson): boolean {
+  if (parsed.ok === false) return true; // real error payload — caller handles it
+  if (parsed.confirmationMissing || isAppsScriptProbeResponse(parsed)) return false;
+  if (action === "readSheet") return Array.isArray(parsed.rows);
+  if (action === "appendApplicant") return parsed.row != null;
+  return true;
+}
+
+export async function postWebhookJson(
+  url: string,
+  payload: Record<string, unknown>
+): Promise<WebhookJson> {
+  const action = String(payload.action || "");
+  // readSheet / updateSheet are safe to re-POST. appendApplicant is not —
+  // only the confirmation GET is retried inside postWebhookJsonOnce.
+  // Large Form scans often lose the 302 body to the doGet probe — retry more.
+  const postAttempts = action === "readSheet" ? 8 : action === "updateSheet" ? 4 : 1;
+
+  let last: WebhookJson = { ok: true, confirmationMissing: true };
+  for (let attempt = 1; attempt <= postAttempts; attempt++) {
+    last = await postWebhookJsonOnce(url, payload);
+    if (webhookResultUsable(action, last)) {
+      return last;
+    }
+    if (attempt < postAttempts) {
+      console.warn(
+        `Webhook ${action || "request"} got Apps Script probe/empty confirmation; retrying POST (${attempt}/${postAttempts})`
+      );
+      await sleep(400 * attempt);
+    }
+  }
+
+  if (action === "readSheet" && !Array.isArray(last.rows)) {
+    throw new Error(
+      "readSheet confirmation returned Apps Script doGet probe (no rows) after retries — refusing to treat as empty sheet"
+    );
+  }
+  return last;
+}
+
+function parseWebhookBody(body: string): WebhookJson {
   if (!body.trim()) {
-    return { ok: true };
+    return { ok: true, confirmationMissing: true };
   }
   try {
-    return JSON.parse(body) as Record<string, unknown> & {
-      ok?: boolean;
-      skipped?: boolean;
-      updated?: boolean;
-      error?: string;
-      row?: number;
-      count?: number;
-      nr?: number;
-    };
+    return JSON.parse(body) as WebhookJson;
   } catch {
     if (/<!doctype html/i.test(body) || /authorization/i.test(body)) {
       throw new Error(

@@ -5,7 +5,14 @@ import { loadIntakeMapping, requiredIntakeHeaderLabels } from "./mapping.js";
 import { formatErrorCell } from "../outcome.js";
 import { validateIdNumber } from "../transforms.js";
 import { buildOutputValues } from "./row.js";
-import { appendAutomationRow, markIntakeStatus, readUnprocessedIntake } from "./sheets.js";
+import {
+  appendAutomationRow,
+  isFailedEnrichmentRowZero,
+  isUsableSheetRow,
+  markIntakeStatus,
+  readUnprocessedIntake,
+  recoverAppendedAutomationRow,
+} from "./sheets.js";
 
 export interface IngestResult {
   scanned: number;
@@ -138,11 +145,38 @@ export async function ingestNewRows(
         continue;
       }
 
+      // Prior run marked "enriched row 0" after a lost Apps Script confirmation —
+      // reuse the automation row if it already exists instead of appending again.
+      if (isFailedEnrichmentRowZero(intake.status)) {
+        const existing = await recoverAppendedAutomationRow({
+          webhookUrl: config.sheetWebhookUrl,
+          spreadsheetId: config.sheetId,
+          values,
+        });
+        if (existing && isUsableSheetRow(existing.row)) {
+          result.appendedSheetRows.push(existing.row);
+          await markIntakeStatus({
+            webhookUrl: config.sheetWebhookUrl,
+            spreadsheetId: config.intakeSpreadsheetId,
+            rowIndex: intake.rowIndex,
+            statusColumn: config.intakeStatusColumn,
+            status: `enriched row ${existing.row} nr ${existing.nr}`,
+          });
+          console.log(
+            `Recovered prior row-0 enrich for ${label} → automation sheet row ${existing.row} (NR ${existing.nr})`
+          );
+          continue;
+        }
+      }
+
       const written = await appendAutomationRow({
         webhookUrl: config.sheetWebhookUrl,
         spreadsheetId: config.sheetId,
         values,
       });
+      if (!isUsableSheetRow(written.row)) {
+        throw new Error(`appendApplicant returned unusable sheet row ${written.row}`);
+      }
       result.appendedSheetRows.push(written.row);
       await markIntakeStatus({
         webhookUrl: config.sheetWebhookUrl,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  isFailedEnrichmentRowZero,
   isTerminalIntakeStatus,
   isUsableSheetRow,
   matchAppendedSheetRow,
@@ -22,6 +23,12 @@ describe("isTerminalIntakeStatus", () => {
       isTerminalIntakeStatus("Im not sure, but it should be GOOD"),
       false
     );
+  });
+
+  it("does not treat enriched row 0 (lost Apps Script confirmation) as terminal", () => {
+    assert.equal(isTerminalIntakeStatus("enriched row 0 nr 0"), false);
+    assert.equal(isFailedEnrichmentRowZero("enriched row 0 nr 0"), true);
+    assert.equal(isFailedEnrichmentRowZero("enriched row 340 nr 341"), false);
   });
 });
 
