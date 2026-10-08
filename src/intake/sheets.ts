@@ -6,6 +6,21 @@ export interface IntakeSheetRow {
   values: Record<string, string>;
 }
 
+/**
+ * Melrose wrote these Enrichment Status values. Anything else in that column
+ * (Form answers, operator notes) must not block ingest.
+ */
+export function isTerminalIntakeStatus(status: string | undefined | null): boolean {
+  const s = String(status ?? "").trim();
+  if (!s) return false;
+  return /^(enriched\b|skipped_|processing\b|error\b)/i.test(s);
+}
+
+const DEFAULT_INTAKE_SHEET_NAME = "Form Responses 1";
+
+/** Empty scan column: Apps Script ensureColumn_ fills it blank so every row is returned. */
+const INTAKE_SCAN_COLUMN = "__melrose_row_scan__";
+
 export async function readSheetRows(options: {
   webhookUrl: string;
   spreadsheetId: string;
@@ -44,14 +59,61 @@ export async function readUnprocessedIntake(options: {
   webhookUrl: string;
   spreadsheetId: string;
   statusColumn: string;
+  sheetName?: string;
 }): Promise<IntakeSheetRow[]> {
-  return readSheetRows({
+  const sheetName = options.sheetName || DEFAULT_INTAKE_SHEET_NAME;
+
+  // Full-sheet scan (not Enrichment Status allowlist). Form answers that landed
+  // in Enrichment Status used to make scanned=0 even for brand-new submissions.
+  const scanned = await readSheetRows({
     webhookUrl: options.webhookUrl,
     spreadsheetId: options.spreadsheetId,
+    sheetName,
     unprocessedOnly: true,
-    statusColumn: options.statusColumn,
-    processableStatuses: ["", "new", "retry"],
+    statusColumn: INTAKE_SCAN_COLUMN,
+    processableStatuses: [""],
   });
+
+  const pending: IntakeSheetRow[] = [];
+  const leaked: IntakeSheetRow[] = [];
+  for (const row of scanned) {
+    const enrich = String(row.values[options.statusColumn] ?? "").trim();
+    if (isTerminalIntakeStatus(enrich)) continue;
+    pending.push({
+      ...row,
+      status: enrich.toLowerCase(),
+    });
+    if (enrich && !/^(new|retry)$/i.test(enrich)) {
+      leaked.push(row);
+    }
+  }
+
+  // Clear leaked Form text so older GHA/main builds that still use the allowlist
+  // can see these rows on the next click.
+  if (leaked.length > 0) {
+    const updates = leaked.map((row) => ({
+      row: row.rowIndex,
+      column: options.statusColumn,
+      value: "",
+    }));
+    console.warn(
+      `Clearing ${updates.length} non-pipeline Enrichment Status value(s) that were blocking ingest`
+    );
+    const parsed = await postWebhookJson(options.webhookUrl, {
+      action: "updateSheet",
+      spreadsheetId: options.spreadsheetId,
+      updates,
+    });
+    if (parsed.ok === false) {
+      console.warn(`Could not clear leaked statuses: ${parsed.error}`);
+    } else {
+      for (const row of leaked) {
+        row.values[options.statusColumn] = "";
+      }
+    }
+  }
+
+  return pending;
 }
 
 export async function markIntakeStatus(options: {

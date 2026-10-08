@@ -2,6 +2,8 @@ import type { AppConfig } from "../types.js";
 import { enrichWithGemini } from "./gemini.js";
 import { assertIntakeHeadersPresent, cell, firstFilled, flattenRow, hasConsent } from "./headers.js";
 import { loadIntakeMapping, requiredIntakeHeaderLabels } from "./mapping.js";
+import { formatErrorCell } from "../outcome.js";
+import { validateIdNumber } from "../transforms.js";
 import { buildOutputValues } from "./row.js";
 import { appendAutomationRow, markIntakeStatus, readUnprocessedIntake } from "./sheets.js";
 
@@ -117,6 +119,19 @@ export async function ingestNewRows(
       });
       console.log(`Gemini finished ${label} in ${((Date.now() - startedMs) / 1000).toFixed(1)}s`);
       const values = buildOutputValues(mapping, fields, intake.values);
+
+      // Bad RSA IDs never pass Seriti Personal Next — stamp Status at ingest time.
+      const idCheck = validateIdNumber(values["ID number"]);
+      if (
+        !idCheck.valid &&
+        idCheck.code &&
+        ["ID_CHECKSUM_INVALID", "ID_NOT_13_DIGITS"].includes(idCheck.code)
+      ) {
+        values.Status = formatErrorCell([idCheck.code]);
+        console.warn(
+          `${label}: ${idCheck.code} — appending with Status=${values.Status} (will not load)`
+        );
+      }
 
       if (dryRun) {
         console.log(`DRY RUN ${label}: would append`, values);

@@ -243,12 +243,21 @@ export function applyDeterministicFixes(
       );
       if (nok) next["Next of kin name + Surname"] = nok;
     }
-    if (isMissingValue(next["Next of kin cellphone number"])) {
-      const nokPhone = firstFilled(
+    // NOK phone: Form sometimes puts an address here. Only keep real mobiles.
+    {
+      const formNokPhone = firstFilled(
         intakeValues,
         intakeHeadersFor(mapping, "next_of_kin_phone")
       );
-      if (nokPhone) next["Next of kin cellphone number"] = nokPhone;
+      const candidate = isMissingValue(next["Next of kin cellphone number"])
+        ? formNokPhone
+        : next["Next of kin cellphone number"]!;
+      const nokMobile = transformMobile(candidate);
+      if (nokMobile.valid) {
+        next["Next of kin cellphone number"] = nokMobile.value;
+      } else if (!isMissingValue(candidate)) {
+        next["Next of kin cellphone number"] = "";
+      }
     }
     if (isMissingValue(next["Educational level"])) {
       const edu = firstFilled(
@@ -269,9 +278,14 @@ export function applyDeterministicFixes(
       intakeValues,
       intakeHeadersFor(mapping, "spouse_number")
     );
-    if (spousePhone && !/^wife|husband|spouse$/i.test(spousePhone.trim())) {
-      const spouseMobile = transformMobile(spousePhone);
-      if (spouseMobile.valid) next["Spouse number"] = spouseMobile.value;
+    {
+      const candidate = spousePhone || next["Spouse number"] || "";
+      if (/^wife|husband|spouse$/i.test(candidate.trim())) {
+        next["Spouse number"] = "";
+      } else if (!isMissingValue(candidate)) {
+        const spouseMobile = transformMobile(candidate);
+        next["Spouse number"] = spouseMobile.valid ? spouseMobile.value : "";
+      }
     }
 
     const seriti = loadSeritiOptions();

@@ -312,6 +312,31 @@ function mapRow(
       value: spousePhoneRaw,
     });
   }
+  // Seriti Married expands required Spouse ID + Marital Date. The Google Form
+  // does not collect them — block before Personal Next instead of a vague timeout.
+  if (/married/i.test(maritalRaw)) {
+    const spouseIdRaw = getCell(row, "Spouse ID number") || getCell(row, "Spouse ID");
+    const maritalDateRaw =
+      getCell(row, "Marital date") || getCell(row, "Marital Date (MM DD YYYY)");
+    if (!String(spouseIdRaw || "").trim()) {
+      errors.push({
+        code: "SPOUSE_ID_EMPTY",
+        field: "spouseId",
+        message:
+          "Married requires Spouse ID on Seriti; add Spouse ID number on the sheet (Form does not collect it)",
+        value: "",
+      });
+    }
+    if (!String(maritalDateRaw || "").trim()) {
+      errors.push({
+        code: "MARITAL_DATE_EMPTY",
+        field: "maritalDate",
+        message:
+          "Married requires Marital Date on Seriti; add Marital date on the sheet (Form does not collect it)",
+        value: "",
+      });
+    }
+  }
 
   const nokRelRaw = mapping.nextOfKinRelationship
     ? getCell(row, mapping.nextOfKinRelationship)
