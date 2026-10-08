@@ -498,6 +498,8 @@ function isPhoneColumn_(name) {
   var n = String(name || "");
   // Do not treat "Telephone payment" as a phone — that expense must stay numeric.
   if (/payment|cost|salary|expense|gross|nett/i.test(n)) return false;
+  // "Spouse number" has no phone/mobile/cell token but must stay text (leading 0).
+  if (/spouse\s*number/i.test(n)) return true;
   return /(phone|mobile|cell)/i.test(n);
 }
 

@@ -70,6 +70,8 @@ export interface ApplicantRecord {
   maritalStatus: string;
   spouseFullName?: string;
   spousePhone?: string;
+  spouseId?: string;
+  maritalDate?: string;
   maxPrice: string;
   employerName: string;
   employerPhone: string;

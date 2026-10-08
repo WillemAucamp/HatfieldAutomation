@@ -24,6 +24,21 @@ function significantTokens(value: string): string[] {
     .filter((token) => !["example", "your", "the", "and", "for", "with", "from"].includes(token));
 }
 
+/** Tokens that qualify a person/role — must not be ignored when fuzzy-matching. */
+const ROLE_QUALIFIERS = new Set([
+  "spouse",
+  "partner",
+  "employer",
+  "employee",
+  "kin",
+  "relative",
+  "friend",
+  "client",
+  "account",
+  "holder",
+  "next",
+]);
+
 function headersCompatible(have: string, want: string): boolean {
   const a = coreHeader(have);
   const b = coreHeader(want);
@@ -34,11 +49,19 @@ function headersCompatible(have: string, want: string): boolean {
   const aTokens = significantTokens(have);
   const bTokens = significantTokens(want);
   if (!bTokens.length) return false;
-  // Require every significant token from the shorter side to appear in the longer.
+  // Require every significant token from the shorter side to appear in the longer
+  // (Form "Food spend" ↔ mapping "How much do you spend on food?").
   const [shorter, longer] =
     aTokens.length <= bTokens.length ? [aTokens, bTokens] : [bTokens, aTokens];
   if (shorter.length < 2) return false;
-  return shorter.every((token) => longer.includes(token));
+  if (!shorter.every((token) => longer.includes(token))) return false;
+
+  // Role qualifiers must agree on both sides — otherwise "Name and surname"
+  // matches "Spouse Name + Surname" via shared name/surname tokens.
+  for (const role of ROLE_QUALIFIERS) {
+    if (aTokens.includes(role) !== bTokens.includes(role)) return false;
+  }
+  return true;
 }
 
 export function findHeaderKey(
