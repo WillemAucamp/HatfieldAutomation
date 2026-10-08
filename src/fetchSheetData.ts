@@ -232,8 +232,10 @@ function mapRow(
   pushError(errors, residencyResult, "residencyStartDate", residencyRaw);
 
   const employmentRaw = getCell(row, mapping.employmentStartDate);
+  // Form sometimes answers "months" with no number — fall back to residency start
+  // so Work Next is not blocked when the sheet employment date is empty.
   const employmentResult = validateDateFormat(
-    employmentRaw,
+    employmentRaw || residencyResult.value,
     "Employment start date",
     "EMPLOYMENT_DATE_EMPTY",
     "EMPLOYMENT_DATE_FORMAT"
@@ -334,10 +336,9 @@ function mapRow(
       value: spousePhoneRaw,
     });
   }
-  // Seriti Married expands Spouse ID + Marital Date. Form does not collect them.
-  // Marital date falls back to residency start. Spouse ID is filled when present
-  // on the sheet; when missing we still attempt Seriti (name/phone/date) rather
-  // than hard-blocking — Personal Next surfaces a clear failure if ID is required.
+  // Seriti Married requires Spouse ID Type + Spouse ID + Marital Date. Form does
+  // not collect spouse ID/date. Marital date falls back to residency start.
+  // Missing spouse ID hard-blocks — Seriti Personal Next will not advance without it.
   let spouseId = "";
   let maritalDate = "";
   if (/married/i.test(maritalRaw)) {
@@ -346,6 +347,15 @@ function mapRow(
       getCell(row, "Marital date") || getCell(row, "Marital Date (MM DD YYYY)");
     spouseId = String(spouseIdRaw || "").replace(/\D/g, "");
     if (spouseId.length === 12) spouseId = `0${spouseId}`;
+    if (!spouseId) {
+      errors.push({
+        code: "SPOUSE_ID_EMPTY",
+        field: "spouseId",
+        message:
+          "Married requires Spouse ID on Seriti; add Spouse ID number on the sheet (Form does not collect it)",
+        value: "",
+      });
+    }
     const maritalDateResult = validateDateFormat(
       maritalDateRaw || residencyResult.value,
       "Marital date",
@@ -449,6 +459,15 @@ function mapRow(
   const bankRaw = mapping.bank ? getCell(row, mapping.bank) : getCell(row, "Bank name");
   const bankResult = requireText(bankRaw, "BANK_EMPTY", "Bank name is empty");
   pushError(errors, bankResult, "bank", bankRaw);
+  // Form occasionally puts a postal/branch code in the bank column (e.g. "3800").
+  if (bankResult.valid && /^\d+$/.test(bankResult.value.replace(/\s/g, ""))) {
+    errors.push({
+      code: "BANK_NOT_NAME",
+      field: "bank",
+      message: `Bank must be a Seriti bank name, not a number ("${bankResult.value}")`,
+      value: bankResult.value,
+    });
+  }
 
   const accountTypeRaw = mapping.accountType
     ? getCell(row, mapping.accountType)

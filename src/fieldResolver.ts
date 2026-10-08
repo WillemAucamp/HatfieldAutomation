@@ -172,12 +172,17 @@ async function findBySemanticHints(form: FormScope, target: FieldTarget): Promis
     if (exact) return exact;
     const bySuffix = await firstVisibleOrAny(form.locator(`[id$="${id}"]`));
     if (bySuffix) return bySuffix;
+    // Seriti prefixes numeric widget ids (e.g. 72_txtClientMaritalDate).
+    const byContains = await firstVisibleOrAny(form.locator(`[id*="${id}"]`));
+    if (byContains) return byContains;
   }
   for (const name of target.names ?? []) {
     const byName = await firstVisibleOrAny(form.locator(`[name="${name}"]`));
     if (byName) return byName;
     const byNameSuffix = await firstVisibleOrAny(form.locator(`[name$="${name}"]`));
     if (byNameSuffix) return byNameSuffix;
+    const byNameContains = await firstVisibleOrAny(form.locator(`[name*="${name}"]`));
+    if (byNameContains) return byNameContains;
   }
   return null;
 }

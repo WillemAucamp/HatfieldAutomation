@@ -1,6 +1,12 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
-import { clickNextAndWait, screenshotSection, syncAddressFromPostal, waitForSelectorVisible } from "../formUtils.js";
+import {
+  clickNextAndWait,
+  matchSelectOption,
+  screenshotSection,
+  syncAddressFromPostal,
+  waitForSelectorVisible,
+} from "../formUtils.js";
 
 const SECTION = "section3";
 
@@ -181,66 +187,92 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     ids: ["ddlClientMaritalStatus"],
   }, data.maritalStatus);
 
-  // Married expands required Spouse fields; fill before next-of-kin (form re-renders).
+  // Married expands Marriage Type/Date + Spouse name/ID (no spouse mobile on this build).
   if (/married/i.test(data.maritalStatus || "")) {
+    await waitForSelectorVisible(
+      form,
+      '[id*="txtClientMarriageDate"], [id*="clientMarriageDate"], [id="txtSpouseFirstName"], [id="ddlClientMarriageType"]',
+      15000
+    ).catch(() => undefined);
+
     const spouse = String(data.spouseFullName || "").trim();
     const spouseParts = spouse.split(/\s+/).filter(Boolean);
     const spouseFirst = spouseParts.slice(0, -1).join(" ") || spouseParts[0] || "";
     const spouseLast = spouseParts.length > 1 ? spouseParts[spouseParts.length - 1]! : "";
+
+    // Marriage type (ANC/COP) — Form does not collect; pick first Seriti option.
+    await fillField(ctx, {
+      name: "Marriage type",
+      section: SECTION,
+      labels: ["Marriage type", "Type of marriage"],
+      role: "combobox",
+      type: "select",
+      names: ["clientMarriageType"],
+      ids: ["ddlClientMarriageType"],
+    }, "Out of community", { fallbackToFirst: true });
+
+    // Live id is txtClientMarriageDate_<timestamp>.
+    if (data.maritalDate) {
+      await fillField(ctx, {
+        name: "Marital date",
+        section: SECTION,
+        labels: ["Marital date", "Marital Date", "Date of marriage", "Marriage date"],
+        role: "textbox",
+        type: "date",
+        names: ["clientMarriageDate", "MarriageDate"],
+        ids: ["txtClientMarriageDate", "clientMarriageDate", "MarriageDate"],
+      }, data.maritalDate);
+    }
+
     if (spouseFirst) {
       await fillField(ctx, {
         name: "Spouse first name",
         section: SECTION,
-        labels: ["Spouse first name", "Spouse name", "Partner first name"],
+        labels: ["Spouse first name", "Spouse First Name", "Spouse name"],
         role: "textbox",
         type: "text",
-        names: ["spouseFirstName", "clientSpouseFirstName"],
-        ids: ["txtSpouseFirstName", "txtClientSpouseFirstName"],
+        names: ["spouseFirstName"],
+        ids: ["txtSpouseFirstName"],
       }, spouseFirst);
     }
     if (spouseLast) {
       await fillField(ctx, {
         name: "Spouse surname",
         section: SECTION,
-        labels: ["Spouse surname", "Spouse last name", "Partner surname"],
+        labels: ["Spouse surname", "Spouse last name", "Spouse Last Name"],
         role: "textbox",
         type: "text",
-        names: ["spouseLastName", "clientSpouseLastName"],
-        ids: ["txtSpouseLastName", "txtClientSpouseLastName"],
+        names: ["spouseLastName"],
+        ids: ["txtSpouseLastName"],
       }, spouseLast);
     }
-    if (data.spousePhone) {
-      await fillField(ctx, {
-        name: "Spouse mobile",
-        section: SECTION,
-        labels: ["Spouse mobile", "Spouse phone", "Partner mobile"],
-        role: "textbox",
-        type: "text",
-        names: ["spouseMobileNumber", "clientSpouseMobileNumber"],
-        ids: ["txtSpouseMobileNumber", "txtClientSpouseMobileNumber"],
-      }, data.spousePhone);
+
+    // Spouse identity uses the same *_IdType / *_IdNumber pattern as the applicant
+    // (e.g. 891_IdType). Applicant owns the first visible pair; spouse is the last.
+    await waitForSelectorVisible(form, '[id$="_IdType"]', 10000).catch(() => undefined);
+    const idTypes = form.locator('[id$="_IdType"]').filter({ visible: true });
+    const idNumbers = form.locator('[id$="_IdNumber"]').filter({ visible: true });
+    const idTypeCount = await idTypes.count();
+    const idNumberCount = await idNumbers.count();
+    if (idTypeCount >= 2) {
+      const spouseIdType = idTypes.nth(idTypeCount - 1);
+      const match = await matchSelectOption(spouseIdType, "RSA", {
+        fieldName: "Spouse ID type",
+        fallbackToFirst: true,
+      });
+      await spouseIdType.selectOption({ value: match.value });
+      console.log(`  [section3] Spouse ID type => ${match.text || match.value}`);
     }
-    if (data.spouseId) {
-      await fillField(ctx, {
-        name: "Spouse ID number",
-        section: SECTION,
-        labels: ["Spouse ID number", "Spouse ID", "Partner ID number"],
-        role: "textbox",
-        type: "text",
-        names: ["spouseIdNumber", "clientSpouseIdNumber", "_SpouseIdNumber"],
-        ids: ["txtSpouseIdNumber", "txtClientSpouseIdNumber", "_SpouseIdNumber"],
+    if (data.spouseId && idNumberCount >= 2) {
+      const spouseIdInput = idNumbers.nth(idNumberCount - 1);
+      await spouseIdInput.fill(data.spouseId);
+      await spouseIdInput.evaluate((el, val) => {
+        const input = el as HTMLInputElement;
+        if (input.value !== val) input.value = val;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
       }, data.spouseId);
-    }
-    if (data.maritalDate) {
-      await fillField(ctx, {
-        name: "Marital date",
-        section: SECTION,
-        labels: ["Marital date", "Date of marriage", "Marriage date"],
-        role: "textbox",
-        type: "date",
-        names: ["maritalDate", "clientMaritalDate", "spouseMaritalDate"],
-        ids: ["txtMaritalDate", "txtClientMaritalDate", "txtSpouseMaritalDate"],
-      }, data.maritalDate);
+      console.log(`  [section3] Spouse ID number filled (${data.spouseId.length} digits)`);
     }
   }
 

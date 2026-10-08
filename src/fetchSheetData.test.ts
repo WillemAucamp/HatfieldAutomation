@@ -241,7 +241,8 @@ describe("fetchSheetData", () => {
     assert.equal(row.spouseFullName, "Frieda Tobias");
     assert.equal(row.spousePhone, "0786454285");
     assert.equal(row.maritalDate, "10 08 2020");
-    assert.ok(!row.errors.some((e) => e.code === "SPOUSE_ID_EMPTY"));
+    // Seriti requires Spouse ID for Married — hard-block when Form/sheet omit it.
+    assert.ok(row.errors.some((e) => e.code === "SPOUSE_ID_EMPTY"));
     assert.ok(!row.errors.some((e) => e.code === "MARITAL_DATE_EMPTY"));
   });
 

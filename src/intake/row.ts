@@ -200,6 +200,17 @@ export function applyDeterministicFixes(
     const employedDate = parseDurationToMmDdYyyy(employed, today);
     if (employedDate) {
       next["Year they started working there (calculate from years provided)"] = employedDate;
+    } else if (
+      isMissingValue(
+        next["Year they started working there (calculate from years provided)"]
+      ) &&
+      !isMissingValue(
+        next["Year start living at address (MM DD YYYY format ONLY)"]
+      )
+    ) {
+      // Unparseable Form answers like "months" — mirror residency so Seriti Work Next is not blocked.
+      next["Year they started working there (calculate from years provided)"] =
+        next["Year start living at address (MM DD YYYY format ONLY)"]!;
     }
 
     // Re-copy mobile from Form when the sheet cell is empty / Sheets-stripped.
