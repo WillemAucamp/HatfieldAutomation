@@ -12,6 +12,8 @@ export interface ColumnMapping {
   occupation?: string;
   employeeLevel?: string;
   maritalStatus?: string;
+  spouseFullName?: string;
+  spousePhone?: string;
   nextOfKinRelationship?: string;
   maxPrice?: string;
   idNumber: string;
@@ -66,6 +68,8 @@ export interface ApplicantRecord {
   occupation: string;
   employeeLevel: string;
   maritalStatus: string;
+  spouseFullName?: string;
+  spousePhone?: string;
   maxPrice: string;
   employerName: string;
   employerPhone: string;

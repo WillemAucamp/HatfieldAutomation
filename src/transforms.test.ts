@@ -81,6 +81,7 @@ describe("parseDurationToMmDdYyyy", () => {
     const today = new Date(2026, 9, 5);
     assert.equal(parseDurationToMmDdYyyy("3 years", today), "10 05 2023");
     assert.equal(parseDurationToMmDdYyyy("6 months", today), "04 05 2026");
+    assert.equal(parseDurationToMmDdYyyy("3", today), "10 05 2023");
   });
 });
 
@@ -141,6 +142,12 @@ describe("validateIdNumber", () => {
     assert.equal(validateIdNumber("12345").valid, false);
     assert.equal(validateIdNumber("12345").code, "ID_NOT_13_DIGITS");
   });
+
+  it("rejects 13-digit IDs that fail the RSA check digit", () => {
+    const result = validateIdNumber("9910125324080");
+    assert.equal(result.valid, false);
+    assert.equal(result.code, "ID_CHECKSUM_INVALID");
+  });
 });
 
 describe("formatDateForForm", () => {
@@ -191,5 +198,11 @@ describe("postalSearchNeedles", () => {
   it("still extracts town before a trailing postal code in the address", () => {
     const needles = postalSearchNeedles("7580", "18 sunridge street wesbank kuilsriver 7580", "Western Cape");
     assert.ok(needles.some((n) => /7580/i.test(n) && /kuilsriver/i.test(n)));
+  });
+
+  it("treats a city/town name as a place-search needle when no 4-digit code exists", () => {
+    const needles = postalSearchNeedles("Pretoria", "12 Main Road Pretoria", "Gauteng");
+    assert.ok(needles[0] === "Pretoria" || needles.includes("Pretoria"));
+    assert.ok(!needles.includes("2000"));
   });
 });

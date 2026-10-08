@@ -104,10 +104,13 @@ describe("fetchSheetData", () => {
     assert.equal(row.telephoneExpense, "1000");
     assert.ok(row.errors.some((e) => e.code === "MARITAL_STATUS_EMPTY"));
     assert.ok(row.errors.some((e) => e.code === "NOK_RELATIONSHIP_EMPTY"));
-    assert.ok(row.errors.some((e) => e.code === "MAX_PRICE_EMPTY"));
+    // Max price is optional (Form does not ask). Empty must not block the row.
+    assert.ok(!row.errors.some((e) => e.code === "MAX_PRICE_EMPTY"));
     assert.deepEqual(
       row.errors.filter((e) =>
-        ["ID_EMPTY", "MOBILE_EMPTY", "TELEPHONE_EXPENSE_EMPTY"].includes(e.code)
+        ["ID_EMPTY", "MOBILE_EMPTY", "TELEPHONE_EXPENSE_EMPTY", "MAX_PRICE_EMPTY"].includes(
+          e.code
+        )
       ),
       []
     );

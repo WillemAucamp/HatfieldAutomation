@@ -42,7 +42,8 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     ids: ["txtClientLastName"],
   }, data.surname);
 
-  if (data.initials) {
+  async function fillInitials(): Promise<void> {
+    if (!data.initials) return;
     await fillField(ctx, {
       name: "Initials",
       section: SECTION,
@@ -53,6 +54,8 @@ export async function runSection3(ctx: FillContext): Promise<void> {
       ids: ["txtClientInitials", "txtInitials"],
     }, data.initials);
   }
+
+  await fillInitials();
 
   // Name entry recreates identity controls with a new numeric prefix (71_IdType → 72_IdType).
   await waitForSelectorVisible(form, '[id$="_IdType"], [id$="_IdNumber"]');
@@ -76,6 +79,9 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     names: ["_IdNumber", "IdNumber"],
     ids: ["_IdNumber", "IdNumber"],
   }, data.idNumber);
+
+  // Seriti often blanks Initials when identity controls recreate — fill again.
+  await fillInitials();
 
   await fillField(ctx, {
     name: "Educational level",
@@ -175,6 +181,47 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     ids: ["ddlClientMaritalStatus"],
   }, data.maritalStatus);
 
+  // Married expands required Spouse fields; fill before next-of-kin (form re-renders).
+  if (/married/i.test(data.maritalStatus || "")) {
+    const spouse = String(data.spouseFullName || "").trim();
+    const spouseParts = spouse.split(/\s+/).filter(Boolean);
+    const spouseFirst = spouseParts.slice(0, -1).join(" ") || spouseParts[0] || "";
+    const spouseLast = spouseParts.length > 1 ? spouseParts[spouseParts.length - 1]! : "";
+    if (spouseFirst) {
+      await fillField(ctx, {
+        name: "Spouse first name",
+        section: SECTION,
+        labels: ["Spouse first name", "Spouse name", "Partner first name"],
+        role: "textbox",
+        type: "text",
+        names: ["spouseFirstName", "clientSpouseFirstName"],
+        ids: ["txtSpouseFirstName", "txtClientSpouseFirstName"],
+      }, spouseFirst);
+    }
+    if (spouseLast) {
+      await fillField(ctx, {
+        name: "Spouse surname",
+        section: SECTION,
+        labels: ["Spouse surname", "Spouse last name", "Partner surname"],
+        role: "textbox",
+        type: "text",
+        names: ["spouseLastName", "clientSpouseLastName"],
+        ids: ["txtSpouseLastName", "txtClientSpouseLastName"],
+      }, spouseLast);
+    }
+    if (data.spousePhone) {
+      await fillField(ctx, {
+        name: "Spouse mobile",
+        section: SECTION,
+        labels: ["Spouse mobile", "Spouse phone", "Partner mobile"],
+        role: "textbox",
+        type: "text",
+        names: ["spouseMobileNumber", "clientSpouseMobileNumber"],
+        ids: ["txtSpouseMobileNumber", "txtClientSpouseMobileNumber"],
+      }, data.spousePhone);
+    }
+  }
+
   await fillField(ctx, {
     name: "Next of kin name",
     section: SECTION,
@@ -215,7 +262,7 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["relativeRelation"],
     ids: ["ddlRelativeRelation"],
-  }, data.nextOfKinRelationship);
+  }, data.nextOfKinRelationship, { fallbackToFirst: true });
 
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 

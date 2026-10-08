@@ -288,6 +288,56 @@ function mapRow(
   );
   pushError(errors, maritalResult, "maritalStatus", maritalRaw);
 
+  const spouseFullNameRaw = mapping.spouseFullName
+    ? getCell(row, mapping.spouseFullName)
+    : getCell(row, "Spouse Name + Surname");
+  const spousePhoneRaw = mapping.spousePhone
+    ? getCell(row, mapping.spousePhone)
+    : getCell(row, "Spouse number");
+  const spousePhoneResult = transformMobile(spousePhoneRaw);
+  if (/married/i.test(maritalRaw) && !spouseFullNameRaw.trim()) {
+    errors.push({
+      code: "SPOUSE_NAME_EMPTY",
+      field: "spouseFullName",
+      message: "Marital status is Married but Spouse Name + Surname is empty",
+      value: "",
+    });
+  }
+  if (/married/i.test(maritalRaw) && !spousePhoneResult.valid) {
+    errors.push({
+      code: "SPOUSE_PHONE_EMPTY",
+      field: "spousePhone",
+      message:
+        "Marital status is Married but Spouse number is missing or not a valid mobile",
+      value: spousePhoneRaw,
+    });
+  }
+  // Seriti Married expands required Spouse ID + Marital Date. The Google Form
+  // does not collect them — block before Personal Next instead of a vague timeout.
+  if (/married/i.test(maritalRaw)) {
+    const spouseIdRaw = getCell(row, "Spouse ID number") || getCell(row, "Spouse ID");
+    const maritalDateRaw =
+      getCell(row, "Marital date") || getCell(row, "Marital Date (MM DD YYYY)");
+    if (!String(spouseIdRaw || "").trim()) {
+      errors.push({
+        code: "SPOUSE_ID_EMPTY",
+        field: "spouseId",
+        message:
+          "Married requires Spouse ID on Seriti; add Spouse ID number on the sheet (Form does not collect it)",
+        value: "",
+      });
+    }
+    if (!String(maritalDateRaw || "").trim()) {
+      errors.push({
+        code: "MARITAL_DATE_EMPTY",
+        field: "maritalDate",
+        message:
+          "Married requires Marital Date on Seriti; add Marital date on the sheet (Form does not collect it)",
+        value: "",
+      });
+    }
+  }
+
   const nokRelRaw = mapping.nextOfKinRelationship
     ? getCell(row, mapping.nextOfKinRelationship)
     : getCell(row, "Next of kin relationship");
@@ -298,15 +348,14 @@ function mapRow(
   );
   pushError(errors, nokRelResult, "nextOfKinRelationship", nokRelRaw);
 
+  // Form does not ask max price. Loader applies standing default 350000 when empty.
   const maxPriceRaw = mapping.maxPrice
     ? getCell(row, mapping.maxPrice)
     : getCell(row, "Max price range");
-  const maxPriceResult = requireText(
-    maxPriceRaw,
-    "MAX_PRICE_EMPTY",
-    "Max price is not on the intake sheet"
-  );
-  pushError(errors, maxPriceResult, "maxPrice", maxPriceRaw);
+  const maxPriceResult = {
+    value: maxPriceRaw.trim() || "350000",
+    valid: true,
+  };
 
   const employerNameRaw = getCell(row, mapping.employerName);
   const employerNameResult = requireText(
@@ -316,28 +365,20 @@ function mapRow(
   );
   pushError(errors, employerNameResult, "employerName", employerNameRaw);
 
+  // Seriti requires work telephone — empty employer phone blocks Work Next.
   const employerPhoneRaw = getCell(row, mapping.employerPhone);
   const employerPhoneResult = transformMobile(employerPhoneRaw);
   pushError(errors, employerPhoneResult, "employerPhone", employerPhoneRaw);
 
+  // Address/postal remain soft: loader falls back to client province / personal postal search.
   const employerAddressRaw = getCell(row, mapping.employerAddress);
-  const employerAddressResult = requireText(
-    employerAddressRaw,
-    "EMPLOYER_ADDRESS_EMPTY",
-    "Employer address is empty"
-  );
-  pushError(errors, employerAddressResult, "employerAddress", employerAddressRaw);
+  const employerAddressResult = { value: employerAddressRaw, valid: true };
 
   const employerPostalRaw = getCell(row, mapping.employerPostalCode);
-  const employerPostalResult = requireText(
-    employerPostalRaw,
-    "EMPLOYER_POSTAL_EMPTY",
-    "Employer postal code is empty"
-  );
-  pushError(errors, employerPostalResult, "employerPostalCode", employerPostalRaw);
-  if (employerPostalResult.valid) {
-    employerPostalResult.value = restorePostalCode(employerPostalResult.value);
-  }
+  const employerPostalResult = {
+    value: employerPostalRaw ? restorePostalCode(employerPostalRaw) : "",
+    valid: true,
+  };
 
   const provinceRaw = mapping.province ? getCell(row, mapping.province) : getCell(row, "Province");
   const provinceResult = requireText(provinceRaw, "PROVINCE_EMPTY", "Province is empty");
@@ -346,12 +387,10 @@ function mapRow(
   const employerProvinceRaw = mapping.employerProvince
     ? getCell(row, mapping.employerProvince)
     : getCell(row, "Employer province (online search)");
-  const employerProvinceResult = requireText(
-    employerProvinceRaw,
-    "EMPLOYER_PROVINCE_EMPTY",
-    "Employer province is empty"
-  );
-  pushError(errors, employerProvinceResult, "employerProvince", employerProvinceRaw);
+  const employerProvinceResult = {
+    value: employerProvinceRaw || provinceResult.value,
+    valid: true,
+  };
 
   const grossRaw = getCell(row, mapping.grossMonthly);
   const grossResult = requireAmount(grossRaw, "GROSS_EMPTY", "Gross monthly salary");
@@ -418,6 +457,8 @@ function mapRow(
     occupation: occupationResult.value,
     employeeLevel: levelResult.value,
     maritalStatus: maritalResult.value,
+    spouseFullName: spouseFullNameRaw,
+    spousePhone: spousePhoneResult.valid ? spousePhoneResult.value : spousePhoneRaw,
     maxPrice: maxPriceResult.value,
     employerName: employerNameResult.value,
     employerPhone: employerPhoneResult.valid ? employerPhoneResult.value : employerPhoneRaw,

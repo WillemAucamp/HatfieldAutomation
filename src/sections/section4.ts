@@ -73,22 +73,25 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     ids: ["clientEmpAddressDdlClientProvince"],
   }, data.employerProvince || data.province);
 
+  // Prefer employer postal; else personal postal / address as Seriti place-search needles.
+  const workPostalNeedle = data.employerPostalCode || data.postalCode;
+  const workPostalHint = [data.employerAddress, data.addressLine1].filter(Boolean).join(" ");
   await fillField(ctx, {
     name: "Work postal code",
     section: SECTION,
     labels: ["Postal code", "Work postal code", "Employer postal code"],
     role: "textbox",
     type: "postal",
-    postalHint: data.employerAddress,
+    postalHint: workPostalHint,
     postalProvince: data.employerProvince || data.province,
     names: ["clientEmpAddress"],
     ids: ["clientEmpAddress_value"],
-  }, data.employerPostalCode);
+  }, workPostalNeedle);
 
   const workAddressLine = await syncAddressFromPostal(
     form,
     "clientEmpAddress_value",
-    data.employerAddress
+    data.employerAddress || data.addressLine1
   );
   await fillField(ctx, {
     name: "Work address line 1",

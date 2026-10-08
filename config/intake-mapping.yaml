@@ -35,14 +35,23 @@ intake_columns:
   - gross_monthly
   - nett_monthly
   - bank_name
-  - next_of_kin_name
+  - next_of_kin_first_name
+  - next_of_kin_surname
   - next_of_kin_phone
   - expenses_summary
   - id_number
   - consent
+  - blacklisted
+  - on_itc
+  - debt_review
+  - housing_status
   - marital_status
-  - nok_relationship
-  - max_price
+  - spouse_name
+  - spouse_number
+  - food_spend
+  - cellphone_spend
+  - accounts_spend
+  - employment
 
 intake_headers:
   timestamp: Timestamp
@@ -53,7 +62,7 @@ intake_headers:
   whatsapp_phone: Whatsapp Phone number
   gender: Gender
   highest_education: Highest education
-  street_address: "Current street address Example: 1058 Steve Biko Road"
+  street_address: "Current STREET address and House number Example: 1058 Steve Biko Road"
   province: Province
   city_town: "City/Town Example: Pretoria/Cape Town/ Kimberley"
   years_at_address: "How long have you lived here? Example: 3 years/ 2 months"
@@ -63,14 +72,61 @@ intake_headers:
   gross_monthly: "Gross Income per month (Income on your payslip before any payslip deductions)"
   nett_monthly: "Net Income per month? (Income paid into your account by your employer)"
   bank_name: Which bank do you use?
-  next_of_kin_name: "Relative or friend Name & surname Example: Vusi Nel"
-  next_of_kin_phone: "Relative or friend number example: 0856475124"
+  next_of_kin_first_name: "Relative or friend Name Example: Vusi"
+  next_of_kin_surname: "Relative or friend surname Example: Nel"
+  next_of_kin_phone: "Relative or friend number example: 0856475124 CANNOT BE THE SAME AS YOURS"
   expenses_summary: "Summary of your expenses, what do you pay on the below Food R2000 Accounts R1000 Other R500"
   id_number: ID Number
   consent: "Thank you for the above info provided, looking forward to getting you the best possible deal Are you okay with us processing your information for this finance application, Do we have your permission to apply on your behalf to see what is the best possible deal?"
-  marital_status: Marital status
-  nok_relationship: Next of kin relationship
-  max_price: Max price range
+  blacklisted: Are you Blacklisted
+  on_itc: Are you on ITC?
+  debt_review: Debt review
+  housing_status: Column 27
+  marital_status: Marital Status
+  spouse_name: Spouse Name + Surname
+  spouse_number: Spouse number
+  # Live Form titles (fuzzy cell() still matches older "Food spend" wording).
+  food_spend: "How much do you spend on food?"
+  cellphone_spend: "How much do you spend on a cellphone?"
+  accounts_spend: "How much do you spend on a accounts?"
+  employment: Employment
+
+# Headers that must exist on the live Form sheet. Missing any aborts the ingest run.
+required_intake_headers:
+  - name_and_surname
+  - email
+  - street_address
+  - province
+  - city_town
+  - employer_name
+  - job_title
+  - gross_monthly
+  - nett_monthly
+  - bank_name
+  - next_of_kin_first_name
+  - next_of_kin_surname
+  - next_of_kin_phone
+  - id_number
+  - consent
+  - marital_status
+  - food_spend
+  - cellphone_spend
+  - employment
+
+# Standing defaults for Seriti fields the Form does not ask / leaves unusable.
+# These are operator-defined defaults — not fabricated client identity data.
+standing_defaults:
+  "Next of kin relationship": Friend
+  # Form does not ask; Seriti marks Max Price Range required (red) and blocks Next.
+  "Max price range": "350000"
+  # Empty expense cells fail Seriti Work/Expenses Next.
+  "Transport cost": "0"
+  "Food cost": "0"
+  "Telephone payment": "0"
+  # "None" / blank education is not a Seriti option — Grade 12 is the operator default.
+  "Educational level": "Grade 12"
+  # SA finance apps on this Form are RSA ID holders.
+  "ID Type": "RSA ID"
 
 # Exact live output-sheet header row (gid=0). Order is the contract.
 destination_columns:
@@ -114,6 +170,7 @@ destination_columns:
   - Timing
 
 # copy = pass through (normalise only). infer = LLM / search / standing prompt rules.
+# join = concatenate multiple Form columns with spaces.
 # writer = filled by the sheet writer / Melrose loader, not by Gemini.
 field_map:
   - destination: NR
@@ -138,18 +195,18 @@ field_map:
     mode: copy
 
   - destination: ID Type
-    source: id_number
-    mode: copy
-    notes: Set in code to "RSA ID" when the ID is 13 digits. Never invent an ID.
+    mode: writer
+    notes: Always "RSA ID" (standing default + code). Never invent an ID number here.
 
   - destination: ID number
     source: id_number
     mode: copy
-    notes: Strip spaces. Never invent.
+    notes: Strip spaces; restore leading zero if Sheets stripped it. Never invent.
 
   - destination: Educational level
     source: highest_education
     mode: copy
+    notes: Copy Form education; None/blank → Grade 12 standing default.
 
   - destination: Mobile number
     sources: [whatsapp_phone, call_phone]
@@ -157,13 +214,14 @@ field_map:
     notes: Prefer WhatsApp number; else call number. 10 digits starting with 0 (+27 → 0). Empty if the Form has no phone.
 
   - destination: Address line
-    source: street_address
-    mode: copy
+    sources: [street_address, city_town]
+    mode: join
+    notes: Street plus city/town so Seriti postal autocomplete has a place name.
 
   - destination: Postal code
     sources: [street_address, city_town, province]
     mode: infer
-    notes: Infer from address + city via search/geo. Unknown if not found.
+    notes: Infer from address + city via geo. Prefer a real code; if unknown leave the city/town name for Seriti place search. Never invent a generic code like 2000.
 
   - destination: Province
     source: province
@@ -172,11 +230,11 @@ field_map:
   - destination: Year start living at address (MM DD YYYY format ONLY)
     source: years_at_address
     mode: infer
-    notes: If "X years/months living there", calculate from today as MM DD YYYY. Never use the ID date of birth.
+    notes: If "X years/months living there", calculate from today as MM DD YYYY. Bare numbers are treated as years. Never use the ID date of birth.
 
   - destination: Next of kin name + Surname
-    source: next_of_kin_name
-    mode: copy
+    sources: [next_of_kin_first_name, next_of_kin_surname]
+    mode: join
 
   - destination: Next of kin cellphone number
     source: next_of_kin_phone
@@ -184,16 +242,19 @@ field_map:
     notes: Copy the Form next-of-kin number only. Do not reuse the client's number.
 
   - destination: Industry (AI based on employer)
-    source: employer_name
+    sources: [employer_name, job_title, employment]
     mode: infer
+    notes: Must be an exact Seriti Industry string from the numbered list. Self-employed → BUSINESS SERVICES.
 
   - destination: Occupation
     source: job_title
     mode: copy
+    notes: Mapped in code onto Seriti Occupation list; unclear titles → LABOURER (SKILLED).
 
   - destination: Employee level
-    sources: [job_title, employer_name]
+    sources: [job_title, employer_name, employment]
     mode: infer
+    notes: Must be an exact Seriti Level string from the numbered list.
 
   - destination: Employer name
     source: employer_name
@@ -202,7 +263,7 @@ field_map:
   - destination: Employer telephone number (online search)
     sources: [employer_name, city_town, province, street_address]
     mode: infer
-    notes: Infer from employer + location. Leave empty if not found — do not copy the client mobile.
+    notes: Dedicated google_search pass looks up the business name online and picks the most likely SA telephone. Leave empty in the first pass if unsure — do not copy the client mobile.
 
   - destination: Employer street address (online search)
     sources: [employer_name, city_town, province, street_address]
@@ -217,12 +278,12 @@ field_map:
   - destination: Employer province (online search)
     sources: [employer_name, province]
     mode: infer
-    notes: Infer from employer + client province context. Leave empty if not found — do not copy the home province.
+    notes: Prefer employer province from search; code falls back to client province when empty.
 
   - destination: Year they started working there (calculate from years provided)
     source: years_at_employer
     mode: infer
-    notes: If "X years/months", calculate start date as MM DD YYYY.
+    notes: If "X years/months", calculate start date as MM DD YYYY. Bare numbers are years.
 
   - destination: Gross monthly salary
     source: gross_monthly
@@ -235,18 +296,19 @@ field_map:
     notes: Never invent salary figures.
 
   - destination: Telephone payment
-    source: expenses_summary
-    mode: infer
-    notes: Map accounts/mobile contracts. Split a single total across Telephone/Transport/Food. Numeric only. Empty if the Form has no expenses.
+    source: cellphone_spend
+    mode: copy
+    notes: Prefer the Form cellphone spend column; else Gemini may split expenses_summary.
 
   - destination: Transport cost
-    source: expenses_summary
-    mode: infer
+    source: accounts_spend
+    mode: copy
+    notes: Prefer accounts spend when present; else standing default 0 (Form has no transport question).
 
   - destination: Food cost
-    source: expenses_summary
-    mode: infer
-    notes: Map groceries/food line.
+    source: food_spend
+    mode: copy
+    notes: Prefer the Form food spend column; else Gemini may split expenses_summary.
 
   - destination: Bank name
     source: bank_name
@@ -272,14 +334,12 @@ field_map:
     notes: Copy from the Form. Empty if the Form does not ask. Do not default to Single.
 
   - destination: Next of kin relationship
-    source: nok_relationship
-    mode: copy
-    notes: Copy from the Form. Empty if the Form does not ask. Do not default to Sibling.
+    mode: writer
+    notes: Form asks Relative or friend but not the Seriti relationship. Standing default Friend is applied in code.
 
   - destination: Max price range
-    source: max_price
-    mode: copy
-    notes: Copy from the Form. Empty if the Form does not ask. Do not invent 300000.
+    mode: writer
+    notes: Form does not ask. Leave empty — loader will surface MAX_PRICE_EMPTY for review unless a standing default is set.
 
   - destination: Status
     mode: writer
@@ -294,15 +354,26 @@ passthrough_not_on_destination:
   - vehicle_interest
   - consent
   - gender
+  - blacklisted
+  - on_itc
+  - debt_review
+  - housing_status
+  - spouse_name
+  - spouse_number
+  - employment
+  - expenses_summary
 
 rules:
   - Output must be exactly 38 columns in destination_columns order. No extra headings, notes, or columns.
-  - LLM fills infer columns only. Copy columns come from the Form in code. Writer sets NR; Status and Timing stay empty so the Melrose loader picks the row up.
+  - LLM fills infer columns only. Copy/join columns come from the Form in code. Writer sets NR; Status and Timing stay empty so the Melrose loader picks the row up.
   - Never invent ID numbers, salary figures, names, addresses, or phone numbers.
-  - Copy-mode columns are filled from the Form in code. Gemini only fills infer columns.
+  - Copy-mode and join-mode columns are filled from the Form in code. Gemini only fills infer columns.
   - Never output Gender on the destination sheet.
-  - Dates must be MM DD YYYY. Prefer calculating from "X years/months" in code.
+  - Dates must be MM DD YYYY. Prefer calculating from "X years/months" in code. Bare numbers mean years.
   - If an infer value cannot be determined, leave it empty (not the client's name or home address).
-  - Title, marital status, next-of-kin relationship, industry, occupation, employee level, and max price must come from the intake sheet (or a deterministic mapping of an intake field). Missing values are errors for review — do not invent them.
+  - Industry and Employee level must be exact Seriti menu strings (see config/seriti-options.json). Occupation is mapped in code.
+  - Self-employed clients get Industry BUSINESS SERVICES.
+  - Unclear Occupation → LABOURER (SKILLED).
   - Do not load a row when consent is not given.
   - Single-line cells only (no line breaks inside addresses or names).
+  - Never substitute a generic postal code (e.g. 2000) that is not the client's.

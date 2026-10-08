@@ -131,22 +131,33 @@ export function postalSearchNeedles(
   province = ""
 ): string[] {
   const code = restorePostalCode(postalCode);
-  const needles: string[] = [code];
+  const codeDigits = String(code).replace(/\D/g, "");
+  const hasRealCode = codeDigits.length === 4;
+  const needles: string[] = [];
   const address = String(addressLine ?? "").trim();
+
+  // Sheet may store a city/town name when the real code is unknown — search that first.
+  if (!hasRealCode && /[A-Za-z]/.test(code)) {
+    needles.push(code);
+  }
+  if (hasRealCode) needles.push(code);
 
   const townAtEnd = address.match(/\b([A-Za-z][A-Za-z\s-]+?)\s+\d{4}\s*$/);
   if (townAtEnd) {
     const town = townAtEnd[1].trim().split(/\s+/).pop() ?? townAtEnd[1].trim();
-    needles.push(`${code} ${town}`, `${town}, ${code}`, town);
+    if (hasRealCode) needles.push(`${code} ${town}`, `${town}, ${code}`);
+    needles.push(town);
   }
 
   for (const token of placeTokensFromAddress(address)) {
-    needles.push(`${code} ${token}`, token);
+    if (hasRealCode) needles.push(`${code} ${token}`);
+    needles.push(token);
   }
 
   const cities = PROVINCE_CITY_HINTS[province.trim().toLowerCase()] ?? [];
   for (const city of cities) {
-    needles.push(`${code} ${city}`);
+    if (hasRealCode) needles.push(`${code} ${city}`);
+    needles.push(city);
   }
 
   return [...new Set(needles.filter(Boolean))];
@@ -218,6 +229,25 @@ export function validateIdNumber(raw: string | number | undefined | null): Trans
       valid: false,
       code: "ID_NOT_13_DIGITS",
       message: `ID number is not 13 digits (got ${digitsOnly(source).length}: "${original}")`,
+    };
+  }
+
+  // Official RSA ID check-digit (Luhn-style). Seriti rejects invalid IDs on Personal Next.
+  let checksum = 0;
+  for (let i = 0; i < 13; i++) {
+    let n = Number(digits[i]);
+    if (i % 2 === 0) checksum += n;
+    else {
+      const doubled = n * 2;
+      checksum += Math.floor(doubled / 10) + (doubled % 10);
+    }
+  }
+  if (checksum % 10 !== 0) {
+    return {
+      value: digits,
+      valid: false,
+      code: "ID_CHECKSUM_INVALID",
+      message: `ID number fails RSA check digit (got "${digits}")`,
     };
   }
 
@@ -399,26 +429,82 @@ export function titleFromGender(raw: string | undefined | null): TransformResult
 }
 
 /** "3 years", "6 months", "2 years 3 months" → MM DD YYYY relative to today. */
+/** Strip currency noise (R2000, R 500) so expense cells stay numeric for Seriti. */
+export function normalizeExpenseAmount(raw: string | undefined | null): string {
+  const value = String(raw ?? "").trim();
+  if (!value || isMissingValue(value)) return "";
+  const cleaned = value.replace(/,/g, "").replace(/^[rR]\s*/, "").trim();
+  if (/^\d+(\.\d+)?$/.test(cleaned)) return cleaned;
+  const match = cleaned.match(/(\d+(?:\.\d+)?)/);
+  return match ? match[1]! : "";
+}
+
+/**
+ * RSA ID YYMMDD → MM DD YYYY birth date. Used when the client says they have
+ * lived at the address since birth (not for inventing employment dates).
+ */
+export function birthDateMmDdYyyyFromSaId(
+  idRaw: string | undefined | null,
+  today: Date = new Date()
+): string | null {
+  const digits = String(idRaw ?? "").replace(/\D/g, "");
+  if (digits.length !== 13) return null;
+  const yy = Number(digits.slice(0, 2));
+  const mm = Number(digits.slice(2, 4));
+  const dd = Number(digits.slice(4, 6));
+  if (!mm || mm > 12 || !dd || dd > 31) return null;
+  const currentYy = today.getFullYear() % 100;
+  const century = yy > currentYy + 1 ? 1900 : 2000;
+  const year = century + yy;
+  const born = new Date(year, mm - 1, dd);
+  if (Number.isNaN(born.getTime())) return null;
+  if (born.getTime() >= today.getTime()) return null;
+  return `${String(mm).padStart(2, "0")} ${String(dd).padStart(2, "0")} ${year}`;
+}
+
 export function parseDurationToMmDdYyyy(
   raw: string | undefined | null,
-  today: Date = new Date()
+  today: Date = new Date(),
+  extras: { idNumber?: string } = {}
 ): string | null {
   const coerced = coerceToMmDdYyyy(raw);
   if (DATE_PATTERN.test(coerced)) return coerced;
   const value = String(raw ?? "").trim().toLowerCase();
   if (!value || isMissingValue(value)) return null;
 
+  // "Since I was born" / "whole life" → RSA ID birth date when available.
+  if (
+    /since\s*(i\s*)?(was\s*)?born|from\s*birth|whole\s*life|all\s*my\s*life|lifetime/.test(
+      value
+    )
+  ) {
+    return birthDateMmDdYyyyFromSaId(extras.idNumber, today);
+  }
+
   let years = 0;
   let months = 0;
-  const yearMatch = value.match(/(\d+)\s*(year|years|yr|yrs)\b/);
-  const monthMatch = value.match(/(\d+)\s*(month|months|mo)\b/);
+  // Allow glued forms like "14years" / "6months".
+  const yearMatch = value.match(/(\d+)\s*(years|year|yrs|yr)\b/);
+  const monthMatch = value.match(/(\d+)\s*(months|month|mo)\b/);
   if (yearMatch) years = Number(yearMatch[1]);
   if (monthMatch) months = Number(monthMatch[1]);
-  if (!yearMatch && !monthMatch) return null;
+  // Bare number with no unit → years (Form clients often write "3" meaning 3 years).
+  if (!yearMatch && !monthMatch) {
+    const bare = value.match(/^(\d{1,2})$/);
+    if (!bare) return null;
+    years = Number(bare[1]);
+    // "0" / empty duration is not a usable residency start — leave unset.
+    if (years === 0 && months === 0) return null;
+  }
 
   const date = new Date(today.getTime());
   date.setFullYear(date.getFullYear() - years);
   date.setMonth(date.getMonth() - months);
+  // Seriti rejects residency / employment starts on or after today.
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (date.getTime() >= todayStart.getTime()) {
+    date.setFullYear(date.getFullYear() - 1);
+  }
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
   const yyyy = String(date.getFullYear());
@@ -501,8 +587,17 @@ export function expandSelectNeedles(raw: string): string[] {
     { keys: ["matric", "grade 12", "grade12"], terms: ["MATRIC", "GRADE 12"] },
     { keys: ["rsa id", "rsa"], terms: ["RSA"] },
     { keys: ["labourer", "laborer"], terms: ["LABOURER", "LABORER"] },
-    { keys: ["skilled worker"], terms: ["SKILLED"] },
-    { keys: ["business services"], terms: ["BUSINESS SERVICES"] },
+    { keys: ["skilled worker"], terms: ["SKILLED WORKER", "SKILLED"] },
+    { keys: ["semi skilled", "semi-skilled"], terms: ["SEMI-SKILLED WORKER", "SEMI SKILLED"] },
+    { keys: ["unskilled"], terms: ["UNSKILLED WORKER", "UNSKILLED"] },
+    { keys: ["junior", "entry level", "entry-level"], terms: ["JUNIOR POSITION", "JUNIOR"] },
+    { keys: ["manager", "management"], terms: ["MANAGEMENT"] },
+    { keys: ["executive", "senior management"], terms: ["SENIOR MANAGEMENT"] },
+    { keys: ["supervisor"], terms: ["SUPERVISOR"] },
+    { keys: ["business services", "consulting"], terms: ["BUSINESS SERVICES"] },
+    { keys: ["logistics", "transportation"], terms: ["TRANSPORT"] },
+    { keys: ["healthcare", "health care"], terms: ["HEALTH"] },
+    { keys: ["financial services", "banking"], terms: ["FINANCE"] },
     { keys: ["gauteng", "gp"], terms: ["GAUTENG"] },
     { keys: ["western cape", "wc"], terms: ["WESTERN CAPE"] },
     { keys: ["kwazulu natal", "kwazulu-natal", "kzn"], terms: ["KWAZULU"] },

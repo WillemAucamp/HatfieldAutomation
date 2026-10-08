@@ -273,8 +273,7 @@ function updateSheet_(data) {
       var aKey = appendKeys[a];
       var aCol = ensureColumn_(sheet, headers, aKey);
       var aVal = data.append[aKey];
-      if (isPhoneColumn_(aKey)) writePhone_(sheet, row, aCol, aVal);
-      else sheet.getRange(row, aCol).setValue(aVal);
+      writePlain_(sheet, row, aCol, aKey, aVal);
       written.push({ row: row, column: aKey, value: aVal });
     }
   }
@@ -306,8 +305,7 @@ function updateSheet_(data) {
       var sKey = setKeys[s];
       var sCol = ensureColumn_(sheet, headers, sKey);
       var sVal = data.set[sKey];
-      if (isPhoneColumn_(sKey)) writePhone_(sheet, matchedRow, sCol, sVal);
-      else sheet.getRange(matchedRow, sCol).setValue(sVal);
+      writePlain_(sheet, matchedRow, sCol, sKey, sVal);
       written.push({ row: matchedRow, column: sKey, value: sVal });
     }
   }
@@ -335,9 +333,11 @@ function updateSheet_(data) {
       return { ok: false, error: "updates[] item needs column/header/col/columnIndex" };
     }
     var val = item.value;
-    if (item.column && isPhoneColumn_(item.column)) writePhone_(sheet, rowNum, colNum, val);
+    var colName = item.column || item.header || "";
+    if (colName) writePlain_(sheet, rowNum, colNum, colName, val);
+    else if (isPhoneColumn_(colName)) writePhone_(sheet, rowNum, colNum, val);
     else sheet.getRange(rowNum, colNum).setValue(val);
-    written.push({ row: rowNum, column: item.column || item.header || item.col || colNum, value: val });
+    written.push({ row: rowNum, column: colName || item.col || colNum, value: val });
   }
 
   if (written.length === 0) {
@@ -499,6 +499,10 @@ function isPhoneColumn_(name) {
   return /(phone|mobile|cell)/i.test(n);
 }
 
+function isPostalColumn_(name) {
+  return /postal\s*code/i.test(String(name || ""));
+}
+
 function columnLetterToIndex_(letter) {
   var s = String(letter || "").toUpperCase().replace(/[^A-Z]/g, "");
   var n = 0;
@@ -518,7 +522,14 @@ function isDateColumn_(name) {
 
 function writePlain_(sheet, row, col, name, value) {
   var text = value == null ? "" : String(value);
-  if (isPhoneColumn_(name) || isIdColumn_(name) || isDateColumn_(name)) {
+  // Force plain text for IDs, phones, dates, and postal codes so Sheets does not
+  // strip leading zeros (0083 → 83) or convert MM DD YYYY into Date serials.
+  if (
+    isPhoneColumn_(name) ||
+    isIdColumn_(name) ||
+    isDateColumn_(name) ||
+    isPostalColumn_(name)
+  ) {
     sheet.getRange(row, col).setNumberFormat("@").setValue(text);
     return;
   }
@@ -547,11 +558,21 @@ function readSheet_(data) {
     return String(s).trim().toLowerCase();
   });
   var statusIdx = statusColumn ? headers.indexOf(statusColumn) : -1;
+  // Enrichment Status on the Form sheet: only Melrose pipeline values are terminal.
+  // Form answers that leaked into that column (e.g. "Im not sure, but it should be GOOD")
+  // must not hide new submissions. Other sheets keep processableStatuses allowlist.
+  var intakeEnrichmentCol = /enrichment\s*status/i.test(statusColumn);
   if (lastRow >= 2) {
     var values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
     for (var i = 0; i < values.length; i++) {
       var status = statusIdx >= 0 ? String(values[i][statusIdx] || "").trim().toLowerCase() : "";
-      if (data.unprocessedOnly && processable.indexOf(status) === -1) continue;
+      if (data.unprocessedOnly) {
+        if (intakeEnrichmentCol) {
+          if (/^(enriched\b|skipped_|processing\b|error\b)/i.test(status)) continue;
+        } else if (processable.indexOf(status) === -1) {
+          continue;
+        }
+      }
       var record = {};
       for (var c = 0; c < headers.length; c++) {
         var h = String(headers[c] || "");

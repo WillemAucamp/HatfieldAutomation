@@ -1,6 +1,29 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isUsableSheetRow, matchAppendedSheetRow } from "./sheets.js";
+import {
+  isTerminalIntakeStatus,
+  isUsableSheetRow,
+  matchAppendedSheetRow,
+} from "./sheets.js";
+
+describe("isTerminalIntakeStatus", () => {
+  it("treats Melrose pipeline values as terminal", () => {
+    assert.equal(isTerminalIntakeStatus("enriched row 328 nr 329"), true);
+    assert.equal(isTerminalIntakeStatus("skipped_already_loaded"), true);
+    assert.equal(isTerminalIntakeStatus("processing"), true);
+    assert.equal(isTerminalIntakeStatus("error GEMINI_TIMEOUT"), true);
+  });
+
+  it("does not treat Form answers or empty/new/retry as terminal", () => {
+    assert.equal(isTerminalIntakeStatus(""), false);
+    assert.equal(isTerminalIntakeStatus("new"), false);
+    assert.equal(isTerminalIntakeStatus("retry"), false);
+    assert.equal(
+      isTerminalIntakeStatus("Im not sure, but it should be GOOD"),
+      false
+    );
+  });
+});
 
 describe("isUsableSheetRow", () => {
   it("rejects the fake row 0 Apps Script 302 responses return", () => {
