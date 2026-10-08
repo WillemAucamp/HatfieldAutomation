@@ -145,6 +145,31 @@ export async function runSection3(ctx: FillContext): Promise<void> {
   }, data.postalCode);
 
   const addressLine = await syncAddressFromPostal(form, "clientPhysicalAddress_value", data.addressLine1);
+  // #region agent log
+  {
+    const postalVal = await form
+      .locator('[id$="clientPhysicalAddress_value"]')
+      .filter({ visible: true })
+      .first()
+      .inputValue()
+      .catch(() => "");
+    const fs = await import("node:fs");
+    fs.appendFileSync(
+      "/opt/cursor/logs/debug.log",
+      JSON.stringify({
+        hypothesisId: "C",
+        location: "section3.ts:address-sync",
+        message: "Address after postal sync",
+        data: {
+          sheetAddress: data.addressLine1,
+          postalVal,
+          addressLineUsed: addressLine,
+        },
+        timestamp: Date.now(),
+      }) + "\n"
+    );
+  }
+  // #endregion
   await fillField(ctx, {
     name: "Address line 1",
     section: SECTION,
@@ -180,6 +205,33 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     names: ["clientMaritalStatus"],
     ids: ["ddlClientMaritalStatus"],
   }, data.maritalStatus);
+
+  // #region agent log
+  {
+    const maritalOpts = await form
+      .locator('[id*="MaritalStatus"], [id*="maritalStatus"]')
+      .first()
+      .evaluate((el) =>
+        Array.from((el as HTMLSelectElement).options || []).map((o) => ({
+          v: o.value,
+          t: o.text,
+          sel: o.selected,
+        }))
+      )
+      .catch(() => []);
+    const fs = await import("node:fs");
+    fs.appendFileSync(
+      "/opt/cursor/logs/debug.log",
+      JSON.stringify({
+        hypothesisId: "F",
+        location: "section3.ts:after-marital",
+        message: "Marital status options after select",
+        data: { sheetMarital: data.maritalStatus, maritalOpts },
+        timestamp: Date.now(),
+      }) + "\n"
+    );
+  }
+  // #endregion
 
   // Married expands required Spouse fields; fill before next-of-kin (form re-renders).
   if (/married/i.test(data.maritalStatus || "")) {
@@ -266,12 +318,142 @@ export async function runSection3(ctx: FillContext): Promise<void> {
 
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "after", config);
 
-  if (!config.dryRun) {
-    await clickNextAndWait(
-      form,
-      config,
-      '[id="txtemployerName"], [id="ddlIndustry"]',
-      "Personal Information"
+  // #region agent log
+  {
+    const dump = await form
+      .evaluate(() => {
+        const interesting: Array<Record<string, string | boolean | null>> = [];
+        const nodes = Array.from(
+          document.querySelectorAll("input, select, textarea, label")
+        ) as HTMLElement[];
+        for (const el of nodes) {
+          const id = el.id || "";
+          const name = (el as HTMLInputElement).name || "";
+          const tag = el.tagName.toLowerCase();
+          const text = (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
+          const hay = `${id} ${name} ${text}`.toLowerCase();
+          if (
+            !/spouse|marital|marriage|initial|address|postal|relative|kin/.test(hay)
+          ) {
+            continue;
+          }
+          const input = el as HTMLInputElement;
+          interesting.push({
+            tag,
+            id,
+            name,
+            type: input.type || null,
+            value: input.value ?? null,
+            text: tag === "label" ? text : null,
+            required: input.required === true,
+            cls: (el.className || "").toString().slice(0, 120),
+            visible: !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length),
+          });
+        }
+        const reds = Array.from(
+          document.querySelectorAll(
+            ".field-validation-error, .text-danger, .has-error, .input-validation-error, [aria-invalid='true']"
+          )
+        ).map((el) => ({
+          tag: el.tagName,
+          id: (el as HTMLElement).id || "",
+          cls: ((el as HTMLElement).className || "").toString().slice(0, 100),
+          text: (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 100),
+        }));
+        const addr = {
+          line1: (document.querySelector('[id*="AddressLine1"]') as HTMLInputElement | null)
+            ?.value,
+          postal: (document.querySelector('[id*="PhysicalAddress_value"], [id$="clientPhysicalAddress_value"]') as HTMLInputElement | null)
+            ?.value,
+        };
+        return { interesting, reds, addr };
+      })
+      .catch((e) => ({ error: String(e) }));
+    const fs = await import("node:fs");
+    fs.appendFileSync(
+      "/opt/cursor/logs/debug.log",
+      JSON.stringify({
+        hypothesisId: "A-E",
+        location: "section3.ts:pre-next",
+        message: "Personal form state before Next",
+        data: {
+          sheetAddress: data.addressLine1,
+          sheetSpousePhone: data.spousePhone,
+          initials: data.initials,
+          dump,
+        },
+        timestamp: Date.now(),
+      }) + "\n"
     );
+  }
+  // #endregion
+
+  if (!config.dryRun) {
+    try {
+      await clickNextAndWait(
+        form,
+        config,
+        '[id="txtemployerName"], [id="ddlIndustry"]',
+        "Personal Information"
+      );
+      // #region agent log
+      {
+        const fs = await import("node:fs");
+        fs.appendFileSync(
+          "/opt/cursor/logs/debug.log",
+          JSON.stringify({
+            hypothesisId: "A",
+            location: "section3.ts:post-next",
+            message: "Personal Next succeeded",
+            data: {},
+            timestamp: Date.now(),
+          }) + "\n"
+        );
+      }
+      // #endregion
+    } catch (err) {
+      // #region agent log
+      {
+        const alerts = await form
+          .evaluate(() => {
+            const msgs = Array.from(
+              document.querySelectorAll(
+                ".field-validation-error, .text-danger, .alert-danger, .help-block, [role='alert']"
+              )
+            )
+              .map((el) => (el.textContent || "").replace(/\s+/g, " ").trim())
+              .filter(Boolean)
+              .slice(0, 12);
+            const invalid = Array.from(
+              document.querySelectorAll(
+                "input.input-validation-error, select.input-validation-error, .has-error input, .has-error select, input[aria-invalid='true']"
+              )
+            ).map((el) => {
+              const input = el as HTMLInputElement;
+              return {
+                id: input.id,
+                name: input.name,
+                value: input.value,
+                cls: (input.className || "").toString().slice(0, 80),
+              };
+            });
+            return { msgs, invalid };
+          })
+          .catch((e) => ({ error: String(e) }));
+        const fs = await import("node:fs");
+        fs.appendFileSync(
+          "/opt/cursor/logs/debug.log",
+          JSON.stringify({
+            hypothesisId: "A-B",
+            location: "section3.ts:next-failed",
+            message: "Personal Next failed — validation dump",
+            data: { err: err instanceof Error ? err.message : String(err), alerts },
+            timestamp: Date.now(),
+          }) + "\n"
+        );
+      }
+      // #endregion
+      throw err;
+    }
   }
 }
