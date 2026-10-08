@@ -142,6 +142,16 @@ export function applyDeterministicFixes(
 
   // RSA ID type is always set for this Form; never leave Gemini free text here.
   next["ID Type"] = "RSA ID";
+
+  // Form answers like "Married in community of property" must map to a Seriti
+  // marital option. Keep Married/Single/Divorced/Widowed; collapse COP wording
+  // to Married so Seriti does not open COP-only fields we cannot fill from Form.
+  {
+    const marital = String(next["Marital status"] || "").trim();
+    if (/married/i.test(marital) && /community of property|anc|cop\b/i.test(marital)) {
+      next["Marital status"] = "Married";
+    }
+  }
   if (mapping && isMissingValue(next["ID number"])) {
     const formId = firstFilled(intakeValues, intakeHeadersFor(mapping, "id_number"));
     if (formId) next["ID number"] = formId;
