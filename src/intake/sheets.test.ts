@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   DEFAULT_INTAKE_SHEET_GID,
+  explicitSheetSelector,
   intakeSheetSelector,
   isFailedEnrichmentRowZero,
   isTerminalIntakeStatus,
@@ -25,6 +26,19 @@ describe("intakeSheetSelector", () => {
       sheetName: "Willem/ Sihle",
     });
     assert.deepEqual(intakeSheetSelector({}), { sheetName: "Willem/ Sihle" });
+  });
+});
+
+describe("explicitSheetSelector", () => {
+  it("leaves automation-sheet reads on the default tab", () => {
+    assert.deepEqual(explicitSheetSelector({}), {});
+  });
+
+  it("passes through a caller-supplied gid or name", () => {
+    assert.deepEqual(explicitSheetSelector({ sheetGid: 880063023, sheetName: "x" }), {
+      sheetGid: 880063023,
+    });
+    assert.deepEqual(explicitSheetSelector({ sheetName: "Sheet1" }), { sheetName: "Sheet1" });
   });
 });
 

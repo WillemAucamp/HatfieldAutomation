@@ -52,6 +52,17 @@ export function intakeSheetSelector(options: {
   return { sheetName: name };
 }
 
+export function explicitSheetSelector(options: {
+  sheetGid?: number;
+  sheetName?: string;
+}): IntakeSheetSelector {
+  if (options.sheetGid != null && Number.isFinite(options.sheetGid) && options.sheetGid > 0) {
+    return { sheetGid: options.sheetGid };
+  }
+  if (options.sheetName) return { sheetName: options.sheetName };
+  return {};
+}
+
 export async function readSheetRows(options: {
   webhookUrl: string;
   spreadsheetId: string;
@@ -61,7 +72,8 @@ export async function readSheetRows(options: {
   sheetName?: string;
   sheetGid?: number;
 }): Promise<IntakeSheetRow[]> {
-  const selector = intakeSheetSelector(options);
+  // Generic reader (automation sheet too) — only target a tab when the caller asks.
+  const selector = explicitSheetSelector(options);
   const parsed = await postWebhookJson(options.webhookUrl, {
     action: "readSheet",
     spreadsheetId: options.spreadsheetId,
