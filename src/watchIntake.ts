@@ -86,7 +86,7 @@ export async function watchIntakeMain(): Promise<void> {
       );
     } else {
       console.log(
-        `\n[${new Date().toISOString()}] Checking intake sheet ${config.intakeSpreadsheetId}…`
+        `\n[${new Date().toISOString()}] Checking intake sheet ${config.intakeSpreadsheetId} tab ${config.intakeSheetName} (gid=${config.intakeSheetGid})…`
       );
       const result = await ingestNewRows(config);
       appendedSheetRows = result.appendedSheetRows;

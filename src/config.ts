@@ -170,7 +170,11 @@ export function loadConfig(): AppConfig {
     geminiModel: process.env.GEMINI_MODEL || "gemini-3.6-flash",
     intakeSpreadsheetId:
       normalizeEnvValue(process.env.INTAKE_SPREADSHEET_ID, "INTAKE_SPREADSHEET_ID") ||
-      "1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M",
+      "1qzp0v1_lHzAUj7TGXIj-cz0zuWctBX8de1wR46hKcLY",
+    // Willem/Sihle person tab — do not read other assignees' tabs.
+    intakeSheetGid:
+      parseInt(process.env.INTAKE_SHEET_GID ?? "880063023", 10) || 880063023,
+    intakeSheetName: process.env.INTAKE_SHEET_NAME || "Willem/ Sihle",
     intakeStatusColumn: process.env.INTAKE_STATUS_COLUMN || "Enrichment Status",
     intakeMappingPath: process.env.INTAKE_MAPPING_PATH || "./config/intake-mapping.yaml",
     pollSeconds: parseInt(process.env.POLL_SECONDS ?? "60", 10) || 60,

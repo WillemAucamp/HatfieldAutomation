@@ -67,6 +67,15 @@ describe("intake headers", () => {
     assert.equal(hasConsent(""), false);
   });
 
+  it("matches the new intakes sheet debt-review and housing headers", () => {
+    const row = {
+      "Are you on Debt review or Credit bureau? ": "No",
+      "Column 18": "Renting",
+    };
+    assert.equal(cell(row, "Are you on Debt review or Credit bureau?"), "No");
+    assert.equal(cell(row, "Column 18"), "Renting");
+  });
+
   it("does not treat applicant Name and surname as Spouse Name + Surname", () => {
     const row = {
       "Name and surname": "Ada Lovelace",

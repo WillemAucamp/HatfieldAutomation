@@ -27,7 +27,10 @@
 
 var SOURCE_SHEET_ID = "12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI";
 var LOADED_SHEET_ID = "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM";
-var INTAKE_SHEET_ID = "1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M";
+var INTAKE_SHEET_ID = "1qzp0v1_lHzAUj7TGXIj-cz0zuWctBX8de1wR46hKcLY";
+/** Willem/Sihle person tab only — other assignee tabs are ignored. From sheet URL gid=. */
+var INTAKE_SHEET_GID = 880063023;
+var INTAKE_SHEET_NAME = "Willem/ Sihle";
 /** Leads tab (Status Approved/Declined → WhatsApp). From sheet URL gid=. */
 var LEADS_SHEET_GID = 1730847217;
 var LEADS_STATUS_HEADER = "Status";
@@ -491,6 +494,12 @@ function resolveSheet_(ss, data) {
     if (byName) return byName;
     throw new Error("No sheet named " + data.sheetName);
   }
+  // Shared intakes workbook: default to the Willem/Sihle person tab only.
+  if (ss.getId() === INTAKE_SHEET_ID) {
+    var intakeTab =
+      ss.getSheetById(INTAKE_SHEET_GID) || ss.getSheetByName(INTAKE_SHEET_NAME);
+    if (intakeTab) return intakeTab;
+  }
   return ss.getSheets()[0];
 }
 
@@ -835,7 +844,11 @@ function menuSkipHistorical() {
   if (confirm !== ui.Button.YES) return;
 
   var ss = SpreadsheetApp.openById(INTAKE_SHEET_ID);
-  var sheet = ss.getSheets()[0];
+  var sheet = ss.getSheetById(INTAKE_SHEET_GID) || ss.getSheetByName(INTAKE_SHEET_NAME);
+  if (!sheet) {
+    ui.alert("Could not find intake tab " + INTAKE_SHEET_NAME + " (gid " + INTAKE_SHEET_GID + ").");
+    return;
+  }
   var lastCol = Math.max(sheet.getLastColumn(), 1);
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) {

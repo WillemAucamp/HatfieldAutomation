@@ -3,7 +3,10 @@
 # Destination headers are the TSV contract the Melrose loader already reads.
 
 intake:
-  spreadsheet_id: 1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M
+  # Shared intakes workbook — only the Willem/Sihle person tab is processed.
+  spreadsheet_id: 1qzp0v1_lHzAUj7TGXIj-cz0zuWctBX8de1wR46hKcLY
+  sheet_name: "Willem/ Sihle"
+  sheet_gid: 880063023
   headers_file: config/intake-form-headers.tsv
 
 destination:
@@ -38,7 +41,6 @@ intake_columns:
   - next_of_kin_first_name
   - next_of_kin_surname
   - next_of_kin_phone
-  - expenses_summary
   - id_number
   - consent
   - blacklisted
@@ -53,6 +55,7 @@ intake_columns:
   - accounts_spend
   - employment
 
+# Exact live Willem/Sihle headers (newlines collapsed to spaces in normalizeHeader).
 intake_headers:
   timestamp: Timestamp
   vehicle_interest: "Which vehicle are you thinking of? Remember we can always compare later and give you options to consider"
@@ -75,17 +78,15 @@ intake_headers:
   next_of_kin_first_name: "Relative or friend Name Example: Vusi"
   next_of_kin_surname: "Relative or friend surname Example: Nel"
   next_of_kin_phone: "Relative or friend number example: 0856475124 CANNOT BE THE SAME AS YOURS"
-  expenses_summary: "Summary of your expenses, what do you pay on the below Food R2000 Accounts R1000 Other R500"
   id_number: ID Number
   consent: "Thank you for the above info provided, looking forward to getting you the best possible deal Are you okay with us processing your information for this finance application, Do we have your permission to apply on your behalf to see what is the best possible deal?"
   blacklisted: Are you Blacklisted
   on_itc: Are you on ITC?
-  debt_review: Debt review
-  housing_status: Column 27
+  debt_review: Are you on Debt review or Credit bureau?
+  housing_status: Column 18
   marital_status: Marital Status
   spouse_name: Spouse Name + Surname
   spouse_number: Spouse number
-  # Live Form titles (fuzzy cell() still matches older "Food spend" wording).
   food_spend: "How much do you spend on food?"
   cellphone_spend: "How much do you spend on a cellphone?"
   accounts_spend: "How much do you spend on a accounts?"
@@ -300,7 +301,7 @@ field_map:
   - destination: Telephone payment
     source: cellphone_spend
     mode: copy
-    notes: Prefer the Form cellphone spend column; else Gemini may split expenses_summary.
+    notes: Prefer the Form cellphone spend column.
 
   - destination: Transport cost
     source: accounts_spend
@@ -310,7 +311,7 @@ field_map:
   - destination: Food cost
     source: food_spend
     mode: copy
-    notes: Prefer the Form food spend column; else Gemini may split expenses_summary.
+    notes: Prefer the Form food spend column.
 
   - destination: Bank name
     source: bank_name
@@ -366,7 +367,6 @@ passthrough_not_on_destination:
   - spouse_name
   - spouse_number
   - employment
-  - expenses_summary
 
 rules:
   - Output must be exactly 38 columns in destination_columns order. No extra headings, notes, or columns.
