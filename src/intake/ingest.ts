@@ -48,10 +48,15 @@ export async function ingestNewRows(
   }
 
   const mapping = loadIntakeMapping(config.intakeMappingPath);
+  const intakeTab = {
+    sheetGid: config.intakeSheetGid,
+    sheetName: config.intakeSheetName,
+  };
   const allIntakeRows = await readUnprocessedIntake({
     webhookUrl: config.sheetWebhookUrl,
     spreadsheetId: config.intakeSpreadsheetId,
     statusColumn: config.intakeStatusColumn,
+    ...intakeTab,
   });
   result.scanned = allIntakeRows.length;
   if (allIntakeRows.length > 0) {
@@ -87,6 +92,7 @@ export async function ingestNewRows(
           rowIndex: intake.rowIndex,
           statusColumn: config.intakeStatusColumn,
           status: "skipped_no_consent",
+          ...intakeTab,
         });
       }
       console.log(`Skip ${label}: consent not given`);
@@ -101,6 +107,7 @@ export async function ingestNewRows(
           rowIndex: intake.rowIndex,
           statusColumn: config.intakeStatusColumn,
           status: "skipped_empty",
+          ...intakeTab,
         });
       }
       console.log(`Skip ${label}: no name`);
@@ -115,6 +122,7 @@ export async function ingestNewRows(
           rowIndex: intake.rowIndex,
           statusColumn: config.intakeStatusColumn,
           status: "processing",
+          ...intakeTab,
         });
       }
 
@@ -161,6 +169,7 @@ export async function ingestNewRows(
             rowIndex: intake.rowIndex,
             statusColumn: config.intakeStatusColumn,
             status: `enriched row ${existing.row} nr ${existing.nr}`,
+            ...intakeTab,
           });
           console.log(
             `Recovered prior row-0 enrich for ${label} → automation sheet row ${existing.row} (NR ${existing.nr})`
@@ -184,6 +193,7 @@ export async function ingestNewRows(
         rowIndex: intake.rowIndex,
         statusColumn: config.intakeStatusColumn,
         status: `enriched row ${written.row} nr ${written.nr}`,
+        ...intakeTab,
       });
       console.log(`Enriched ${label} → automation sheet row ${written.row} (NR ${written.nr})`);
     } catch (err) {
@@ -198,6 +208,7 @@ export async function ingestNewRows(
             rowIndex: intake.rowIndex,
             statusColumn: config.intakeStatusColumn,
             status: `error ${message.slice(0, 180)}`,
+            ...intakeTab,
           });
         } catch (markErr) {
           console.error(`Could not mark error on ${label}:`, markErr);

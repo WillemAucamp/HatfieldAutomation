@@ -13,7 +13,12 @@ export interface FieldMapEntry {
 }
 
 export interface IntakeMapping {
-  intake: { spreadsheet_id: string; headers_file: string };
+  intake: {
+    spreadsheet_id: string;
+    sheet_name?: string;
+    sheet_gid?: number;
+    headers_file: string;
+  };
   destination: {
     spreadsheet_id: string;
     spreadsheet_url?: string;

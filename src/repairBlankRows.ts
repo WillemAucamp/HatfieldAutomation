@@ -137,7 +137,8 @@ async function main(): Promise<void> {
     readSheetRows({
       webhookUrl: config.sheetWebhookUrl!,
       spreadsheetId: config.intakeSpreadsheetId,
-      sheetName: "Form Responses 1",
+      sheetGid: config.intakeSheetGid,
+      sheetName: config.intakeSheetName,
       unprocessedOnly: false,
     })
   );

@@ -1,11 +1,46 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  DEFAULT_INTAKE_SHEET_GID,
+  explicitSheetSelector,
+  intakeSheetSelector,
   isFailedEnrichmentRowZero,
   isTerminalIntakeStatus,
   isUsableSheetRow,
   matchAppendedSheetRow,
 } from "./sheets.js";
+
+describe("intakeSheetSelector", () => {
+  it("prefers tab gid so other person tabs are never read", () => {
+    assert.deepEqual(
+      intakeSheetSelector({
+        intakeSheetGid: DEFAULT_INTAKE_SHEET_GID,
+        intakeSheetName: "Willem/ Sihle",
+      }),
+      { sheetGid: DEFAULT_INTAKE_SHEET_GID }
+    );
+  });
+
+  it("falls back to the Willem/Sihle tab name when gid is missing", () => {
+    assert.deepEqual(intakeSheetSelector({ intakeSheetName: "Willem/ Sihle" }), {
+      sheetName: "Willem/ Sihle",
+    });
+    assert.deepEqual(intakeSheetSelector({}), { sheetName: "Willem/ Sihle" });
+  });
+});
+
+describe("explicitSheetSelector", () => {
+  it("leaves automation-sheet reads on the default tab", () => {
+    assert.deepEqual(explicitSheetSelector({}), {});
+  });
+
+  it("passes through a caller-supplied gid or name", () => {
+    assert.deepEqual(explicitSheetSelector({ sheetGid: 880063023, sheetName: "x" }), {
+      sheetGid: 880063023,
+    });
+    assert.deepEqual(explicitSheetSelector({ sheetName: "Sheet1" }), { sheetName: "Sheet1" });
+  });
+});
 
 describe("isTerminalIntakeStatus", () => {
   it("treats Melrose pipeline values as terminal", () => {

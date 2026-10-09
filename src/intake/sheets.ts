@@ -25,10 +25,43 @@ export function isFailedEnrichmentRowZero(status: string | undefined | null): bo
   return /^enriched row 0\b/i.test(String(status ?? "").trim());
 }
 
-const DEFAULT_INTAKE_SHEET_NAME = "Form Responses 1";
+const DEFAULT_INTAKE_SHEET_NAME = "Willem/ Sihle";
+/** Default person-tab gid from the intakes workbook URL. */
+export const DEFAULT_INTAKE_SHEET_GID = 880063023;
 
 /** Empty scan column: Apps Script ensureColumn_ fills it blank so every row is returned. */
 const INTAKE_SCAN_COLUMN = "__melrose_row_scan__";
+
+export interface IntakeSheetSelector {
+  sheetGid?: number;
+  sheetName?: string;
+}
+
+/** Prefer tab gid so we never accidentally read another person's tab. */
+export function intakeSheetSelector(options: {
+  intakeSheetGid?: number;
+  intakeSheetName?: string;
+  sheetGid?: number;
+  sheetName?: string;
+}): IntakeSheetSelector {
+  const gid = options.sheetGid ?? options.intakeSheetGid;
+  if (gid != null && Number.isFinite(gid) && gid > 0) {
+    return { sheetGid: gid };
+  }
+  const name = options.sheetName || options.intakeSheetName || DEFAULT_INTAKE_SHEET_NAME;
+  return { sheetName: name };
+}
+
+export function explicitSheetSelector(options: {
+  sheetGid?: number;
+  sheetName?: string;
+}): IntakeSheetSelector {
+  if (options.sheetGid != null && Number.isFinite(options.sheetGid) && options.sheetGid > 0) {
+    return { sheetGid: options.sheetGid };
+  }
+  if (options.sheetName) return { sheetName: options.sheetName };
+  return {};
+}
 
 export async function readSheetRows(options: {
   webhookUrl: string;
@@ -37,14 +70,17 @@ export async function readSheetRows(options: {
   statusColumn?: string;
   processableStatuses?: string[];
   sheetName?: string;
+  sheetGid?: number;
 }): Promise<IntakeSheetRow[]> {
+  // Generic reader (automation sheet too) — only target a tab when the caller asks.
+  const selector = explicitSheetSelector(options);
   const parsed = await postWebhookJson(options.webhookUrl, {
     action: "readSheet",
     spreadsheetId: options.spreadsheetId,
     unprocessedOnly: Boolean(options.unprocessedOnly),
     statusColumn: options.statusColumn || "",
     processableStatuses: options.processableStatuses || ["", "new", "retry"],
-    ...(options.sheetName ? { sheetName: options.sheetName } : {}),
+    ...selector,
   });
   if (parsed.ok === false) {
     throw new Error(String(parsed.error || "readSheet failed"));
@@ -74,8 +110,9 @@ export async function readUnprocessedIntake(options: {
   spreadsheetId: string;
   statusColumn: string;
   sheetName?: string;
+  sheetGid?: number;
 }): Promise<IntakeSheetRow[]> {
-  const sheetName = options.sheetName || DEFAULT_INTAKE_SHEET_NAME;
+  const selector = intakeSheetSelector(options);
 
   // Full-sheet scan (not Enrichment Status allowlist). Form answers that landed
   // in Enrichment Status used to make scanned=0 even for brand-new submissions.
@@ -84,7 +121,7 @@ export async function readUnprocessedIntake(options: {
     scanned = await readSheetRows({
       webhookUrl: options.webhookUrl,
       spreadsheetId: options.spreadsheetId,
-      sheetName,
+      ...selector,
       unprocessedOnly: true,
       statusColumn: INTAKE_SCAN_COLUMN,
       processableStatuses: [""],
@@ -98,7 +135,7 @@ export async function readUnprocessedIntake(options: {
     scanned = await readSheetRows({
       webhookUrl: options.webhookUrl,
       spreadsheetId: options.spreadsheetId,
-      sheetName,
+      ...selector,
       unprocessedOnly: true,
       statusColumn: options.statusColumn,
       processableStatuses: ["", "new", "retry"],
@@ -135,6 +172,7 @@ export async function readUnprocessedIntake(options: {
     const parsed = await postWebhookJson(options.webhookUrl, {
       action: "updateSheet",
       spreadsheetId: options.spreadsheetId,
+      ...selector,
       updates,
     });
     if (parsed.ok === false) {
@@ -155,10 +193,14 @@ export async function markIntakeStatus(options: {
   rowIndex: number;
   statusColumn: string;
   status: string;
+  sheetName?: string;
+  sheetGid?: number;
 }): Promise<void> {
+  const selector = intakeSheetSelector(options);
   const parsed = await postWebhookJson(options.webhookUrl, {
     action: "updateSheet",
     spreadsheetId: options.spreadsheetId,
+    ...selector,
     updates: [
       {
         row: options.rowIndex,

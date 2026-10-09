@@ -31,10 +31,10 @@ npm run process         # one local run: ingest then Seriti
 
 Leads **Approved/Declined** WhatsApp: `npm run notify-leads` (see [`config/leads-whatsapp-automation.md`](./config/leads-whatsapp-automation.md)). Do not turn the Cursor 24/7 intake agent back on.
 
-Intake sheet: https://docs.google.com/spreadsheets/d/1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M  
+Intake sheet (Willem/Sihle tab only): https://docs.google.com/spreadsheets/d/1qzp0v1_lHzAUj7TGXIj-cz0zuWctBX8de1wR46hKcLY/edit?gid=880063023#gid=880063023  
 Automation sheet: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?gid=0#gid=0
 
-Processed Form rows are marked in **Enrichment Status**. The loader still skips any automation row whose **Status** is already filled. Each click processes at most `MAX_INTAKE_ROWS` (default 5 in GitHub Actions).
+Only rows on the **Willem/ Sihle** tab are ingested — other person tabs are ignored. Processed rows are marked in **Enrichment Status**. The loader still skips any automation row whose **Status** is already filled. Each click processes at most `MAX_INTAKE_ROWS` (default 5 in GitHub Actions).
 
 n8n / Render / `trigger-server` are leftover and **not required**. See [`config/n8n-setup.md`](./config/n8n-setup.md) only if you still want that path.
 

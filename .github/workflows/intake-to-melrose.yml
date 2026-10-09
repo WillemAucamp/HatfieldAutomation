@@ -40,7 +40,9 @@ concurrency:
 env:
   SHEET_CSV_URL: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/gviz/tq?tqx=out:csv&gid=0
   SHEET_ID: 12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI
-  INTAKE_SPREADSHEET_ID: 1P7J0CipLKDvPjeLWiKSxuC8ZeWSAjzhbDsQwKFwWH6M
+  INTAKE_SPREADSHEET_ID: 1qzp0v1_lHzAUj7TGXIj-cz0zuWctBX8de1wR46hKcLY
+  INTAKE_SHEET_GID: "880063023"
+  INTAKE_SHEET_NAME: "Willem/ Sihle"
   HEADLESS: "true"
 
 jobs:

@@ -146,6 +146,10 @@ export interface AppConfig {
   geminiApiKey: string;
   geminiModel: string;
   intakeSpreadsheetId: string;
+  /** Pin intake reads/writes to one person tab (gid from the sheet URL). */
+  intakeSheetGid: number;
+  /** Fallback when intakeSheetGid is unset. Live tab is "Willem/ Sihle". */
+  intakeSheetName: string;
   intakeStatusColumn: string;
   intakeMappingPath: string;
   pollSeconds: number;
