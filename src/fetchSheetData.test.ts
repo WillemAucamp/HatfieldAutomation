@@ -393,6 +393,80 @@ describe("fetchSheetData", () => {
     assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_PROVINCE_EMPTY"));
   });
 
+  it("blocks loads below R12000 gross and implausible high salaries", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
+    const csvPath = join(dir, "salary.csv");
+    const headers = [
+      ...HEADERS.slice(0, 23),
+      "Marital status",
+      "Next of kin relationship",
+      "Max price range",
+      ...HEADERS.slice(23),
+    ];
+    const base = [
+      "55",
+      "Ada Lovelace",
+      "ada@example.com",
+      "Ms",
+      "Ada Lovelace",
+      "South African ID",
+      "8705135782080",
+      "Grade 12",
+      "0821234567",
+      "12 Main Road Pretoria",
+      "0083",
+      "Gauteng",
+      "10 05 2023",
+      "Vusi Nel",
+      "0856475124",
+      "RETAIL",
+      "CLERK",
+      "SKILLED WORKER",
+      "Test Shop",
+      "0111234567",
+      "1 Work Ave",
+      "0083",
+      "Gauteng",
+      "Single",
+      "Friend",
+      "350000",
+      "10 05 2024",
+      "11000",
+      "9000",
+      "300",
+      "500",
+      "2000",
+      "Capitec",
+      "Savings/Transactional",
+      "Ada Lovelace",
+      "0821234567",
+      "",
+      "",
+    ];
+    const typo = base.slice();
+    typo[1] = "Typo Client";
+    typo[2] = "typo@example.com";
+    typo[4] = "Typo Client";
+    typo[6] = "8606045216088";
+    typo[27] = "R1000000";
+    typo[28] = "R800000";
+    const csv = [headers, base, typo]
+      .map((cols) => cols.map((c) => `"${c.replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    writeFileSync(csvPath, csv);
+
+    const applicants = await fetchSheetData({
+      csvUrl: "",
+      mapping: loadColumnMapping("./mapping.json"),
+      localCsvPath: csvPath,
+      includeCompleted: true,
+    });
+    assert.equal(applicants.length, 2);
+    assert.ok(applicants[0]!.errors.some((e) => e.code === "AFFORDABILITY_ERROR"));
+    assert.ok(applicants[1]!.errors.some((e) => e.code === "SALARY_IMPLAUSIBLE"));
+    assert.equal(applicants[1]!.grossMonthly, "1000000");
+  });
+
   it("flags an empty extra automation column by name", async () => {
     const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
     const csvPath = join(dir, "blank-id-type.csv");

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandSelectNeedles, formatDateForForm, initialsFromFirstNames, parseDurationToMmDdYyyy, parsePersonName, postalSearchNeedles, restoreIdNumber, restorePostalCode, splitNextOfKinName, titleFromGender, usableIdDigits, validateDateFormat, validateIdNumber, valuesMatch } from "./transforms.js";
+import { expandSelectNeedles, formatDateForForm, initialsFromFirstNames, parseDurationToMmDdYyyy, parseMoneyAmount, parsePersonName, postalSearchNeedles, restoreIdNumber, restorePostalCode, splitNextOfKinName, titleFromGender, usableIdDigits, validateDateFormat, validateIdNumber, validateSalaryPair, valuesMatch } from "./transforms.js";
 
 describe("expandSelectNeedles", () => {
   it("maps FNB to Firstrand search terms", () => {
@@ -167,6 +167,32 @@ describe("formatDateForForm", () => {
 
   it("converts Apps Script Date cells to the form display", () => {
     assert.equal(formatDateForForm("2021-10-05 02:00:00"), "05 Oct 2021");
+  });
+});
+
+describe("validateSalaryPair", () => {
+  it("parses R-prefixed and spaced amounts", () => {
+    assert.equal(parseMoneyAmount("R1000000"), 1_000_000);
+    assert.equal(parseMoneyAmount("R 12 000"), 12_000);
+    assert.equal(parseMoneyAmount("15000"), 15_000);
+  });
+
+  it("rejects gross below R12000 with AFFORDABILITY_ERROR", () => {
+    const errors = validateSalaryPair("11000", "9000");
+    assert.ok(errors.some((e) => e.code === "AFFORDABILITY_ERROR"));
+    assert.equal(validateSalaryPair("12000", "10000").length, 0);
+  });
+
+  it("rejects implausible high salaries without rewriting them", () => {
+    const errors = validateSalaryPair("R1000000", "R800000");
+    assert.ok(errors.some((e) => e.code === "SALARY_IMPLAUSIBLE" && e.field === "grossMonthly"));
+    assert.ok(errors.some((e) => e.code === "SALARY_IMPLAUSIBLE" && e.field === "nettSalary"));
+    assert.ok(!errors.some((e) => /100000\b/.test(e.message) && e.code === "SALARY_IMPLAUSIBLE" && e.message.includes("corrected")));
+  });
+
+  it("rejects nett above gross", () => {
+    const errors = validateSalaryPair("15000", "20000");
+    assert.ok(errors.some((e) => e.code === "SALARY_NETT_ABOVE_GROSS"));
   });
 });
 

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { ApplicantRecord, ColumnMapping, DataError } from "./types.js";
 import {
   isMissingValue,
+  parseMoneyAmount,
   requireAmount,
   requireEmail,
   requireText,
@@ -14,6 +15,7 @@ import {
   transformMobile,
   validateDateFormat,
   validateIdNumber,
+  validateSalaryPair,
 } from "./transforms.js";
 import {
   copyResidentialOntoEmployer,
@@ -580,10 +582,24 @@ function mapRow(
   const grossRaw = getCell(row, mapping.grossMonthly);
   const grossResult = requireAmount(grossRaw, "GROSS_EMPTY", "Gross monthly salary");
   pushError(errors, grossResult, "grossMonthly", grossRaw);
+  if (grossResult.valid) {
+    const amount = parseMoneyAmount(grossResult.value);
+    if (amount != null) grossResult.value = String(Math.round(amount));
+  }
 
   const nettRaw = getCell(row, mapping.nettSalary);
   const nettResult = requireAmount(nettRaw, "NETT_EMPTY", "Nett salary");
   pushError(errors, nettResult, "nettSalary", nettRaw);
+  if (nettResult.valid) {
+    const amount = parseMoneyAmount(nettResult.value);
+    if (amount != null) nettResult.value = String(Math.round(amount));
+  }
+
+  if (grossResult.valid && nettResult.valid) {
+    for (const salaryError of validateSalaryPair(grossResult.value, nettResult.value)) {
+      errors.push(salaryError);
+    }
+  }
 
   const telRaw = getCell(row, mapping.telephoneExpense);
   const telResult = requireAmount(telRaw, "TELEPHONE_EXPENSE_EMPTY", "Telephone expense");
