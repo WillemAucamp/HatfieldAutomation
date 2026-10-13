@@ -579,8 +579,8 @@ export function parseMoneyAmount(raw: string | undefined | null): number | null 
   return amount;
 }
 
-/** Hatfield minimum monthly gross before a Seriti load is allowed. */
-export const MIN_MONTHLY_GROSS = 12_000;
+/** Hatfield minimum monthly nett before a Seriti load is allowed. */
+export const MIN_MONTHLY_NETT = 12_000;
 
 /**
  * Monthly salaries above this are treated as client typos (e.g. R1000000 for R100000),
@@ -597,7 +597,7 @@ export interface SalaryCheckError {
 
 /**
  * Affordability + sanity checks on Gross / Nett. Never rewrites the client's figure.
- * - Gross below R12 000 → AFFORDABILITY_ERROR (do not load)
+ * - Nett below R12 000 → AFFORDABILITY_ERROR (do not load)
  * - Gross or Nett above R500 000 → SALARY_IMPLAUSIBLE (likely typo; do not load)
  * - Nett greater than Gross → SALARY_NETT_ABOVE_GROSS
  */
@@ -611,12 +611,12 @@ export function validateSalaryPair(
   const grossText = String(grossRaw ?? "").trim();
   const nettText = String(nettRaw ?? "").trim();
 
-  if (gross != null && gross < MIN_MONTHLY_GROSS) {
+  if (nett != null && nett < MIN_MONTHLY_NETT) {
     errors.push({
       code: "AFFORDABILITY_ERROR",
-      field: "grossMonthly",
-      message: `Gross monthly salary R${gross} is below the R${MIN_MONTHLY_GROSS} minimum — client cannot afford; do not load`,
-      value: grossText,
+      field: "nettSalary",
+      message: `Nett salary R${nett} is below the R${MIN_MONTHLY_NETT} minimum — client cannot afford; do not load`,
+      value: nettText,
     });
   }
 
