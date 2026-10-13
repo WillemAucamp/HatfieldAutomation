@@ -95,17 +95,47 @@ describe("output row contract", () => {
     );
     assert.equal(values["Industry (AI based on employer)"], "BUSINESS SERVICES");
     assert.equal(values["Employee level"], "MANAGEMENT");
-    assert.equal(values.Occupation, "LABOURER (SKILLED)");
+    assert.equal(values.Occupation, "OPERATOR");
   });
 
-  it("forces BUSINESS SERVICES for self-employed Employment answers", () => {
+  it("forces BUSINESS SERVICES and SELF EMPLOYED for self-employed Employment answers", () => {
     const values = buildOutputValues(
       mapping,
-      { "Industry (AI based on employer)": "Retail" },
-      { ...intakeAda, Employment: "Self-employed" },
+      {
+        "Industry (AI based on employer)": "Retail",
+        Occupation: "CLERK",
+        "Employer street address (online search)": "",
+        "Employer postal code (online search)": "",
+        "Employer province (online search)": "",
+        "Employer telephone number (online search)": "",
+        "Postal code": "0083",
+      },
+      { ...intakeAda, Employment: "Self-employed", "Job title?": "Clerk" },
       new Date(2026, 9, 5)
     );
     assert.equal(values["Industry (AI based on employer)"], "BUSINESS SERVICES");
+    assert.equal(values.Occupation, "SELF EMPLOYED (NON PROFESSIONAL)");
+    assert.equal(values["Employer street address (online search)"], "12 Main Road Pretoria");
+    assert.equal(values["Employer postal code (online search)"], "0083");
+    assert.equal(values["Employer province (online search)"], "Gauteng");
+    assert.equal(values["Employer telephone number (online search)"], "");
+  });
+
+  it("keeps a searched employer address when the client is self-employed", () => {
+    const values = buildOutputValues(
+      mapping,
+      {
+        "Employer street address (online search)": "1 Work Ave",
+        "Employer postal code (online search)": "2196",
+        "Employer province (online search)": "Limpopo",
+        "Postal code": "0083",
+      },
+      { ...intakeAda, Employment: "Self-employed" },
+      new Date(2026, 9, 5)
+    );
+    assert.equal(values["Employer street address (online search)"], "1 Work Ave");
+    assert.equal(values["Employer postal code (online search)"], "2196");
+    assert.equal(values["Employer province (online search)"], "Limpopo");
   });
 
   it("does not copy the home address into employer fields; empty expenses default to 0", () => {
@@ -191,9 +221,29 @@ describe("output row contract", () => {
     );
   });
 
-  it("uses city/town as the postal place needle when Gemini leaves postal empty", () => {
+  it("does not copy city/town into postal code when Gemini leaves postal empty", () => {
     const values = buildOutputValues(mapping, { "Postal code": "" }, intakeAda);
-    assert.equal(values["Postal code"], "Pretoria");
+    assert.equal(values["Postal code"], "");
+  });
+
+  it("does not copy the client province or residency date into employer fields", () => {
+    const values = buildOutputValues(
+      mapping,
+      {
+        "Employer province (online search)": "",
+        "Employer street address (online search)": "",
+        "Year they started working there (calculate from years provided)": "",
+      },
+      {
+        ...intakeAda,
+        "How long have you been working here? Example: 2 Years /6 Months": "months",
+      },
+      new Date(2026, 9, 5)
+    );
+    assert.equal(values["Employer province (online search)"], "");
+    assert.equal(values["Employer street address (online search)"], "");
+    assert.equal(values["Year they started working there (calculate from years provided)"], "");
+    assert.equal(values["Year start living at address (MM DD YYYY format ONLY)"], "10 05 2023");
   });
 
   it("rejects consent Yes leaked into Form ID Number", () => {
@@ -257,7 +307,7 @@ describe("output row contract", () => {
     assert.equal(values["Marital status"], "Single");
   });
 
-  it("sets Married when Form marital is blank but spouse name is present", () => {
+  it("does not infer Married from spouse columns when Form marital is blank", () => {
     const values = buildOutputValues(
       mapping,
       {},
@@ -268,7 +318,7 @@ describe("output row contract", () => {
         "Spouse number": "0786454285",
       }
     );
-    assert.equal(values["Marital status"], "Married");
+    assert.equal(values["Marital status"], "");
     assert.equal(values["Spouse Name + Surname"], "Frieda Tobias");
     assert.equal(values["Spouse number"], "0786454285");
   });

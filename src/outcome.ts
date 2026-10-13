@@ -7,6 +7,19 @@ export function formatErrorCell(codes: string[]): string {
   return `error ${joined}`;
 }
 
+/** Sheet cell for a row that must not be loaded. Names every missing column. */
+export function formatDataErrorCell(
+  errors: Array<{ code: string; message?: string }>
+): string {
+  if (errors.length === 0) return formatErrorCell([]);
+  const parts = errors.map((error) => {
+    const code = error.code.trim();
+    const message = String(error.message ?? "").replace(/\s+/g, " ").trim();
+    return message ? `${code}: ${message}` : code;
+  });
+  return clipStatus(`error ${parts.join("; ")}`);
+}
+
 export function isErrorCell(value: string | undefined | null): boolean {
   return /^error\b/i.test(String(value ?? "").trim());
 }

@@ -252,7 +252,7 @@ field_map:
   - destination: Occupation
     source: job_title
     mode: copy
-    notes: Mapped in code onto Seriti Occupation list; unclear titles → LABOURER (SKILLED).
+    notes: Mapped in code onto Seriti Occupation list; unclear titles → OPERATOR. Self-employed → SELF EMPLOYED (NON PROFESSIONAL).
 
   - destination: Employee level
     sources: [job_title, employer_name, employment]
@@ -271,17 +271,17 @@ field_map:
   - destination: Employer street address (online search)
     sources: [employer_name, city_town, province, street_address]
     mode: infer
-    notes: Infer from employer + location. Leave empty if not found — do not copy the home address.
+    notes: Infer from employer + location. Leave empty if not found. Code copies the home address only when the client is self-employed.
 
   - destination: Employer postal code (online search)
     sources: [employer_name, city_town, province]
     mode: infer
-    notes: Infer from employer + location. Leave empty if not found — do not copy the home postal code.
+    notes: Infer from employer + location. Leave empty if not found. Code copies the home postal code only when the client is self-employed.
 
   - destination: Employer province (online search)
     sources: [employer_name, province]
     mode: infer
-    notes: Prefer employer province from search; code falls back to client province when empty.
+    notes: Prefer employer province from search. Code copies the client province only when the client is self-employed.
 
   - destination: Year they started working there (calculate from years provided)
     source: years_at_employer
@@ -336,8 +336,8 @@ field_map:
     mode: copy
     notes: >-
       Copy from the Form. When Form marital is blank and there is no spouse
-      name/phone, loader applies standing default Single so Seriti Personal Next
-      is not blocked. Rows with spouse data stay Married.
+      name/phone, standing default Single is applied. Spouse name or phone does
+      not fill Marital status — that cell stays empty and the loader reports it.
 
   - destination: Next of kin relationship
     mode: writer
@@ -377,8 +377,8 @@ rules:
   - Dates must be MM DD YYYY. Prefer calculating from "X years/months" in code. Bare numbers mean years.
   - If an infer value cannot be determined, leave it empty (not the client's name or home address).
   - Industry and Employee level must be exact Seriti menu strings (see config/seriti-options.json). Occupation is mapped in code.
-  - Self-employed clients get Industry BUSINESS SERVICES.
-  - Unclear Occupation → LABOURER (SKILLED).
+  - Self-employed clients get Industry BUSINESS SERVICES and Occupation SELF EMPLOYED (NON PROFESSIONAL). Their residential address is copied onto the employer address. No other column is copied into another column.
+  - Unclear Occupation → OPERATOR.
   - Do not load a row when consent is not given.
   - Single-line cells only (no line breaks inside addresses or names).
   - Never substitute a generic postal code (e.g. 2000) that is not the client's.

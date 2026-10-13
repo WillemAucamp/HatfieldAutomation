@@ -349,9 +349,13 @@
     "loan consultant": "CONSULTANT",
     "truck driver": "DRIVER",
     "owner": "OWNER OF BUSINESS (NON PROFESSIONAL)",
-    "business owner": "OWNER OF BUSINESS (NON PROFESSIONAL)"
+    "business owner": "OWNER OF BUSINESS (NON PROFESSIONAL)",
+    "self employed": "SELF EMPLOYED (NON PROFESSIONAL)",
+    "self-employed": "SELF EMPLOYED (NON PROFESSIONAL)",
+    "self employed owner": "SELF EMPLOYED (NON PROFESSIONAL)"
   },
-  "occupation_fallback": "LABOURER (SKILLED)",
+  "occupation_fallback": "OPERATOR",
   "level_fallback": "SKILLED WORKER",
-  "self_employed_industry": "BUSINESS SERVICES"
+  "self_employed_industry": "BUSINESS SERVICES",
+  "self_employed_occupation": "SELF EMPLOYED (NON PROFESSIONAL)"
 }

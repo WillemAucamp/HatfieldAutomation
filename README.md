@@ -259,8 +259,9 @@ The only automatic rewrites are known Google Sheets artefacts:
 | `MOBILE_NOT_10_DIGITS` | Mobile is not 10 digits starting with 0 (after optional leading-0 restore) |
 | `MOBILE_EMPTY` | Mobile number is empty |
 | `EMAIL_EMPTY` / `EMAIL_INVALID` | Missing or malformed email |
-| `NAME_EMPTY` / `NAME_MISSING_SURNAME` | Applicant name missing or not "First Last" |
-| `NEXT_OF_KIN_EMPTY` | Next of kin name is empty. A single given name is duplicated as the surname. |
+| `NAME_EMPTY` / `NAME_MISSING_SURNAME` | Applicant name missing or not "First Last". A single given name is not copied into the surname. |
+| `NEXT_OF_KIN_EMPTY` / `NEXT_OF_KIN_MISSING_SURNAME` | Next of kin name is empty or has no surname. A single given name is not copied into the surname. |
+| `COLUMN_EMPTY` / `EMPLOYER_ADDRESS_EMPTY` / `MAX_PRICE_EMPTY` / `NOK_PHONE_EMPTY` | A column on the automation sheet is empty. The row is not loaded. Status names the missing column. |
 | `RESIDENCY_DATE_FORMAT` / `EMPLOYMENT_DATE_FORMAT` | Date is not `MM DD YYYY` |
 | `ACCOUNT_HOLDER_EMPTY` | Account holder is empty |
 | `BANK_EMPTY` | Bank name cell is empty |

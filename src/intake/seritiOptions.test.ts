@@ -31,14 +31,15 @@ describe("seriti option mapping", () => {
     assert.equal(mapLevel("not-a-real-level", options), "SKILLED WORKER");
   });
 
-  it("maps Occupation job titles and falls back to LABOURER (SKILLED)", () => {
+  it("maps Occupation job titles and falls back to OPERATOR", () => {
     assert.equal(mapOccupation("Clerk", options), "CLERK");
     assert.equal(mapOccupation("plumber", options), "PLUMBER");
-    assert.equal(mapOccupation("Warehouse picker", options), "LABOURER (SKILLED)");
-    assert.equal(mapOccupation("", options), "LABOURER (SKILLED)");
+    assert.equal(mapOccupation("Warehouse picker", options), "OPERATOR");
+    assert.equal(mapOccupation("", options), "OPERATOR");
     assert.equal(mapOccupation("RDT operator", options), "OPERATOR");
     assert.equal(mapOccupation("Loan consultant", options), "CONSULTANT");
     assert.equal(mapOccupation("Truck driver", options), "DRIVER");
+    assert.equal(mapOccupation("Self-employed", options), "SELF EMPLOYED (NON PROFESSIONAL)");
   });
 
   it("detects self-employed Employment answers", () => {

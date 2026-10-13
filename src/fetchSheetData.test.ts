@@ -102,15 +102,13 @@ describe("fetchSheetData", () => {
     assert.equal(row.idNumber, "8304015345083");
     assert.equal(row.mobile, "0629095338");
     assert.equal(row.telephoneExpense, "1000");
-    // Blank marital + no spouse ⇒ Single (Form often omits marital).
-    assert.equal(row.maritalStatus, "Single");
-    assert.ok(!row.errors.some((e) => e.code === "MARITAL_STATUS_EMPTY"));
+    assert.equal(row.maritalStatus, "");
+    assert.ok(row.errors.some((e) => e.code === "MARITAL_STATUS_EMPTY" && /Marital status/.test(e.message)));
     assert.ok(row.errors.some((e) => e.code === "NOK_RELATIONSHIP_EMPTY"));
-    // Max price is optional (Form does not ask). Empty must not block the row.
-    assert.ok(!row.errors.some((e) => e.code === "MAX_PRICE_EMPTY"));
+    assert.ok(row.errors.some((e) => e.code === "MAX_PRICE_EMPTY" && /Max price range/.test(e.message)));
     assert.deepEqual(
       row.errors.filter((e) =>
-        ["ID_EMPTY", "MOBILE_EMPTY", "TELEPHONE_EXPENSE_EMPTY", "MAX_PRICE_EMPTY"].includes(
+        ["ID_EMPTY", "MOBILE_EMPTY", "TELEPHONE_EXPENSE_EMPTY"].includes(
           e.code
         )
       ),
@@ -118,7 +116,7 @@ describe("fetchSheetData", () => {
     );
   });
 
-  it("duplicates a mononym as surname and does not hard-block", async () => {
+  it("does not duplicate a single given name into the surname", async () => {
     const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
     const csvPath = join(dir, "mono.csv");
     const values = [
@@ -171,11 +169,12 @@ describe("fetchSheetData", () => {
     });
     const row = applicants[0]!;
     assert.equal(row.firstName, "Lucky");
-    assert.equal(row.surname, "Lucky");
-    assert.ok(!row.errors.some((e) => e.code === "NAME_MISSING_SURNAME"));
+    assert.equal(row.surname, "");
+    assert.ok(row.errors.some((e) => e.code === "NAME_MISSING_SURNAME"));
+    assert.match(row.errors.find((e) => e.code === "NAME_MISSING_SURNAME")!.message, /Lucky/);
   });
 
-  it("treats Married without spouse ID as loadable when marital date can fall back", async () => {
+  it("blocks Married rows that are missing spouse ID or marital date", async () => {
     const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
     const csvPath = join(dir, "married.csv");
     const headers = [
@@ -240,13 +239,13 @@ describe("fetchSheetData", () => {
     assert.equal(row.maritalStatus, "Married");
     assert.equal(row.spouseFullName, "Frieda Tobias");
     assert.equal(row.spousePhone, "0786454285");
-    assert.equal(row.maritalDate, "10 08 2020");
-    // Seriti requires Spouse ID for Married — hard-block when Form/sheet omit it.
+    assert.equal(row.maritalDate, undefined);
+    // Seriti requires Spouse ID and Marital date for Married — do not copy residency.
     assert.ok(row.errors.some((e) => e.code === "SPOUSE_ID_EMPTY"));
-    assert.ok(!row.errors.some((e) => e.code === "MARITAL_DATE_EMPTY"));
+    assert.ok(row.errors.some((e) => e.code === "MARITAL_DATE_EMPTY"));
   });
 
-  it("does not reject a row when next-of-kin phone is blank", async () => {
+  it("rejects a row when next-of-kin phone is blank", async () => {
     const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
     const csvPath = join(dir, "row.csv");
     const values = [
@@ -300,6 +299,156 @@ describe("fetchSheetData", () => {
 
     const row = applicants[0]!;
     assert.equal(row.nextOfKinPhone, "");
-    assert.ok(!row.errors.some((e) => e.field === "nextOfKinPhone"));
+    const nok = row.errors.find((e) => e.field === "nextOfKinPhone");
+    assert.ok(nok);
+    assert.equal(nok!.code, "NOK_PHONE_EMPTY");
+    assert.match(nok!.message, /Next of kin cellphone number/);
+  });
+
+  it("copies residential address onto employer address only when occupation is self-employed", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
+    const csvPath = join(dir, "self.csv");
+    const headers = [
+      ...HEADERS.slice(0, 23),
+      "Marital status",
+      "Next of kin relationship",
+      "Max price range",
+      ...HEADERS.slice(23),
+    ];
+    const employed = [
+      "55",
+      "Ada Lovelace",
+      "ada@example.com",
+      "Ms",
+      "Ada Lovelace",
+      "South African ID",
+      "8705135782080",
+      "Grade 12",
+      "0821234567",
+      "12 Main Road Pretoria",
+      "0083",
+      "Gauteng",
+      "10 05 2023",
+      "Vusi Nel",
+      "0856475124",
+      "RETAIL",
+      "CLERK",
+      "SKILLED WORKER",
+      "Test Shop",
+      "0111234567",
+      "",
+      "",
+      "",
+      "Single",
+      "Friend",
+      "350000",
+      "10 05 2024",
+      "15000",
+      "12000",
+      "300",
+      "500",
+      "2000",
+      "Capitec",
+      "Savings/Transactional",
+      "Ada Lovelace",
+      "0821234567",
+      "",
+      "",
+    ];
+    const selfEmployed = employed.slice();
+    selfEmployed[15] = "RETAIL";
+    selfEmployed[16] = "Self-employed";
+    const csv = [headers, employed, selfEmployed]
+      .map((cols) => cols.map((c) => `"${c.replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    writeFileSync(csvPath, csv);
+
+    const applicants = await fetchSheetData({
+      csvUrl: "",
+      mapping: loadColumnMapping("./mapping.json"),
+      localCsvPath: csvPath,
+      includeCompleted: true,
+    });
+    assert.equal(applicants.length, 2);
+    const employedRow = applicants[0]!;
+    const selfRow = applicants[1]!;
+
+    assert.equal(employedRow.employerAddress, "");
+    assert.ok(
+      employedRow.errors.some(
+        (e) => e.code === "EMPLOYER_ADDRESS_EMPTY" && /Employer street address/.test(e.message)
+      )
+    );
+    assert.equal(employedRow.industry, "RETAIL");
+    assert.equal(employedRow.occupation, "CLERK");
+    assert.notEqual(employedRow.employerProvince, employedRow.province);
+
+    assert.equal(selfRow.industry, "BUSINESS SERVICES");
+    assert.equal(selfRow.occupation, "SELF EMPLOYED (NON PROFESSIONAL)");
+    assert.equal(selfRow.employerAddress, "12 Main Road Pretoria");
+    assert.equal(selfRow.employerPostalCode, "0083");
+    assert.equal(selfRow.employerProvince, "Gauteng");
+    assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_ADDRESS_EMPTY"));
+    assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_POSTAL_EMPTY"));
+    assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_PROVINCE_EMPTY"));
+  });
+
+  it("flags an empty extra automation column by name", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
+    const csvPath = join(dir, "blank-id-type.csv");
+    const headers = [...HEADERS];
+    const values = [
+      "55",
+      "Ada Lovelace",
+      "ada@example.com",
+      "Ms",
+      "",
+      "",
+      "8705135782080",
+      "Grade 12",
+      "0821234567",
+      "12 Main Road Pretoria",
+      "0083",
+      "Gauteng",
+      "10 05 2023",
+      "Vusi Nel",
+      "0856475124",
+      "RETAIL",
+      "CLERK",
+      "SKILLED WORKER",
+      "Test Shop",
+      "0111234567",
+      "1 Work Ave",
+      "0083",
+      "Gauteng",
+      "10 05 2024",
+      "15000",
+      "12000",
+      "300",
+      "500",
+      "2000",
+      "Capitec",
+      "Savings/Transactional",
+      "Ada Lovelace",
+      "0821234567",
+      "",
+      "",
+    ];
+    const csv = [headers, values]
+      .map((cols) => cols.map((c) => `"${c.replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    writeFileSync(csvPath, csv);
+
+    const applicants = await fetchSheetData({
+      csvUrl: "",
+      mapping: loadColumnMapping("./mapping.json"),
+      localCsvPath: csvPath,
+      includeCompleted: true,
+    });
+    const row = applicants[0]!;
+    const missing = row.errors.filter((e) => e.code === "COLUMN_EMPTY").map((e) => e.field);
+    assert.ok(missing.includes("First names + surname"));
+    assert.ok(missing.includes("ID Type"));
+    assert.ok(row.errors.every((e) => e.field !== "Status" && e.field !== "Timing"));
   });
 });
