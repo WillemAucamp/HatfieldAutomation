@@ -1,4 +1,4 @@
-import { firstFilled, joinFilled } from "./headers.js";
+import { cell, firstFilled, joinFilled } from "./headers.js";
 import { copyColumns, joinColumns } from "./mapping.js";
 import type { IntakeMapping } from "./mapping.js";
 import {
@@ -38,6 +38,8 @@ const DATE_COLUMNS = [
 ] as const;
 
 const EXPENSE_COLUMNS = ["Telephone payment", "Transport cost", "Food cost"] as const;
+
+const DATE_PATTERN = /^\d{2}\s+\d{2}\s+\d{4}$/;
 
 export function accountTypeForBank(bank: string): string {
   const n = bank.toLowerCase();
@@ -176,7 +178,7 @@ export function applyDeterministicFixes(
   // Coerce Gemini/Sheets date serials (2021-10-08 02:00:00) back to MM DD YYYY.
   for (const column of DATE_COLUMNS) {
     const coerced = coerceToMmDdYyyy(next[column]);
-    if (/^\d{2}\s+\d{2}\s+\d{4}$/.test(coerced)) {
+    if (DATE_PATTERN.test(coerced)) {
       next[column] = coerced;
     }
   }
@@ -212,16 +214,32 @@ export function applyDeterministicFixes(
       next["Year they started working there (calculate from years provided)"] =
         next["Year start living at address (MM DD YYYY format ONLY)"]!;
     }
+    // Unparseable residency answers like "Yes" — mirror employment start so
+    // Seriti Personal Next is not blocked by RESIDENCY_DATE_EMPTY.
+    if (
+      !livedDate &&
+      !DATE_PATTERN.test(next["Year start living at address (MM DD YYYY format ONLY)"] ?? "") &&
+      DATE_PATTERN.test(
+        next["Year they started working there (calculate from years provided)"] ?? ""
+      )
+    ) {
+      next["Year start living at address (MM DD YYYY format ONLY)"] =
+        next["Year they started working there (calculate from years provided)"]!;
+    }
 
-    // Re-copy mobile from Form when the sheet cell is empty / Sheets-stripped.
-    if (isMissingValue(next["Mobile number"])) {
-      const formMobile = firstFilled(intakeValues, [
-        ...intakeHeadersFor(mapping, undefined, ["whatsapp_phone", "call_phone"]),
-      ]);
-      const formMobileResult = transformMobile(formMobile);
-      if (formMobileResult.valid) {
-        next["Mobile number"] = formMobileResult.value;
-        next["Client cellphone number (add again at the end)"] = formMobileResult.value;
+    // Re-copy mobile from Form when the sheet cell is empty, Sheets-stripped, or
+    // a typo (WhatsApp "9767867821") while the other Form phone is valid.
+    if (!transformMobile(next["Mobile number"]).valid) {
+      for (const header of intakeHeadersFor(mapping, undefined, [
+        "whatsapp_phone",
+        "call_phone",
+      ])) {
+        const formMobileResult = transformMobile(cell(intakeValues, header));
+        if (formMobileResult.valid) {
+          next["Mobile number"] = formMobileResult.value;
+          next["Client cellphone number (add again at the end)"] = formMobileResult.value;
+          break;
+        }
       }
     }
 
@@ -265,6 +283,28 @@ export function applyDeterministicFixes(
         ])
       );
       if (nok) next["Next of kin name + Surname"] = nok;
+    }
+    // Full NOK name typed into both Form boxes ("Steven Williams" twice).
+    // Single-word repeats ("Dineo"/"Dineo") stay so the loader still has a surname.
+    {
+      const first = cell(
+        intakeValues,
+        intakeHeadersFor(mapping, "next_of_kin_first_name")[0]!
+      ).replace(/\s+/g, " ");
+      const surname = cell(
+        intakeValues,
+        intakeHeadersFor(mapping, "next_of_kin_surname")[0]!
+      ).replace(/\s+/g, " ");
+      const current = String(next["Next of kin name + Surname"] ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (
+        first.includes(" ") &&
+        first.toLowerCase() === surname.toLowerCase() &&
+        current.toLowerCase() === `${first} ${surname}`.toLowerCase()
+      ) {
+        next["Next of kin name + Surname"] = first;
+      }
     }
     // NOK phone: Form sometimes puts an address here. Only keep real mobiles.
     {

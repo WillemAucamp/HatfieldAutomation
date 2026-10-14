@@ -273,6 +273,102 @@ describe("output row contract", () => {
     assert.equal(values["Spouse number"], "0786454285");
   });
 
+  it("mirrors employment start into residency when the Form answer is not a duration", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "How long have you lived here? Example: 3 years/ 2 months": "Yes",
+        "How long have you been working here? Example: 2 Years /6 Months": "2",
+      },
+      new Date(2026, 9, 14)
+    );
+    assert.equal(
+      values["Year they started working there (calculate from years provided)"],
+      "10 14 2024"
+    );
+    assert.equal(values["Year start living at address (MM DD YYYY format ONLY)"], "10 14 2024");
+  });
+
+  it("keeps a valid Gemini residency date over the employment fallback", () => {
+    const values = buildOutputValues(
+      mapping,
+      { "Year start living at address (MM DD YYYY format ONLY)": "2019-03-01 02:00:00" },
+      {
+        ...intakeAda,
+        "How long have you lived here? Example: 3 years/ 2 months": "Yes",
+      },
+      new Date(2026, 9, 14)
+    );
+    assert.equal(values["Year start living at address (MM DD YYYY format ONLY)"], "03 01 2019");
+  });
+
+  it("falls back to the call number when the WhatsApp number is a typo", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "Whatsapp Phone number": "9767867821",
+        "Call Phone number": "0767867821",
+      }
+    );
+    assert.equal(values["Mobile number"], "0767867821");
+    assert.equal(values["Client cellphone number (add again at the end)"], "0767867821");
+  });
+
+  it("repairs a typo seeded on the sheet from the Form call number", () => {
+    const values = buildOutputValues(
+      mapping,
+      { "Mobile number": "9767867821" },
+      {
+        ...intakeAda,
+        "Whatsapp Phone number": "9767867821",
+        "Call Phone number": "0767867821",
+      }
+    );
+    assert.equal(values["Mobile number"], "0767867821");
+  });
+
+  it("de-duplicates a full next-of-kin name typed into both name boxes", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "Relative or friend Name Example: Vusi": "Steven Williams ",
+        "Relative or friend surname Example: Nel": "Steven Williams ",
+      }
+    );
+    assert.equal(values["Next of kin name + Surname"], "Steven Williams");
+  });
+
+  it("keeps single-word repeated next-of-kin names so a surname remains", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "Relative or friend Name Example: Vusi": "Dineo ",
+        "Relative or friend surname Example: Nel": "Dineo",
+      }
+    );
+    assert.equal(values["Next of kin name + Surname"], "Dineo Dineo");
+  });
+
+  it("leaves a 9-digit next-of-kin number blank so the loader does not reject the row", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "Relative or friend number example: 0856475124 CANNOT BE THE SAME AS YOURS": "076997746",
+      }
+    );
+    assert.equal(values["Next of kin cellphone number"], "");
+  });
+
   it("repairs a doubled email domain", () => {
     assert.equal(normalizeEmail("ada@gmail.com@gmail.com"), "ada@gmail.com");
   });
