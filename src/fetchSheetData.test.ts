@@ -246,7 +246,10 @@ describe("fetchSheetData", () => {
     assert.ok(!row.errors.some((e) => e.code === "MARITAL_DATE_EMPTY"));
   });
 
-  it("does not reject a row when next-of-kin phone is blank", async () => {
+  for (const [label, nokPhone] of [
+    ["blank", ""],
+    ["a 9-digit typo", "076997746"],
+  ] as const) it(`does not reject a row when next-of-kin phone is ${label}`, async () => {
     const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
     const csvPath = join(dir, "row.csv");
     const values = [
@@ -264,7 +267,7 @@ describe("fetchSheetData", () => {
       "Limpopo",
       "01 10 1986",
       "David Moraba",
-      "",
+      nokPhone,
       "Legal Services / Law Enforcement",
       "Deputy Sheriff",
       "Mid-Level",

@@ -41,6 +41,12 @@ const EXPENSE_COLUMNS = ["Telephone payment", "Transport cost", "Food cost"] as 
 
 const DATE_PATTERN = /^\d{2}\s+\d{2}\s+\d{4}$/;
 
+/** Digits from a value made only of digits and phone/ID separators; else "". */
+function typedDigits(raw: string | undefined | null): string {
+  const compact = String(raw ?? "").replace(/[\s().+-]/g, "");
+  return /^\d+$/.test(compact) ? compact : "";
+}
+
 export function accountTypeForBank(bank: string): string {
   const n = bank.toLowerCase();
   for (const [needle, value] of Object.entries(BANK_ACCOUNT_TYPE)) {
@@ -158,16 +164,18 @@ export function applyDeterministicFixes(
   // Never keep Form leaks like consent "Yes" in the ID column.
   {
     const currentUsable = usableIdDigits(next["ID number"]);
-    const formId = mapping
-      ? usableIdDigits(firstFilled(intakeValues, intakeHeadersFor(mapping, "id_number")))
+    const formRaw = mapping
+      ? firstFilled(intakeValues, intakeHeadersFor(mapping, "id_number"))
       : "";
+    const formId = usableIdDigits(formRaw);
     if (currentUsable) {
       next["ID number"] = currentUsable;
     } else if (formId) {
       next["ID number"] = formId;
-    } else if (!isMissingValue(next["ID number"])) {
-      // Drop non-digit garbage so load reports ID_EMPTY instead of a fake value.
-      next["ID number"] = "";
+    } else {
+      // Keep what the client typed when it is digits (e.g. "1500") so the sheet
+      // shows it and load stamps ID_NOT_13_DIGITS; drop text leaks like "Yes".
+      next["ID number"] = typedDigits(formRaw) || typedDigits(next["ID number"]);
     }
   }
   const idResult = validateIdNumber(next["ID number"]);
@@ -319,7 +327,9 @@ export function applyDeterministicFixes(
       if (nokMobile.valid) {
         next["Next of kin cellphone number"] = nokMobile.value;
       } else if (!isMissingValue(candidate)) {
-        next["Next of kin cellphone number"] = "";
+        // Keep short/long digit typos ("076997746") visible; the loader skips
+        // invalid NOK mobiles instead of blocking the row. Addresses are dropped.
+        next["Next of kin cellphone number"] = typedDigits(candidate);
       }
     }
     if (isMissingValue(next["Educational level"])) {

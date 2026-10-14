@@ -357,7 +357,7 @@ describe("output row contract", () => {
     assert.equal(values["Next of kin name + Surname"], "Dineo Dineo");
   });
 
-  it("leaves a 9-digit next-of-kin number blank so the loader does not reject the row", () => {
+  it("keeps a 9-digit next-of-kin number typo visible on the sheet", () => {
     const values = buildOutputValues(
       mapping,
       {},
@@ -366,7 +366,12 @@ describe("output row contract", () => {
         "Relative or friend number example: 0856475124 CANNOT BE THE SAME AS YOURS": "076997746",
       }
     );
-    assert.equal(values["Next of kin cellphone number"], "");
+    assert.equal(values["Next of kin cellphone number"], "076997746");
+  });
+
+  it("keeps a client-typed short numeric ID so load reports ID_NOT_13_DIGITS", () => {
+    const values = buildOutputValues(mapping, {}, { ...intakeAda, "ID Number": "1500" });
+    assert.equal(values["ID number"], "1500");
   });
 
   it("repairs a doubled email domain", () => {

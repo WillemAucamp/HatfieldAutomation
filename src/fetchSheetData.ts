@@ -248,8 +248,12 @@ function mapRow(
   const nextOfKinPhoneResult = nextOfKinPhoneRaw
     ? transformMobile(nextOfKinPhoneRaw)
     : { value: "", valid: true };
-  if (nextOfKinPhoneRaw) {
-    pushError(errors, nextOfKinPhoneResult, "nextOfKinPhone", nextOfKinPhoneRaw);
+  // Seriti NOK mobile is optional — a Form typo ("076997746") must not block the
+  // load. Leave it unfilled and keep the raw value on the sheet for the operator.
+  if (nextOfKinPhoneRaw && !nextOfKinPhoneResult.valid) {
+    console.warn(
+      `Row ${rowIndex}: skipping invalid next-of-kin mobile "${nextOfKinPhoneRaw}" (${nextOfKinPhoneResult.code})`
+    );
   }
 
   const titleRaw = mapping.title ? getCell(row, mapping.title) : getCell(row, "Title");
@@ -496,7 +500,7 @@ function mapRow(
     residencyStartDate: residencyResult.value,
     nextOfKinName: nextOfKin.firstName,
     nextOfKinSurname: nextOfKin.surname,
-    nextOfKinPhone: nextOfKinPhoneResult.valid ? nextOfKinPhoneResult.value : nextOfKinPhoneRaw,
+    nextOfKinPhone: nextOfKinPhoneResult.valid ? nextOfKinPhoneResult.value : "",
     nextOfKinRelationship: nokRelResult.value,
     industry: industryResult.value,
     occupation: occupationResult.value,
