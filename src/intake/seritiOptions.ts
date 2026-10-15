@@ -90,6 +90,12 @@ export function mapOccupation(
   const aliases = options.occupation_aliases ?? {};
   const aliased = aliasLookup(aliases, value);
   if (aliased) return aliased;
+  // Exact Seriti string "LABOURER (SKILLED)" is the old automation default written
+  // onto the sheet. Remap it to the current fallback. Real job titles like
+  // "Labourer" / "Skilled labourer" still match the Seriti list below.
+  if (normalizeSelectText(value) === "labourer skilled") {
+    return options.occupation_fallback;
+  }
   const matched = matchFromList(value, options.occupations);
   return matched || options.occupation_fallback;
 }

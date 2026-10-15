@@ -40,6 +40,10 @@ describe("seriti option mapping", () => {
     assert.equal(mapOccupation("Loan consultant", options), "CONSULTANT");
     assert.equal(mapOccupation("Truck driver", options), "DRIVER");
     assert.equal(mapOccupation("Self-employed", options), "SELF EMPLOYED (NON PROFESSIONAL)");
+    // Old sheet default string must not stick as an exact Seriti match.
+    assert.equal(mapOccupation("LABOURER (SKILLED)", options), "OPERATOR");
+    // Real labourer job titles still map onto the Seriti labourer menu.
+    assert.equal(mapOccupation("Labourer", options), "LABOURER (SKILLED)");
   });
 
   it("detects self-employed Employment answers", () => {

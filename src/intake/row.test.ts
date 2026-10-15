@@ -138,6 +138,26 @@ describe("output row contract", () => {
     assert.equal(values["Employer province (online search)"], "Limpopo");
   });
 
+  it("remaps a sheet LABOURER (SKILLED) default to OPERATOR when the job title is unclear", () => {
+    const values = buildOutputValues(
+      mapping,
+      { Occupation: "LABOURER (SKILLED)" },
+      { ...intakeAda, "Job title?": "Warehouse picker" },
+      new Date(2026, 9, 5)
+    );
+    assert.equal(values.Occupation, "OPERATOR");
+  });
+
+  it("remaps LABOURER (SKILLED) left on the sheet when Form job title is empty", () => {
+    const values = buildOutputValues(
+      mapping,
+      { Occupation: "LABOURER (SKILLED)" },
+      { ...intakeAda, "Job title?": "" },
+      new Date(2026, 9, 5)
+    );
+    assert.equal(values.Occupation, "OPERATOR");
+  });
+
   it("does not copy the home address into employer fields; empty expenses default to 0", () => {
     const values = buildOutputValues(
       mapping,

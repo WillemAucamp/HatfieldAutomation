@@ -21,6 +21,7 @@ import {
   copyResidentialOntoEmployer,
   isSelfEmployed,
   loadSeritiOptions,
+  mapOccupation,
   selfEmployedOccupation,
 } from "./intake/seritiOptions.js";
 import { successfulReferenceFromCell, isStatusPopulated } from "./outcome.js";
@@ -522,9 +523,9 @@ function mapRow(
 
   // Self-employed clients are loaded strictly as BUSINESS SERVICES / SELF EMPLOYED.
   // Their residential address is the only column that may fill employer address.
+  const seriti = loadSeritiOptions();
   const selfEmployed = isSelfEmployed(occupationRaw, industryRaw, employerNameRaw);
   if (selfEmployed) {
-    const seriti = loadSeritiOptions();
     industryRaw = seriti.self_employed_industry;
     occupationRaw = selfEmployedOccupation(seriti);
     const copied = copyResidentialOntoEmployer({
@@ -539,6 +540,10 @@ function mapRow(
     employerAddressRaw = copied.employerAddress;
     employerPostalRaw = copied.employerPostal;
     employerProvinceRaw = copied.employerProvince;
+  } else {
+    // Remap sheet Occupation through Seriti menus so the old LABOURER (SKILLED)
+    // default becomes OPERATOR even when the sheet was written before the change.
+    occupationRaw = mapOccupation(occupationRaw, seriti);
   }
 
   const industryResult = requireText(

@@ -352,7 +352,11 @@
     "business owner": "OWNER OF BUSINESS (NON PROFESSIONAL)",
     "self employed": "SELF EMPLOYED (NON PROFESSIONAL)",
     "self-employed": "SELF EMPLOYED (NON PROFESSIONAL)",
-    "self employed owner": "SELF EMPLOYED (NON PROFESSIONAL)"
+    "self employed owner": "SELF EMPLOYED (NON PROFESSIONAL)",
+    "labourer skilled": "OPERATOR",
+    "laborer skilled": "OPERATOR",
+    "labourer (skilled)": "OPERATOR",
+    "laborer (skilled)": "OPERATOR"
   },
   "occupation_fallback": "OPERATOR",
   "level_fallback": "SKILLED WORKER",
