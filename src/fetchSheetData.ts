@@ -84,6 +84,20 @@ function resolveName(
   const firstFromCol = mapping.firstName ? getCell(row, mapping.firstName) : "";
   const surnameFromCol = mapping.surname ? getCell(row, mapping.surname) : "";
   if (firstFromCol && surnameFromCol && mapping.firstName !== mapping.surname) {
+    if (firstFromCol.toLowerCase() === surnameFromCol.toLowerCase()) {
+      return {
+        firstName: firstFromCol,
+        surname: "",
+        initials: initialsFromFirstNames(firstFromCol),
+        original: `${firstFromCol} ${surnameFromCol}`,
+        error: {
+          code: "NAME_MISSING_SURNAME",
+          field: "fullName",
+          message: `Applicant name "${firstFromCol} ${surnameFromCol}" has no surname (given name was duplicated)`,
+          value: `${firstFromCol} ${surnameFromCol}`,
+        },
+      };
+    }
     return {
       firstName: firstFromCol,
       surname: surnameFromCol,
@@ -353,17 +367,22 @@ function mapRow(
   const nextOfKinPhoneRaw = mapping.nextOfKinPhone
     ? getCell(row, mapping.nextOfKinPhone)
     : getCell(row, nokPhoneHeader);
-  const nextOfKinPhoneResult = transformMobile(nextOfKinPhoneRaw);
-  if (!nextOfKinPhoneResult.valid) {
-    const empty = nextOfKinPhoneResult.code === "MOBILE_EMPTY" || isMissingValue(nextOfKinPhoneRaw);
+  // Blank NOK phone is missing sheet data — block the load.
+  // A Form typo ("076997746") must not block; leave Seriti unfilled.
+  const nextOfKinPhoneResult = !isMissingValue(nextOfKinPhoneRaw)
+    ? transformMobile(nextOfKinPhoneRaw)
+    : { value: "", valid: false, code: "MOBILE_EMPTY" as const };
+  if (isMissingValue(nextOfKinPhoneRaw)) {
     errors.push({
-      code: empty ? "NOK_PHONE_EMPTY" : "NOK_PHONE_INVALID",
+      code: "NOK_PHONE_EMPTY",
       field: "nextOfKinPhone",
-      message: empty
-        ? `Missing information in "${nokPhoneHeader}"`
-        : `Next of kin cellphone number is not a valid mobile ("${nextOfKinPhoneRaw}")`,
-      value: nextOfKinPhoneRaw,
+      message: `Missing information in "${nokPhoneHeader}"`,
+      value: "",
     });
+  } else if (!nextOfKinPhoneResult.valid) {
+    console.warn(
+      `Row ${rowIndex}: skipping invalid next-of-kin mobile "${nextOfKinPhoneRaw}" (${nextOfKinPhoneResult.code})`
+    );
   }
 
   const titleRaw = mapping.title ? getCell(row, mapping.title) : getCell(row, "Title");
@@ -668,7 +687,7 @@ function mapRow(
     residencyStartDate: residencyResult.value,
     nextOfKinName: nextOfKin.firstName,
     nextOfKinSurname: nextOfKin.surname,
-    nextOfKinPhone: nextOfKinPhoneResult.valid ? nextOfKinPhoneResult.value : nextOfKinPhoneRaw,
+    nextOfKinPhone: nextOfKinPhoneResult.valid ? nextOfKinPhoneResult.value : "",
     nextOfKinRelationship: nokRelResult.value,
     industry: industryResult.value,
     occupation: occupationResult.value,

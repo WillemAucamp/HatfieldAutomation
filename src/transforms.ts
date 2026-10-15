@@ -394,6 +394,19 @@ export function parsePersonName(
     };
   }
 
+  // Old automation wrote mononyms as "Lucky Lucky". That is not a real surname —
+  // reject it instead of loading the duplicated given name into Seriti.
+  if (firstName.toLowerCase() === surname.toLowerCase()) {
+    return {
+      firstName,
+      surname: "",
+      initials,
+      valid: false,
+      code: surnameCode,
+      message: `${label} "${value}" has no surname (given name was duplicated)`,
+    };
+  }
+
   return { firstName, surname, initials, valid: true };
 }
 

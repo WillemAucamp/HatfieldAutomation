@@ -97,6 +97,11 @@ export function mapOccupation(
     return options.occupation_fallback;
   }
   const matched = matchFromList(value, options.occupations);
+  // Only keep a LABOURER menu pick when the job title actually says labourer.
+  // Vague titles must not fuzzy-match onto the old default.
+  if (matched && /^LABOURER\b/i.test(matched) && !/\blabou?rers?\b/i.test(value)) {
+    return options.occupation_fallback;
+  }
   return matched || options.occupation_fallback;
 }
 

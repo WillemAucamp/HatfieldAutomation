@@ -65,6 +65,14 @@ describe("parsePersonName", () => {
     assert.equal(parsed.code, "NAME_MISSING_SURNAME");
     assert.equal(parsed.surname, "A");
   });
+
+  it("rejects a duplicated given name that was written as the surname", () => {
+    const parsed = parsePersonName("Lucky Lucky");
+    assert.equal(parsed.valid, false);
+    assert.equal(parsed.code, "NAME_MISSING_SURNAME");
+    assert.equal(parsed.firstName, "Lucky");
+    assert.equal(parsed.surname, "");
+  });
 });
 
 describe("titleFromGender", () => {

@@ -144,8 +144,8 @@ describe("fetchSheetData", () => {
       "2196",
       "Gauteng",
       "10 08 2024",
-      "10000",
-      "8000",
+      "15000",
+      "12000",
       "200",
       "300",
       "500",
@@ -172,6 +172,67 @@ describe("fetchSheetData", () => {
     assert.equal(row.surname, "");
     assert.ok(row.errors.some((e) => e.code === "NAME_MISSING_SURNAME"));
     assert.match(row.errors.find((e) => e.code === "NAME_MISSING_SURNAME")!.message, /Lucky/);
+  });
+
+  it("rejects a previously duplicated Lucky Lucky surname instead of loading it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
+    const csvPath = join(dir, "dup.csv");
+    const values = [
+      "460",
+      "Lucky Lucky",
+      "lucky2@example.com",
+      "Mr",
+      "Lucky Lucky",
+      "South African ID",
+      "9204015306086",
+      "Grade 12",
+      "0821234567",
+      "1 Main Road",
+      "2196",
+      "Gauteng",
+      "10 08 1996",
+      "Friend Name",
+      "0821234568",
+      "Retail",
+      "OPERATOR",
+      "SKILLED WORKER",
+      "Shop",
+      "0111234567",
+      "2 Work Ave",
+      "2196",
+      "Gauteng",
+      "10 08 2024",
+      "15000",
+      "12000",
+      "200",
+      "300",
+      "500",
+      "Capitec",
+      "Savings/Transactional",
+      "Lucky Lucky",
+      "0821234567",
+      "",
+      "",
+    ];
+    const csv = [HEADERS, values]
+      .map((cols) => cols.map((c) => `"${c.replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    writeFileSync(csvPath, csv);
+
+    const applicants = await fetchSheetData({
+      csvUrl: "",
+      mapping: loadColumnMapping("./mapping.json"),
+      localCsvPath: csvPath,
+      includeCompleted: true,
+    });
+    const row = applicants[0]!;
+    assert.equal(row.firstName, "Lucky");
+    assert.equal(row.surname, "");
+    assert.ok(row.errors.some((e) => e.code === "NAME_MISSING_SURNAME"));
+    assert.match(
+      row.errors.find((e) => e.code === "NAME_MISSING_SURNAME")!.message,
+      /duplicated/i
+    );
   });
 
   it("blocks Married rows that are missing spouse ID or marital date", async () => {
@@ -273,8 +334,8 @@ describe("fetchSheetData", () => {
       "900",
       "Limpopo",
       "12 10 2022",
-      "11000",
-      "11000",
+      "15000",
+      "12000",
       "1000",
       "500",
       "2000",
@@ -303,6 +364,63 @@ describe("fetchSheetData", () => {
     assert.ok(nok);
     assert.equal(nok!.code, "NOK_PHONE_EMPTY");
     assert.match(nok!.message, /Next of kin cellphone number/);
+  });
+
+  it("does not reject a row when next-of-kin phone is a 9-digit typo", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
+    const csvPath = join(dir, "nok-typo.csv");
+    const values = [
+      "55",
+      "Mothoka Jefferson Oupa Sekhwela",
+      "sekhwelaoupa83@gmail.com",
+      "Mr",
+      "Mothoka Jefferson Oupa Sekhwela",
+      "South African ID",
+      "8304015345083",
+      "Grade 12",
+      "0629095338",
+      "1528 Park Town, Church Street, Kgapane",
+      "830",
+      "Limpopo",
+      "01 10 1986",
+      "David Moraba",
+      "076997746",
+      "Legal Services / Law Enforcement",
+      "Deputy Sheriff",
+      "Mid-Level",
+      "Sheriff Musina",
+      "0155342200",
+      "112 Irwin Street, Musina",
+      "900",
+      "Limpopo",
+      "12 10 2022",
+      "15000",
+      "12000",
+      "1000",
+      "500",
+      "2000",
+      "Capitec",
+      "Savings/Transactional",
+      "Mothoka Jefferson Oupa Sekhwela",
+      "0629095338",
+      "",
+      "",
+    ];
+    const csv = [HEADERS, values]
+      .map((cols) => cols.map((c) => `"${c.replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    writeFileSync(csvPath, csv);
+
+    const applicants = await fetchSheetData({
+      csvUrl: "",
+      mapping: loadColumnMapping("./mapping.json"),
+      localCsvPath: csvPath,
+      includeCompleted: true,
+    });
+
+    const row = applicants[0]!;
+    assert.equal(row.nextOfKinPhone, "");
+    assert.ok(!row.errors.some((e) => e.field === "nextOfKinPhone"));
   });
 
   it("copies residential address onto employer address only when occupation is self-employed", async () => {

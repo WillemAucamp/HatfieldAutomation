@@ -44,6 +44,10 @@ describe("seriti option mapping", () => {
     assert.equal(mapOccupation("LABOURER (SKILLED)", options), "OPERATOR");
     // Real labourer job titles still map onto the Seriti labourer menu.
     assert.equal(mapOccupation("Labourer", options), "LABOURER (SKILLED)");
+    assert.equal(mapOccupation("Skilled labourer", options), "LABOURER (SKILLED)");
+    // Vague titles must not fuzzy-match onto LABOURER.
+    assert.equal(mapOccupation("General worker", options), "OPERATOR");
+    assert.equal(mapOccupation("Mining", options), "OPERATOR");
   });
 
   it("detects self-employed Employment answers", () => {

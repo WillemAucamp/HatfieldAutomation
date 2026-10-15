@@ -206,7 +206,8 @@ async function main(): Promise<void> {
             const sheetId = usableIdDigits(next[col] || "");
             if (!rebuiltId && sheetId) continue;
             if (!rebuiltId) {
-              next[col] = "";
+              // Rebuild keeps client-typed digits ("1500") and drops text leaks.
+              next[col] = rebuilt[col] || "";
               continue;
             }
             next[col] = rebuiltId;

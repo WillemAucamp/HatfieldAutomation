@@ -1,4 +1,4 @@
-import { firstFilled, joinFilled } from "./headers.js";
+import { cell, firstFilled, joinFilled } from "./headers.js";
 import { copyColumns, joinColumns } from "./mapping.js";
 import type { IntakeMapping } from "./mapping.js";
 import {
@@ -40,6 +40,14 @@ const DATE_COLUMNS = [
 ] as const;
 
 const EXPENSE_COLUMNS = ["Telephone payment", "Transport cost", "Food cost"] as const;
+
+const DATE_PATTERN = /^\d{2}\s+\d{2}\s+\d{4}$/;
+
+/** Digits from a value made only of digits and phone/ID separators; else "". */
+function typedDigits(raw: string | undefined | null): string {
+  const compact = String(raw ?? "").replace(/[\s().+-]/g, "");
+  return /^\d+$/.test(compact) ? compact : "";
+}
 
 export function accountTypeForBank(bank: string): string {
   const n = bank.toLowerCase();
@@ -158,16 +166,18 @@ export function applyDeterministicFixes(
   // Never keep Form leaks like consent "Yes" in the ID column.
   {
     const currentUsable = usableIdDigits(next["ID number"]);
-    const formId = mapping
-      ? usableIdDigits(firstFilled(intakeValues, intakeHeadersFor(mapping, "id_number")))
+    const formRaw = mapping
+      ? firstFilled(intakeValues, intakeHeadersFor(mapping, "id_number"))
       : "";
+    const formId = usableIdDigits(formRaw);
     if (currentUsable) {
       next["ID number"] = currentUsable;
     } else if (formId) {
       next["ID number"] = formId;
-    } else if (!isMissingValue(next["ID number"])) {
-      // Drop non-digit garbage so load reports ID_EMPTY instead of a fake value.
-      next["ID number"] = "";
+    } else {
+      // Keep what the client typed when it is digits (e.g. "1500") so the sheet
+      // shows it and load stamps ID_NOT_13_DIGITS; drop text leaks like "Yes".
+      next["ID number"] = typedDigits(formRaw) || typedDigits(next["ID number"]);
     }
   }
   const idResult = validateIdNumber(next["ID number"]);
@@ -178,7 +188,7 @@ export function applyDeterministicFixes(
   // Coerce Gemini/Sheets date serials (2021-10-08 02:00:00) back to MM DD YYYY.
   for (const column of DATE_COLUMNS) {
     const coerced = coerceToMmDdYyyy(next[column]);
-    if (/^\d{2}\s+\d{2}\s+\d{4}$/.test(coerced)) {
+    if (DATE_PATTERN.test(coerced)) {
       next[column] = coerced;
     }
   }
@@ -203,16 +213,19 @@ export function applyDeterministicFixes(
     if (employedDate) {
       next["Year they started working there (calculate from years provided)"] = employedDate;
     }
-
-    // Re-copy mobile from Form when the sheet cell is empty / Sheets-stripped.
-    if (isMissingValue(next["Mobile number"])) {
-      const formMobile = firstFilled(intakeValues, [
-        ...intakeHeadersFor(mapping, undefined, ["whatsapp_phone", "call_phone"]),
-      ]);
-      const formMobileResult = transformMobile(formMobile);
-      if (formMobileResult.valid) {
-        next["Mobile number"] = formMobileResult.value;
-        next["Client cellphone number (add again at the end)"] = formMobileResult.value;
+    // Re-copy mobile from Form when the sheet cell is empty, Sheets-stripped, or
+    // a typo (WhatsApp "9767867821") while the other Form phone is valid.
+    if (!transformMobile(next["Mobile number"]).valid) {
+      for (const header of intakeHeadersFor(mapping, undefined, [
+        "whatsapp_phone",
+        "call_phone",
+      ])) {
+        const formMobileResult = transformMobile(cell(intakeValues, header));
+        if (formMobileResult.valid) {
+          next["Mobile number"] = formMobileResult.value;
+          next["Client cellphone number (add again at the end)"] = formMobileResult.value;
+          break;
+        }
       }
     }
 
@@ -257,6 +270,22 @@ export function applyDeterministicFixes(
       );
       if (nok) next["Next of kin name + Surname"] = nok;
     }
+    // Full NOK name typed into both Form boxes ("Steven Williams" twice) → keep once.
+    // Single-word repeats ("Dineo"/"Dineo") collapse to one token so the loader
+    // errors with NEXT_OF_KIN_MISSING_SURNAME instead of inventing a surname.
+    {
+      const first = cell(
+        intakeValues,
+        intakeHeadersFor(mapping, "next_of_kin_first_name")[0]!
+      ).replace(/\s+/g, " ").trim();
+      const surname = cell(
+        intakeValues,
+        intakeHeadersFor(mapping, "next_of_kin_surname")[0]!
+      ).replace(/\s+/g, " ").trim();
+      if (first && surname && first.toLowerCase() === surname.toLowerCase()) {
+        next["Next of kin name + Surname"] = first;
+      }
+    }
     // NOK phone: Form sometimes puts an address here. Only keep real mobiles.
     {
       const formNokPhone = firstFilled(
@@ -270,7 +299,9 @@ export function applyDeterministicFixes(
       if (nokMobile.valid) {
         next["Next of kin cellphone number"] = nokMobile.value;
       } else if (!isMissingValue(candidate)) {
-        next["Next of kin cellphone number"] = "";
+        // Keep short/long digit typos ("076997746") visible; the loader skips
+        // invalid NOK mobiles instead of blocking the row. Addresses are dropped.
+        next["Next of kin cellphone number"] = typedDigits(candidate);
       }
     }
     if (isMissingValue(next["Educational level"])) {
