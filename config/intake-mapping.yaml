@@ -252,7 +252,7 @@ field_map:
   - destination: Occupation
     source: job_title
     mode: copy
-    notes: Mapped in code onto Seriti Occupation list; unclear titles → LABOURER (SKILLED).
+    notes: Mapped in code onto Seriti Occupation list; unclear titles → OPERATOR.
 
   - destination: Employee level
     sources: [job_title, employer_name, employment]
@@ -378,7 +378,7 @@ rules:
   - If an infer value cannot be determined, leave it empty (not the client's name or home address).
   - Industry and Employee level must be exact Seriti menu strings (see config/seriti-options.json). Occupation is mapped in code.
   - Self-employed clients get Industry BUSINESS SERVICES.
-  - Unclear Occupation → LABOURER (SKILLED).
+  - Unclear Occupation → OPERATOR.
   - Do not load a row when consent is not given.
   - Single-line cells only (no line breaks inside addresses or names).
   - Never substitute a generic postal code (e.g. 2000) that is not the client's.

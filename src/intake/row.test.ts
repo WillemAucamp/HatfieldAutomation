@@ -95,7 +95,7 @@ describe("output row contract", () => {
     );
     assert.equal(values["Industry (AI based on employer)"], "BUSINESS SERVICES");
     assert.equal(values["Employee level"], "MANAGEMENT");
-    assert.equal(values.Occupation, "LABOURER (SKILLED)");
+    assert.equal(values.Occupation, "OPERATOR");
   });
 
   it("forces BUSINESS SERVICES for self-employed Employment answers", () => {
