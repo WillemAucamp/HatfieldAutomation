@@ -583,7 +583,7 @@ describe("fetchSheetData", () => {
     assert.ok(!applicants[0]!.errors.some((e) => e.field === "occupation"));
   });
 
-  it("blocks loads below R12000 nett and implausible high salaries", async () => {
+  it("blocks loads below R9000 nett and implausible high salaries", async () => {
     const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
     const csvPath = join(dir, "salary.csv");
     const headers = [
@@ -622,7 +622,7 @@ describe("fetchSheetData", () => {
       "350000",
       "10 05 2024",
       "15000",
-      "11000",
+      "8500",
       "300",
       "500",
       "2000",
@@ -655,7 +655,7 @@ describe("fetchSheetData", () => {
     const affordability = applicants[0]!.errors.find((e) => e.code === "AFFORDABILITY_ERROR");
     assert.ok(affordability);
     assert.equal(affordability!.field, "nettSalary");
-    assert.match(affordability!.message, /Nett salary R11000/);
+    assert.match(affordability!.message, /Nett salary R8500/);
     assert.ok(applicants[1]!.errors.some((e) => e.code === "SALARY_IMPLAUSIBLE"));
     assert.equal(applicants[1]!.grossMonthly, "1000000");
   });
