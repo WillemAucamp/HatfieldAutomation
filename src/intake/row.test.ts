@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { loadIntakeMapping } from "./mapping.js";
-import { accountTypeForBank, buildOutputValues, normalizeEmail } from "./row.js";
+import {
+  accountTypeForBank,
+  applyDeterministicFixes,
+  buildOutputValues,
+  normalizeEmail,
+} from "./row.js";
 
 const mapping = loadIntakeMapping("./config/intake-mapping.yaml");
 
@@ -95,17 +100,85 @@ describe("output row contract", () => {
     );
     assert.equal(values["Industry (AI based on employer)"], "BUSINESS SERVICES");
     assert.equal(values["Employee level"], "MANAGEMENT");
-    assert.equal(values.Occupation, "LABOURER (SKILLED)");
+    assert.equal(values.Occupation, "OPERATOR");
   });
 
-  it("forces BUSINESS SERVICES for self-employed Employment answers", () => {
+  it("forces BUSINESS SERVICES and SELF EMPLOYED for self-employed Employment answers", () => {
     const values = buildOutputValues(
       mapping,
-      { "Industry (AI based on employer)": "Retail" },
-      { ...intakeAda, Employment: "Self-employed" },
+      {
+        "Industry (AI based on employer)": "Retail",
+        Occupation: "CLERK",
+        "Employer street address (online search)": "",
+        "Employer postal code (online search)": "",
+        "Employer province (online search)": "",
+        "Employer telephone number (online search)": "",
+        "Postal code": "0083",
+      },
+      { ...intakeAda, Employment: "Self-employed", "Job title?": "Clerk" },
       new Date(2026, 9, 5)
     );
     assert.equal(values["Industry (AI based on employer)"], "BUSINESS SERVICES");
+    assert.equal(values.Occupation, "SELF EMPLOYED (NON PROFESSIONAL)");
+    assert.equal(values["Employer street address (online search)"], "12 Main Road Pretoria");
+    assert.equal(values["Employer postal code (online search)"], "0083");
+    assert.equal(values["Employer province (online search)"], "Gauteng");
+    assert.equal(values["Employer telephone number (online search)"], "");
+  });
+
+  it("remaps sheet-only SELF Employed occupation onto the Seriti menu", () => {
+    const fixed = applyDeterministicFixes(
+      {
+        "Industry (AI based on employer)": "BUSINESS SERVICES",
+        Occupation: "SELF Employed",
+        "Employee level": "MANAGEMENT",
+        "Employer name": "Retail",
+        "Address line": "Daffodilweg 57",
+        "Postal code": "8801",
+        Province: "Northern Cape",
+      },
+      {},
+      mapping
+    );
+    assert.equal(fixed.Occupation, "SELF EMPLOYED (NON PROFESSIONAL)");
+    assert.equal(fixed["Industry (AI based on employer)"], "BUSINESS SERVICES");
+  });
+
+  it("keeps a searched employer address when the client is self-employed", () => {
+    const values = buildOutputValues(
+      mapping,
+      {
+        "Employer street address (online search)": "1 Work Ave",
+        "Employer postal code (online search)": "2196",
+        "Employer province (online search)": "Limpopo",
+        "Postal code": "0083",
+      },
+      { ...intakeAda, Employment: "Self-employed" },
+      new Date(2026, 9, 5)
+    );
+    assert.equal(values["Employer street address (online search)"], "1 Work Ave");
+    assert.equal(values["Employer postal code (online search)"], "2196");
+    assert.equal(values["Employer province (online search)"], "Limpopo");
+  });
+
+  it("remaps a sheet LABOURER (SKILLED) default to OPERATOR when the job title is unclear", () => {
+    const values = buildOutputValues(
+      mapping,
+      { Occupation: "LABOURER (SKILLED)" },
+      { ...intakeAda, "Job title?": "Warehouse picker" },
+      new Date(2026, 9, 5)
+    );
+    assert.equal(values.Occupation, "OPERATOR");
+  });
+
+  it("remaps LABOURER (SKILLED) left on the sheet when Form job title is empty", () => {
+    const values = buildOutputValues(
+      mapping,
+      { Occupation: "LABOURER (SKILLED)" },
+      { ...intakeAda, "Job title?": "" },
+      new Date(2026, 9, 5)
+    );
+    assert.equal(values.Occupation, "OPERATOR");
   });
 
   it("does not copy the home address into employer fields; empty expenses default to 0", () => {
@@ -191,9 +264,29 @@ describe("output row contract", () => {
     );
   });
 
-  it("uses city/town as the postal place needle when Gemini leaves postal empty", () => {
+  it("does not copy city/town into postal code when Gemini leaves postal empty", () => {
     const values = buildOutputValues(mapping, { "Postal code": "" }, intakeAda);
-    assert.equal(values["Postal code"], "Pretoria");
+    assert.equal(values["Postal code"], "");
+  });
+
+  it("does not copy the client province or residency date into employer fields", () => {
+    const values = buildOutputValues(
+      mapping,
+      {
+        "Employer province (online search)": "",
+        "Employer street address (online search)": "",
+        "Year they started working there (calculate from years provided)": "",
+      },
+      {
+        ...intakeAda,
+        "How long have you been working here? Example: 2 Years /6 Months": "months",
+      },
+      new Date(2026, 9, 5)
+    );
+    assert.equal(values["Employer province (online search)"], "");
+    assert.equal(values["Employer street address (online search)"], "");
+    assert.equal(values["Year they started working there (calculate from years provided)"], "");
+    assert.equal(values["Year start living at address (MM DD YYYY format ONLY)"], "10 05 2023");
   });
 
   it("rejects consent Yes leaked into Form ID Number", () => {
@@ -257,7 +350,7 @@ describe("output row contract", () => {
     assert.equal(values["Marital status"], "Single");
   });
 
-  it("sets Married when Form marital is blank but spouse name is present", () => {
+  it("does not infer Married from spouse columns when Form marital is blank", () => {
     const values = buildOutputValues(
       mapping,
       {},
@@ -268,12 +361,12 @@ describe("output row contract", () => {
         "Spouse number": "0786454285",
       }
     );
-    assert.equal(values["Marital status"], "Married");
+    assert.equal(values["Marital status"], "");
     assert.equal(values["Spouse Name + Surname"], "Frieda Tobias");
     assert.equal(values["Spouse number"], "0786454285");
   });
 
-  it("mirrors employment start into residency when the Form answer is not a duration", () => {
+  it("does not copy employment start into residency when the Form answer is not a duration", () => {
     const values = buildOutputValues(
       mapping,
       {},
@@ -288,10 +381,10 @@ describe("output row contract", () => {
       values["Year they started working there (calculate from years provided)"],
       "10 14 2024"
     );
-    assert.equal(values["Year start living at address (MM DD YYYY format ONLY)"], "10 14 2024");
+    assert.equal(values["Year start living at address (MM DD YYYY format ONLY)"], "");
   });
 
-  it("keeps a valid Gemini residency date over the employment fallback", () => {
+  it("keeps a valid Gemini residency date when the Form residency answer is unusable", () => {
     const values = buildOutputValues(
       mapping,
       { "Year start living at address (MM DD YYYY format ONLY)": "2019-03-01 02:00:00" },
@@ -344,7 +437,7 @@ describe("output row contract", () => {
     assert.equal(values["Next of kin name + Surname"], "Steven Williams");
   });
 
-  it("keeps single-word repeated next-of-kin names so a surname remains", () => {
+  it("collapses single-word repeated next-of-kin names so load can reject missing surname", () => {
     const values = buildOutputValues(
       mapping,
       {},
@@ -354,7 +447,7 @@ describe("output row contract", () => {
         "Relative or friend surname Example: Nel": "Dineo",
       }
     );
-    assert.equal(values["Next of kin name + Surname"], "Dineo Dineo");
+    assert.equal(values["Next of kin name + Surname"], "Dineo");
   });
 
   it("keeps a 9-digit next-of-kin number typo visible on the sheet", () => {

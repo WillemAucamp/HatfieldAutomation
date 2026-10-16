@@ -3,6 +3,8 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ApplicantRecord, ColumnMapping, DataError } from "./types.js";
 import {
+  isMissingValue,
+  parseMoneyAmount,
   requireAmount,
   requireEmail,
   requireText,
@@ -10,11 +12,18 @@ import {
   splitFullName,
   splitNextOfKinName,
   initialsFromFirstNames,
-
   transformMobile,
   validateDateFormat,
   validateIdNumber,
+  validateSalaryPair,
 } from "./transforms.js";
+import {
+  copyResidentialOntoEmployer,
+  clientSelfEmployed,
+  loadSeritiOptions,
+  mapOccupation,
+  selfEmployedOccupation,
+} from "./intake/seritiOptions.js";
 import { successfulReferenceFromCell, isStatusPopulated } from "./outcome.js";
 import { fetchSheetCsv } from "./sheetCsv.js";
 import { readSheetRows } from "./intake/sheets.js";
@@ -75,6 +84,20 @@ function resolveName(
   const firstFromCol = mapping.firstName ? getCell(row, mapping.firstName) : "";
   const surnameFromCol = mapping.surname ? getCell(row, mapping.surname) : "";
   if (firstFromCol && surnameFromCol && mapping.firstName !== mapping.surname) {
+    if (firstFromCol.toLowerCase() === surnameFromCol.toLowerCase()) {
+      return {
+        firstName: firstFromCol,
+        surname: "",
+        initials: initialsFromFirstNames(firstFromCol),
+        original: `${firstFromCol} ${surnameFromCol}`,
+        error: {
+          code: "NAME_MISSING_SURNAME",
+          field: "fullName",
+          message: `Applicant name "${firstFromCol} ${surnameFromCol}" has no surname (given name was duplicated)`,
+          value: `${firstFromCol} ${surnameFromCol}`,
+        },
+      };
+    }
     return {
       firstName: firstFromCol,
       surname: surnameFromCol,
@@ -109,22 +132,6 @@ function resolveName(
     }
     combined = candidate;
     split = attempt;
-  }
-
-  // Seriti requires both given name and surname. Form mononyms (e.g. "Lucky")
-  // duplicate the given name as surname rather than hard-blocking the load.
-  if (
-    !split.valid &&
-    split.code === "NAME_MISSING_SURNAME" &&
-    (split.firstName || combined).trim()
-  ) {
-    const given = (split.firstName || combined).trim();
-    return {
-      firstName: given,
-      surname: given,
-      initials: initialsFromFirstNames(given),
-      original: combined,
-    };
   }
 
   return {
@@ -188,6 +195,120 @@ function resolveNextOfKin(
   };
 }
 
+const SYSTEM_COLUMNS = new Set(["NR", "Status", "Timing", "Processed", "Reference Number"]);
+
+/** Spouse cells stay empty for Single clients. Married rows are checked separately. */
+const SPOUSE_COLUMNS = new Set([
+  "Spouse Name + Surname",
+  "Spouse number",
+  "Spouse ID number",
+  "Spouse ID",
+  "Marital date",
+  "Marital Date (MM DD YYYY)",
+]);
+
+function checkedSheetHeaders(mapping: ColumnMapping): Set<string> {
+  return new Set(
+    [
+      mapping.email,
+      mapping.fullName,
+      mapping.firstName,
+      mapping.surname,
+      "Full name",
+      mapping.title,
+      "Title",
+      mapping.educationalLevel,
+      "Educational level",
+      mapping.industry,
+      "Industry (AI based on employer)",
+      mapping.occupation,
+      "Occupation",
+      mapping.employeeLevel,
+      "Employee level",
+      mapping.maritalStatus,
+      "Marital status",
+      mapping.spouseFullName,
+      "Spouse Name + Surname",
+      mapping.spousePhone,
+      "Spouse number",
+      "Spouse ID number",
+      "Spouse ID",
+      "Marital date",
+      "Marital Date (MM DD YYYY)",
+      mapping.nextOfKinRelationship,
+      "Next of kin relationship",
+      mapping.maxPrice,
+      "Max price range",
+      mapping.idNumber,
+      "ID number",
+      mapping.mobile,
+      "Mobile number",
+      mapping.addressLine1,
+      "Address line",
+      mapping.postalCode,
+      "Postal code",
+      mapping.province,
+      "Province",
+      mapping.residencyStartDate,
+      mapping.nextOfKinFullName,
+      mapping.nextOfKinName,
+      mapping.nextOfKinSurname,
+      "Next of kin name + Surname",
+      mapping.nextOfKinPhone,
+      "Next of kin cellphone number",
+      mapping.employerName,
+      "Employer name",
+      mapping.employerPhone,
+      "Employer telephone number (online search)",
+      mapping.employerAddress,
+      "Employer street address (online search)",
+      mapping.employerPostalCode,
+      "Employer postal code (online search)",
+      mapping.employerProvince,
+      "Employer province (online search)",
+      mapping.employmentStartDate,
+      "Year they started working there (calculate from years provided)",
+      mapping.grossMonthly,
+      "Gross monthly salary",
+      mapping.nettSalary,
+      "Nett salary",
+      mapping.telephoneExpense,
+      "Telephone payment",
+      mapping.transportExpense,
+      "Transport cost",
+      mapping.foodExpense,
+      "Food cost",
+      mapping.accountHolder,
+      "Account holder name and surname (same as client)",
+      mapping.bank,
+      "Bank name",
+      mapping.accountType,
+      "Account type (AI—most likely option based on bank)",
+    ].filter((header): header is string => Boolean(header))
+  );
+}
+
+function flagUncheckedEmptyColumns(
+  row: Record<string, string>,
+  mapping: ColumnMapping,
+  errors: DataError[],
+  married: boolean
+): void {
+  const checked = checkedSheetHeaders(mapping);
+  for (const [header, raw] of Object.entries(row)) {
+    const name = header.trim();
+    if (!name || SYSTEM_COLUMNS.has(name) || checked.has(name)) continue;
+    if (SPOUSE_COLUMNS.has(name) && !married) continue;
+    if (!isMissingValue(raw)) continue;
+    errors.push({
+      code: "COLUMN_EMPTY",
+      field: name,
+      message: `Missing information in "${name}"`,
+      value: "",
+    });
+  }
+}
+
 function mapRow(
   row: Record<string, string>,
   mapping: ColumnMapping,
@@ -232,25 +353,33 @@ function mapRow(
   pushError(errors, residencyResult, "residencyStartDate", residencyRaw);
 
   const employmentRaw = getCell(row, mapping.employmentStartDate);
-  // Form sometimes answers "months" with no number — fall back to residency start
-  // so Work Next is not blocked when the sheet employment date is empty.
+  const employmentHeader =
+    mapping.employmentStartDate || "Year they started working there (calculate from years provided)";
   const employmentResult = validateDateFormat(
-    employmentRaw || residencyResult.value,
-    "Employment start date",
+    employmentRaw,
+    employmentHeader,
     "EMPLOYMENT_DATE_EMPTY",
     "EMPLOYMENT_DATE_FORMAT"
   );
   pushError(errors, employmentResult, "employmentStartDate", employmentRaw);
 
+  const nokPhoneHeader = mapping.nextOfKinPhone || "Next of kin cellphone number";
   const nextOfKinPhoneRaw = mapping.nextOfKinPhone
     ? getCell(row, mapping.nextOfKinPhone)
-    : "";
-  const nextOfKinPhoneResult = nextOfKinPhoneRaw
+    : getCell(row, nokPhoneHeader);
+  // Blank NOK phone is missing sheet data — block the load.
+  // A Form typo ("076997746") must not block; leave Seriti unfilled.
+  const nextOfKinPhoneResult = !isMissingValue(nextOfKinPhoneRaw)
     ? transformMobile(nextOfKinPhoneRaw)
-    : { value: "", valid: true };
-  // Seriti NOK mobile is optional — a Form typo ("076997746") must not block the
-  // load. Leave it unfilled and keep the raw value on the sheet for the operator.
-  if (nextOfKinPhoneRaw && !nextOfKinPhoneResult.valid) {
+    : { value: "", valid: false, code: "MOBILE_EMPTY" as const };
+  if (isMissingValue(nextOfKinPhoneRaw)) {
+    errors.push({
+      code: "NOK_PHONE_EMPTY",
+      field: "nextOfKinPhone",
+      message: `Missing information in "${nokPhoneHeader}"`,
+      value: "",
+    });
+  } else if (!nextOfKinPhoneResult.valid) {
     console.warn(
       `Row ${rowIndex}: skipping invalid next-of-kin mobile "${nextOfKinPhoneRaw}" (${nextOfKinPhoneResult.code})`
     );
@@ -270,25 +399,15 @@ function mapRow(
   );
   pushError(errors, educationResult, "educationalLevel", educationRaw);
 
-  const industryRaw = mapping.industry
+  const industryHeader = mapping.industry || "Industry (AI based on employer)";
+  let industryRaw = mapping.industry
     ? getCell(row, mapping.industry)
-    : getCell(row, "Industry (AI based on employer)");
-  const industryResult = requireText(
-    industryRaw,
-    "INDUSTRY_EMPTY",
-    "Industry is missing (not on the intake sheet or could not be determined from employer/job title)"
-  );
-  pushError(errors, industryResult, "industry", industryRaw);
+    : getCell(row, industryHeader);
 
-  const occupationRaw = mapping.occupation
+  const occupationHeader = mapping.occupation || "Occupation";
+  let occupationRaw = mapping.occupation
     ? getCell(row, mapping.occupation)
-    : getCell(row, "Occupation");
-  const occupationResult = requireText(
-    occupationRaw,
-    "OCCUPATION_EMPTY",
-    "Occupation/job title is missing on the intake sheet"
-  );
-  pushError(errors, occupationResult, "occupation", occupationRaw);
+    : getCell(row, occupationHeader);
 
   const levelRaw = mapping.employeeLevel
     ? getCell(row, mapping.employeeLevel)
@@ -308,19 +427,14 @@ function mapRow(
     : getCell(row, "Spouse number");
   const spousePhoneResult = transformMobile(spousePhoneRaw);
 
-  // Form often leaves Marital Status blank. Spouse data ⇒ Married; else Single.
-  let maritalRaw = mapping.maritalStatus
+  const maritalHeader = mapping.maritalStatus || "Marital status";
+  const maritalRaw = mapping.maritalStatus
     ? getCell(row, mapping.maritalStatus)
-    : getCell(row, "Marital status");
-  if (!String(maritalRaw || "").trim()) {
-    const hasSpouse =
-      Boolean(spouseFullNameRaw.trim()) || spousePhoneResult.valid;
-    maritalRaw = hasSpouse ? "Married" : "Single";
-  }
+    : getCell(row, maritalHeader);
   const maritalResult = requireText(
     maritalRaw,
     "MARITAL_STATUS_EMPTY",
-    "Marital status is not on the intake sheet"
+    `Missing information in "${maritalHeader}"`
   );
   pushError(errors, maritalResult, "maritalStatus", maritalRaw);
   if (/married/i.test(maritalRaw) && !spouseFullNameRaw.trim()) {
@@ -361,7 +475,7 @@ function mapRow(
       });
     }
     const maritalDateResult = validateDateFormat(
-      maritalDateRaw || residencyResult.value,
+      maritalDateRaw,
       "Marital date",
       "MARITAL_DATE_EMPTY",
       "MARITAL_DATE_FORMAT"
@@ -388,14 +502,16 @@ function mapRow(
   );
   pushError(errors, nokRelResult, "nextOfKinRelationship", nokRelRaw);
 
-  // Form does not ask max price. Loader applies standing default 350000 when empty.
+  const maxPriceHeader = mapping.maxPrice || "Max price range";
   const maxPriceRaw = mapping.maxPrice
     ? getCell(row, mapping.maxPrice)
-    : getCell(row, "Max price range");
-  const maxPriceResult = {
-    value: maxPriceRaw.trim() || "350000",
-    valid: true,
-  };
+    : getCell(row, maxPriceHeader);
+  const maxPriceResult = requireText(
+    maxPriceRaw,
+    "MAX_PRICE_EMPTY",
+    `Missing information in "${maxPriceHeader}"`
+  );
+  pushError(errors, maxPriceResult, "maxPrice", maxPriceRaw);
 
   const employerNameRaw = getCell(row, mapping.employerName);
   const employerNameResult = requireText(
@@ -410,35 +526,108 @@ function mapRow(
   const employerPhoneResult = transformMobile(employerPhoneRaw);
   pushError(errors, employerPhoneResult, "employerPhone", employerPhoneRaw);
 
-  // Address/postal remain soft: loader falls back to client province / personal postal search.
-  const employerAddressRaw = getCell(row, mapping.employerAddress);
-  const employerAddressResult = { value: employerAddressRaw, valid: true };
-
-  const employerPostalRaw = getCell(row, mapping.employerPostalCode);
-  const employerPostalResult = {
-    value: employerPostalRaw ? restorePostalCode(employerPostalRaw) : "",
-    valid: true,
-  };
-
   const provinceRaw = mapping.province ? getCell(row, mapping.province) : getCell(row, "Province");
   const provinceResult = requireText(provinceRaw, "PROVINCE_EMPTY", "Province is empty");
   pushError(errors, provinceResult, "province", provinceRaw);
 
-  const employerProvinceRaw = mapping.employerProvince
+  const employerAddressHeader = mapping.employerAddress || "Employer street address (online search)";
+  let employerAddressRaw = getCell(row, mapping.employerAddress);
+  const employerPostalHeader = mapping.employerPostalCode || "Employer postal code (online search)";
+  let employerPostalRaw = getCell(row, mapping.employerPostalCode);
+  const employerProvinceHeader =
+    mapping.employerProvince || "Employer province (online search)";
+  let employerProvinceRaw = mapping.employerProvince
     ? getCell(row, mapping.employerProvince)
-    : getCell(row, "Employer province (online search)");
-  const employerProvinceResult = {
-    value: employerProvinceRaw || provinceResult.value,
-    valid: true,
-  };
+    : getCell(row, employerProvinceHeader);
+
+  // Self-employed clients are loaded strictly as BUSINESS SERVICES / SELF EMPLOYED.
+  // Their residential address is the only column that may fill employer address.
+  const seriti = loadSeritiOptions();
+  const selfEmployed = clientSelfEmployed({
+    sheetOccupation: occupationRaw,
+    sheetIndustry: industryRaw,
+    sheetEmployerName: employerNameRaw,
+  });
+  if (selfEmployed) {
+    industryRaw = seriti.self_employed_industry;
+    occupationRaw = selfEmployedOccupation(seriti);
+    const copied = copyResidentialOntoEmployer({
+      selfEmployed: true,
+      residentialAddress: addressResult.value,
+      residentialPostal: postalResult.value,
+      residentialProvince: provinceResult.value,
+      employerAddress: employerAddressRaw,
+      employerPostal: employerPostalRaw,
+      employerProvince: employerProvinceRaw,
+    });
+    employerAddressRaw = copied.employerAddress;
+    employerPostalRaw = copied.employerPostal;
+    employerProvinceRaw = copied.employerProvince;
+  } else {
+    // Remap sheet Occupation through Seriti menus so the old LABOURER (SKILLED)
+    // default becomes OPERATOR even when the sheet was written before the change.
+    occupationRaw = mapOccupation(occupationRaw, seriti);
+  }
+
+  const industryResult = requireText(
+    industryRaw,
+    "INDUSTRY_EMPTY",
+    `Missing information in "${industryHeader}"`
+  );
+  pushError(errors, industryResult, "industry", industryRaw);
+
+  const occupationResult = requireText(
+    occupationRaw,
+    "OCCUPATION_EMPTY",
+    `Missing information in "${occupationHeader}"`
+  );
+  pushError(errors, occupationResult, "occupation", occupationRaw);
+
+  const employerAddressResult = requireText(
+    employerAddressRaw,
+    "EMPLOYER_ADDRESS_EMPTY",
+    `Missing information in "${employerAddressHeader}"`
+  );
+  pushError(errors, employerAddressResult, "employerAddress", employerAddressRaw);
+
+  const employerPostalResult = requireText(
+    employerPostalRaw,
+    "EMPLOYER_POSTAL_EMPTY",
+    `Missing information in "${employerPostalHeader}"`
+  );
+  pushError(errors, employerPostalResult, "employerPostalCode", employerPostalRaw);
+  if (employerPostalResult.valid) {
+    employerPostalResult.value = restorePostalCode(employerPostalResult.value);
+  }
+
+  const employerProvinceResult = requireText(
+    employerProvinceRaw,
+    "EMPLOYER_PROVINCE_EMPTY",
+    `Missing information in "${employerProvinceHeader}"`
+  );
+  pushError(errors, employerProvinceResult, "employerProvince", employerProvinceRaw);
 
   const grossRaw = getCell(row, mapping.grossMonthly);
   const grossResult = requireAmount(grossRaw, "GROSS_EMPTY", "Gross monthly salary");
   pushError(errors, grossResult, "grossMonthly", grossRaw);
+  if (grossResult.valid) {
+    const amount = parseMoneyAmount(grossResult.value);
+    if (amount != null) grossResult.value = String(Math.round(amount));
+  }
 
   const nettRaw = getCell(row, mapping.nettSalary);
   const nettResult = requireAmount(nettRaw, "NETT_EMPTY", "Nett salary");
   pushError(errors, nettResult, "nettSalary", nettRaw);
+  if (nettResult.valid) {
+    const amount = parseMoneyAmount(nettResult.value);
+    if (amount != null) nettResult.value = String(Math.round(amount));
+  }
+
+  if (grossResult.valid && nettResult.valid) {
+    for (const salaryError of validateSalaryPair(grossResult.value, nettResult.value)) {
+      errors.push(salaryError);
+    }
+  }
 
   const telRaw = getCell(row, mapping.telephoneExpense);
   const telResult = requireAmount(telRaw, "TELEPHONE_EXPENSE_EMPTY", "Telephone expense");
@@ -482,6 +671,8 @@ function mapRow(
     "Account type is empty"
   );
   pushError(errors, accountTypeResult, "accountType", accountTypeRaw);
+
+  flagUncheckedEmptyColumns(row, mapping, errors, /married/i.test(maritalResult.value));
 
   return {
     rowIndex,

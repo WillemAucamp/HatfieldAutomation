@@ -1,6 +1,7 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
 import { clickNextAndWait, screenshotSection, syncAddressFromPostal, waitForSelectorVisible, waitForSelectOptions } from "../formUtils.js";
+import { isSelfEmployed } from "../intake/seritiOptions.js";
 
 const SECTION = "section4";
 
@@ -63,6 +64,11 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     ids: ["txtempTelephoneNumber"],
   }, data.employerPhone);
 
+  const selfEmployed = isSelfEmployed(data.occupation, data.industry, data.employerName);
+  const workProvince = selfEmployed
+    ? data.employerProvince || data.province
+    : data.employerProvince;
+
   await fillField(ctx, {
     name: "Work province",
     section: SECTION,
@@ -71,11 +77,14 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     type: "select",
     names: ["clientEmpAddressProvince"],
     ids: ["clientEmpAddressDdlClientProvince"],
-  }, data.employerProvince || data.province);
+  }, workProvince);
 
-  // Prefer employer postal; else personal postal / address as Seriti place-search needles.
-  const workPostalNeedle = data.employerPostalCode || data.postalCode;
-  const workPostalHint = [data.employerAddress, data.addressLine1].filter(Boolean).join(" ");
+  const workPostalNeedle = selfEmployed
+    ? data.employerPostalCode || data.postalCode
+    : data.employerPostalCode;
+  const workPostalHint = selfEmployed
+    ? data.employerAddress || data.addressLine1
+    : data.employerAddress;
   await fillField(ctx, {
     name: "Work postal code",
     section: SECTION,
@@ -83,7 +92,7 @@ export async function runSection4(ctx: FillContext): Promise<void> {
     role: "textbox",
     type: "postal",
     postalHint: workPostalHint,
-    postalProvince: data.employerProvince || data.province,
+    postalProvince: workProvince,
     names: ["clientEmpAddress"],
     ids: ["clientEmpAddress_value"],
   }, workPostalNeedle);
@@ -91,7 +100,7 @@ export async function runSection4(ctx: FillContext): Promise<void> {
   const workAddressLine = await syncAddressFromPostal(
     form,
     "clientEmpAddress_value",
-    data.employerAddress || data.addressLine1
+    selfEmployed ? data.employerAddress || data.addressLine1 : data.employerAddress
   );
   await fillField(ctx, {
     name: "Work address line 1",

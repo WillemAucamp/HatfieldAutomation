@@ -2,11 +2,14 @@ import { cell, firstFilled, joinFilled } from "./headers.js";
 import { copyColumns, joinColumns } from "./mapping.js";
 import type { IntakeMapping } from "./mapping.js";
 import {
+  copyResidentialOntoEmployer,
+  clientSelfEmployed,
   isSelfEmployed,
   loadSeritiOptions,
   mapIndustry,
   mapLevel,
   mapOccupation,
+  selfEmployedOccupation,
 } from "./seritiOptions.js";
 import {
   coerceToMmDdYyyy,
@@ -210,31 +213,7 @@ export function applyDeterministicFixes(
     const employedDate = parseDurationToMmDdYyyy(employed, today);
     if (employedDate) {
       next["Year they started working there (calculate from years provided)"] = employedDate;
-    } else if (
-      isMissingValue(
-        next["Year they started working there (calculate from years provided)"]
-      ) &&
-      !isMissingValue(
-        next["Year start living at address (MM DD YYYY format ONLY)"]
-      )
-    ) {
-      // Unparseable Form answers like "months" — mirror residency so Seriti Work Next is not blocked.
-      next["Year they started working there (calculate from years provided)"] =
-        next["Year start living at address (MM DD YYYY format ONLY)"]!;
     }
-    // Unparseable residency answers like "Yes" — mirror employment start so
-    // Seriti Personal Next is not blocked by RESIDENCY_DATE_EMPTY.
-    if (
-      !livedDate &&
-      !DATE_PATTERN.test(next["Year start living at address (MM DD YYYY format ONLY)"] ?? "") &&
-      DATE_PATTERN.test(
-        next["Year they started working there (calculate from years provided)"] ?? ""
-      )
-    ) {
-      next["Year start living at address (MM DD YYYY format ONLY)"] =
-        next["Year they started working there (calculate from years provided)"]!;
-    }
-
     // Re-copy mobile from Form when the sheet cell is empty, Sheets-stripped, or
     // a typo (WhatsApp "9767867821") while the other Form phone is valid.
     if (!transformMobile(next["Mobile number"]).valid) {
@@ -292,25 +271,19 @@ export function applyDeterministicFixes(
       );
       if (nok) next["Next of kin name + Surname"] = nok;
     }
-    // Full NOK name typed into both Form boxes ("Steven Williams" twice).
-    // Single-word repeats ("Dineo"/"Dineo") stay so the loader still has a surname.
+    // Full NOK name typed into both Form boxes ("Steven Williams" twice) → keep once.
+    // Single-word repeats ("Dineo"/"Dineo") collapse to one token so the loader
+    // errors with NEXT_OF_KIN_MISSING_SURNAME instead of inventing a surname.
     {
       const first = cell(
         intakeValues,
         intakeHeadersFor(mapping, "next_of_kin_first_name")[0]!
-      ).replace(/\s+/g, " ");
+      ).replace(/\s+/g, " ").trim();
       const surname = cell(
         intakeValues,
         intakeHeadersFor(mapping, "next_of_kin_surname")[0]!
-      ).replace(/\s+/g, " ");
-      const current = String(next["Next of kin name + Surname"] ?? "")
-        .replace(/\s+/g, " ")
-        .trim();
-      if (
-        first.includes(" ") &&
-        first.toLowerCase() === surname.toLowerCase() &&
-        current.toLowerCase() === `${first} ${surname}`.toLowerCase()
-      ) {
+      ).replace(/\s+/g, " ").trim();
+      if (first && surname && first.toLowerCase() === surname.toLowerCase()) {
         next["Next of kin name + Surname"] = first;
       }
     }
@@ -360,14 +333,6 @@ export function applyDeterministicFixes(
         next["Spouse number"] = spouseMobile.valid ? spouseMobile.value : "";
       }
     }
-    // Blank Form marital: Married when spouse data exists, else standing Single.
-    if (isMissingValue(next["Marital status"])) {
-      const hasSpouse =
-        !isMissingValue(next["Spouse Name + Surname"]) ||
-        !isMissingValue(next["Spouse number"]);
-      if (hasSpouse) next["Marital status"] = "Married";
-    }
-
     const seriti = loadSeritiOptions();
     const employment = firstFilled(
       intakeValues,
@@ -378,50 +343,31 @@ export function applyDeterministicFixes(
       intakeValues,
       intakeHeadersFor(mapping, "employer_name")
     );
+    const selfEmployed = clientSelfEmployed({
+      employment,
+      jobTitle,
+      employerName,
+      sheetOccupation: next.Occupation,
+      sheetIndustry: next["Industry (AI based on employer)"],
+      sheetEmployerName: next["Employer name"],
+    });
 
-    if (isSelfEmployed(employment, jobTitle, employerName)) {
+    if (selfEmployed) {
       next["Industry (AI based on employer)"] = seriti.self_employed_industry;
+      next.Occupation = selfEmployedOccupation(seriti);
     } else {
       next["Industry (AI based on employer)"] = mapIndustry(
         next["Industry (AI based on employer)"] || "",
         seriti
       );
+      next.Occupation = mapOccupation(jobTitle || next.Occupation || "", seriti);
     }
-
-    next.Occupation = mapOccupation(jobTitle || next.Occupation || "", seriti);
     // Prefer Gemini level when it maps; else derive from job title; else SKILLED WORKER.
     next["Employee level"] = mapLevel(
       next["Employee level"] || jobTitle || "",
       seriti
     );
 
-    // Employer province falls back to client province — not fabrication of an unknown site.
-    if (isMissingValue(next["Employer province (online search)"])) {
-      const province =
-        next.Province || firstFilled(intakeValues, intakeHeadersFor(mapping, "province"));
-      if (province) next["Employer province (online search)"] = province;
-    }
-
-    // Self-employed with no public listing: work telephone is the client's own mobile.
-    if (
-      isSelfEmployed(employment, jobTitle, employerName) &&
-      isMissingValue(next["Employer telephone number (online search)"])
-    ) {
-      const own =
-        next["Mobile number"] ||
-        next["Client cellphone number (add again at the end)"] ||
-        "";
-      const ownMobile = transformMobile(own);
-      if (ownMobile.valid) {
-        next["Employer telephone number (online search)"] = ownMobile.value;
-      }
-    }
-
-    // When Gemini leaves postal empty, use city/town as a Seriti place-search needle.
-    if (isMissingValue(next["Postal code"])) {
-      const city = firstFilled(intakeValues, intakeHeadersFor(mapping, "city_town"));
-      if (city) next["Postal code"] = city;
-    }
   }
 
   // Pad Sheets-stripped postal codes (83 → 0083). City needles pass through.
@@ -434,12 +380,42 @@ export function applyDeterministicFixes(
     );
   }
 
+  // Residential address may fill employer address only when the client is self-employed.
+  if (mapping) {
+    const employment = firstFilled(intakeValues, intakeHeadersFor(mapping, "employment"));
+    const jobTitle = firstFilled(intakeValues, intakeHeadersFor(mapping, "job_title"));
+    const employerName = firstFilled(intakeValues, intakeHeadersFor(mapping, "employer_name"));
+    if (isSelfEmployed(employment, jobTitle, employerName)) {
+      const copied = copyResidentialOntoEmployer({
+        selfEmployed: true,
+        residentialAddress: next["Address line"] || "",
+        residentialPostal: next["Postal code"] || "",
+        residentialProvince:
+          next.Province || firstFilled(intakeValues, intakeHeadersFor(mapping, "province")),
+        employerAddress: next["Employer street address (online search)"] || "",
+        employerPostal: next["Employer postal code (online search)"] || "",
+        employerProvince: next["Employer province (online search)"] || "",
+      });
+      next["Employer street address (online search)"] = copied.employerAddress;
+      next["Employer postal code (online search)"] = copied.employerPostal;
+      next["Employer province (online search)"] = copied.employerProvince;
+    }
+  }
+
   for (const expense of EXPENSE_COLUMNS) {
     const normalized = normalizeExpenseAmount(next[expense]);
     next[expense] = normalized;
   }
 
-  if (mapping) applyStandingDefaults(next, mapping);
+  if (mapping) {
+    const maritalWasMissing = isMissingValue(next["Marital status"]);
+    applyStandingDefaults(next, mapping);
+    // Spouse columns do not fill Marital status. Leave it empty so the loader
+    // reports the missing cell instead of guessing Married or Single.
+    const hasSpouse =
+      !isMissingValue(next["Spouse Name + Surname"]) || !isMissingValue(next["Spouse number"]);
+    if (maritalWasMissing && hasSpouse) next["Marital status"] = "";
+  }
 
   // After standing defaults, expenses must still be numeric for Seriti.
   for (const expense of EXPENSE_COLUMNS) {

@@ -9,6 +9,7 @@ import { RunLogger, createWarning } from "./logger.js";
 import {
   classifyRuntimeError,
   durationSeconds,
+  formatDataErrorCell,
   formatErrorCell,
   formatRuntimeErrorCell,
   successfulReferenceFromCell,
@@ -77,7 +78,7 @@ async function processApplicant(
       finishedAt: new Date().toISOString(),
       error,
       errorCodes,
-      sheetStatus: formatErrorCell(errorCodes),
+      sheetStatus: formatDataErrorCell(applicant.errors),
       durationSeconds: elapsed(),
     };
     await persistOutcome(config, mapping, applicant, result, warnings);

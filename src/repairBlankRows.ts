@@ -35,6 +35,11 @@ const UNRECOVERABLE_CODES = new Set([
   "SPOUSE_ID_EMPTY",
   // Form put a numeric code in the bank column (e.g. "3800").
   "BANK_NOT_NAME",
+  // Below R12k nett — client cannot afford; do not keep retrying Seriti.
+  "AFFORDABILITY_ERROR",
+  // Salary looks like a client typo (extra zero). Needs a human sheet fix.
+  "SALARY_IMPLAUSIBLE",
+  "SALARY_NETT_ABOVE_GROSS",
 ]);
 
 const PATCH_COLUMNS = [

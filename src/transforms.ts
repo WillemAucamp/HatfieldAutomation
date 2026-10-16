@@ -394,6 +394,19 @@ export function parsePersonName(
     };
   }
 
+  // Old automation wrote mononyms as "Lucky Lucky". That is not a real surname —
+  // reject it instead of loading the duplicated given name into Seriti.
+  if (firstName.toLowerCase() === surname.toLowerCase()) {
+    return {
+      firstName,
+      surname: "",
+      initials,
+      valid: false,
+      code: surnameCode,
+      message: `${label} "${value}" has no surname (given name was duplicated)`,
+    };
+  }
+
   return { firstName, surname, initials, valid: true };
 }
 
@@ -562,6 +575,92 @@ export function requireAmount(
     return { value: "", valid: false, code, message: `${label} is empty` };
   }
   return { value, valid: true };
+}
+
+/** Strip R / commas / spaces so "R1 000 000" → 1000000. */
+export function parseMoneyAmount(raw: string | undefined | null): number | null {
+  const value = String(raw ?? "").trim();
+  if (!value || isMissingValue(value)) return null;
+  const digits = value
+    .replace(/,/g, "")
+    .replace(/\s+/g, "")
+    .replace(/^[rR]/, "")
+    .replace(/[^\d.]/g, "");
+  if (!digits || !/^\d+(\.\d+)?$/.test(digits)) return null;
+  const amount = Number(digits);
+  if (!Number.isFinite(amount)) return null;
+  return amount;
+}
+
+/** Hatfield minimum monthly nett before a Seriti load is allowed. */
+export const MIN_MONTHLY_NETT = 12_000;
+
+/**
+ * Monthly salaries above this are treated as client typos (e.g. R1000000 for R100000),
+ * not auto-corrected. Operator must confirm the figure on the sheet.
+ */
+export const MAX_MONTHLY_SALARY = 500_000;
+
+export interface SalaryCheckError {
+  code: string;
+  field: string;
+  message: string;
+  value: string;
+}
+
+/**
+ * Affordability + sanity checks on Gross / Nett. Never rewrites the client's figure.
+ * - Nett below R12 000 → AFFORDABILITY_ERROR (do not load)
+ * - Gross or Nett above R500 000 → SALARY_IMPLAUSIBLE (likely typo; do not load)
+ * - Nett greater than Gross → SALARY_NETT_ABOVE_GROSS
+ */
+export function validateSalaryPair(
+  grossRaw: string | undefined | null,
+  nettRaw: string | undefined | null
+): SalaryCheckError[] {
+  const errors: SalaryCheckError[] = [];
+  const gross = parseMoneyAmount(grossRaw);
+  const nett = parseMoneyAmount(nettRaw);
+  const grossText = String(grossRaw ?? "").trim();
+  const nettText = String(nettRaw ?? "").trim();
+
+  if (nett != null && nett < MIN_MONTHLY_NETT) {
+    errors.push({
+      code: "AFFORDABILITY_ERROR",
+      field: "nettSalary",
+      message: `Nett salary R${nett} is below the R${MIN_MONTHLY_NETT} minimum — client cannot afford; do not load`,
+      value: nettText,
+    });
+  }
+
+  if (gross != null && gross > MAX_MONTHLY_SALARY) {
+    errors.push({
+      code: "SALARY_IMPLAUSIBLE",
+      field: "grossMonthly",
+      message: `Gross monthly salary "${grossText}" looks like a typo (above R${MAX_MONTHLY_SALARY}). Confirm with the client and fix the sheet — do not invent a corrected amount`,
+      value: grossText,
+    });
+  }
+
+  if (nett != null && nett > MAX_MONTHLY_SALARY) {
+    errors.push({
+      code: "SALARY_IMPLAUSIBLE",
+      field: "nettSalary",
+      message: `Nett salary "${nettText}" looks like a typo (above R${MAX_MONTHLY_SALARY}). Confirm with the client and fix the sheet — do not invent a corrected amount`,
+      value: nettText,
+    });
+  }
+
+  if (gross != null && nett != null && nett > gross) {
+    errors.push({
+      code: "SALARY_NETT_ABOVE_GROSS",
+      field: "nettSalary",
+      message: `Nett salary (${nettText}) is higher than Gross monthly salary (${grossText}) — fix the sheet before loading`,
+      value: nettText,
+    });
+  }
+
+  return errors;
 }
 
 export function normalizeCompareValue(value: string): string {

@@ -31,14 +31,24 @@ describe("seriti option mapping", () => {
     assert.equal(mapLevel("not-a-real-level", options), "SKILLED WORKER");
   });
 
-  it("maps Occupation job titles and falls back to LABOURER (SKILLED)", () => {
+  it("maps Occupation job titles and falls back to OPERATOR", () => {
     assert.equal(mapOccupation("Clerk", options), "CLERK");
     assert.equal(mapOccupation("plumber", options), "PLUMBER");
-    assert.equal(mapOccupation("Warehouse picker", options), "LABOURER (SKILLED)");
-    assert.equal(mapOccupation("", options), "LABOURER (SKILLED)");
+    assert.equal(mapOccupation("Warehouse picker", options), "OPERATOR");
+    assert.equal(mapOccupation("", options), "OPERATOR");
     assert.equal(mapOccupation("RDT operator", options), "OPERATOR");
     assert.equal(mapOccupation("Loan consultant", options), "CONSULTANT");
     assert.equal(mapOccupation("Truck driver", options), "DRIVER");
+    assert.equal(mapOccupation("Self-employed", options), "SELF EMPLOYED (NON PROFESSIONAL)");
+    assert.equal(mapOccupation("SELF Employed", options), "SELF EMPLOYED (NON PROFESSIONAL)");
+    // Old sheet default string must not stick as an exact Seriti match.
+    assert.equal(mapOccupation("LABOURER (SKILLED)", options), "OPERATOR");
+    // Real labourer job titles still map onto the Seriti labourer menu.
+    assert.equal(mapOccupation("Labourer", options), "LABOURER (SKILLED)");
+    assert.equal(mapOccupation("Skilled labourer", options), "LABOURER (SKILLED)");
+    // Vague titles must not fuzzy-match onto LABOURER.
+    assert.equal(mapOccupation("General worker", options), "OPERATOR");
+    assert.equal(mapOccupation("Mining", options), "OPERATOR");
   });
 
   it("detects self-employed Employment answers", () => {

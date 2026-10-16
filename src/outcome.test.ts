@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   classifyRuntimeError,
   durationSeconds,
+  formatDataErrorCell,
   formatErrorCell,
   formatRuntimeErrorCell,
   isStatusPopulated,
@@ -20,6 +21,19 @@ describe("formatErrorCell", () => {
 
   it("falls back when no codes are provided", () => {
     assert.equal(formatErrorCell([]), "error SUBMIT_FAILED");
+  });
+
+  it("names the missing automation column in the sheet error", () => {
+    const cell = formatDataErrorCell([
+      {
+        code: "EMPLOYER_ADDRESS_EMPTY",
+        message: 'Missing information in "Employer street address (online search)"',
+      },
+      { code: "NAME_MISSING_SURNAME", message: 'Applicant name "Lucky" has no surname (expected "First Last")' },
+    ]);
+    assert.match(cell, /^error EMPLOYER_ADDRESS_EMPTY:/);
+    assert.match(cell, /Employer street address/);
+    assert.match(cell, /Lucky/);
   });
 });
 
