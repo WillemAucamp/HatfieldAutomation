@@ -510,6 +510,7 @@ describe("fetchSheetData", () => {
     assert.equal(selfRow.employerAddress, "12 Main Road Pretoria");
     assert.equal(selfRow.employerPostalCode, "0083");
     assert.equal(selfRow.employerProvince, "Gauteng");
+    assert.equal(selfRow.employerPhone, "0821234567");
     assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_ADDRESS_EMPTY"));
     assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_POSTAL_EMPTY"));
     assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_PROVINCE_EMPTY"));
@@ -717,5 +718,69 @@ describe("fetchSheetData", () => {
     assert.ok(missing.includes("First names + surname"));
     assert.ok(missing.includes("ID Type"));
     assert.ok(row.errors.every((e) => e.field !== "Status" && e.field !== "Timing"));
+  });
+
+  it("ignores Apps Script internal scan columns for COLUMN_EMPTY", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
+    const csvPath = join(dir, "scan-cols.csv");
+    const headers = [...HEADERS, "__melrose_row_scan__", "__auto_scan__"];
+    const values = [
+      "55",
+      "Ada Lovelace",
+      "ada@example.com",
+      "Ms",
+      "Ada Lovelace",
+      "South African ID",
+      "8705135782080",
+      "Grade 12",
+      "0821234567",
+      "12 Main Road Pretoria",
+      "0083",
+      "Gauteng",
+      "10 05 2023",
+      "Vusi Nel",
+      "0856475124",
+      "RETAIL",
+      "CLERK",
+      "SKILLED WORKER",
+      "Test Shop",
+      "0111234567",
+      "1 Work Ave",
+      "0083",
+      "Gauteng",
+      "10 05 2024",
+      "15000",
+      "12000",
+      "300",
+      "500",
+      "2000",
+      "Capitec",
+      "Savings/Transactional",
+      "Ada Lovelace",
+      "0821234567",
+      "",
+      "",
+      "",
+      "",
+    ];
+    const csv = [headers, values]
+      .map((cols) => cols.map((c) => `"${c.replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    writeFileSync(csvPath, csv);
+
+    const applicants = await fetchSheetData({
+      csvUrl: "",
+      mapping: loadColumnMapping("./mapping.json"),
+      localCsvPath: csvPath,
+      includeCompleted: true,
+    });
+    const row = applicants[0]!;
+    assert.ok(
+      !row.errors.some(
+        (e) =>
+          e.code === "COLUMN_EMPTY" &&
+          (e.field === "__melrose_row_scan__" || e.field === "__auto_scan__")
+      )
+    );
   });
 });

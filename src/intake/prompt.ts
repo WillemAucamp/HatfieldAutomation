@@ -93,7 +93,7 @@ ${strategy}
 - Search the business name online before answering.
 - Telephone must be a real number found (or clearly listed) for that employer — South African landline or mobile, preferably 0XXXXXXXXX.
 - Do NOT copy the client's personal mobile, home address, home postal code, or home province into employer fields. Residential address is copied onto the employer address in code only when the client is self-employed.
-- If the Form says self-employed / own business with no public listing, leave telephone "". Do not reuse the client's mobile.
+- If the Form says self-employed / own business with no public listing, leave employer telephone "". Code copies the client's mobile onto the work telephone when self-employed.
 - Prefer switchboard / main contact numbers over personal staff mobiles when both appear.
 - Return ONLY a JSON object (no markdown, no commentary).
 

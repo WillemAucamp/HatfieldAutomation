@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { normalizeSelectText, pickSelectOption } from "../selectMatch.js";
-import { isMissingValue } from "../transforms.js";
+import { isMissingValue, transformMobile } from "../transforms.js";
 
 export interface SeritiOptions {
   industries: string[];
@@ -141,6 +141,8 @@ export function selfEmployedOccupation(options: SeritiOptions = loadSeritiOption
  */
 export function copyResidentialOntoEmployer(input: {
   selfEmployed: boolean;
+  /** When true (self-employed policy), employer fields always mirror residential. */
+  overwrite?: boolean;
   residentialAddress: string;
   residentialPostal: string;
   residentialProvince: string;
@@ -155,12 +157,58 @@ export function copyResidentialOntoEmployer(input: {
       employerProvince: input.employerProvince,
     };
   }
-  const fill = (current: string, residential: string) =>
-    isMissingValue(current) ? String(residential ?? "").trim() : String(current ?? "").trim();
+  const overwrite = Boolean(input.overwrite);
+  const fill = (current: string, residential: string) => {
+    const home = String(residential ?? "").trim();
+    if (overwrite) return home;
+    return isMissingValue(current) ? home : String(current ?? "").trim();
+  };
   return {
     employerAddress: fill(input.employerAddress, input.residentialAddress),
     employerPostal: fill(input.employerPostal, input.residentialPostal),
     employerProvince: fill(input.employerProvince, input.residentialProvince),
+  };
+}
+
+/** Self-employed Seriti work block mirrors personal contact/address (only allowed duplicate). */
+export function mirrorSelfEmployedEmployerFromPersonal(input: {
+  fullName: string;
+  mobile: string;
+  residentialAddress: string;
+  residentialPostal: string;
+  residentialProvince: string;
+  employerName: string;
+  employerPhone: string;
+  employerAddress: string;
+  employerPostal: string;
+  employerProvince: string;
+}): {
+  employerName: string;
+  employerPhone: string;
+  employerAddress: string;
+  employerPostal: string;
+  employerProvince: string;
+} {
+  const copied = copyResidentialOntoEmployer({
+    selfEmployed: true,
+    overwrite: true,
+    residentialAddress: input.residentialAddress,
+    residentialPostal: input.residentialPostal,
+    residentialProvince: input.residentialProvince,
+    employerAddress: input.employerAddress,
+    employerPostal: input.employerPostal,
+    employerProvince: input.employerProvince,
+  });
+  const mobile = transformMobile(input.mobile);
+  const employerPhone = mobile.valid ? mobile.value : String(input.mobile ?? "").trim();
+  const employerName =
+    String(input.employerName ?? "").trim() || String(input.fullName ?? "").trim();
+  return {
+    employerName,
+    employerPhone,
+    employerAddress: copied.employerAddress,
+    employerPostal: copied.employerPostal,
+    employerProvince: copied.employerProvince,
   };
 }
 
