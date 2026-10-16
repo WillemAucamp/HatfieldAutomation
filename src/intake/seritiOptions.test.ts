@@ -6,6 +6,7 @@ import {
   mapIndustry,
   mapLevel,
   mapOccupation,
+  mirrorSelfEmployedEmployerFromPersonal,
 } from "./seritiOptions.js";
 
 describe("seriti option mapping", () => {
@@ -49,6 +50,26 @@ describe("seriti option mapping", () => {
     // Vague titles must not fuzzy-match onto LABOURER.
     assert.equal(mapOccupation("General worker", options), "OPERATOR");
     assert.equal(mapOccupation("Mining", options), "OPERATOR");
+  });
+
+  it("mirrors personal mobile and address onto employer fields for self-employed", () => {
+    const mirrored = mirrorSelfEmployedEmployerFromPersonal({
+      fullName: "Ada Lovelace",
+      mobile: "0821234567",
+      residentialAddress: "12 Main Road",
+      residentialPostal: "0083",
+      residentialProvince: "Gauteng",
+      employerName: "My Shop",
+      employerPhone: "0119999999",
+      employerAddress: "Wrong Ave",
+      employerPostal: "0001",
+      employerProvince: "Limpopo",
+    });
+    assert.equal(mirrored.employerPhone, "0821234567");
+    assert.equal(mirrored.employerAddress, "12 Main Road");
+    assert.equal(mirrored.employerPostal, "0083");
+    assert.equal(mirrored.employerProvince, "Gauteng");
+    assert.equal(mirrored.employerName, "My Shop");
   });
 
   it("detects self-employed Employment answers", () => {

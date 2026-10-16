@@ -18,10 +18,10 @@ import {
   validateSalaryPair,
 } from "./transforms.js";
 import {
-  copyResidentialOntoEmployer,
   clientSelfEmployed,
   loadSeritiOptions,
   mapOccupation,
+  mirrorSelfEmployedEmployerFromPersonal,
   selfEmployedOccupation,
 } from "./intake/seritiOptions.js";
 import { successfulReferenceFromCell, isStatusPopulated } from "./outcome.js";
@@ -197,6 +197,16 @@ function resolveNextOfKin(
 
 const SYSTEM_COLUMNS = new Set(["NR", "Status", "Timing", "Processed", "Reference Number"]);
 
+/** Apps Script readSheet helper columns — never client data. */
+const INTERNAL_SHEET_COLUMNS = new Set(["__melrose_row_scan__", "__auto_scan__"]);
+
+function isIgnorableSheetColumn(name: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed) return true;
+  if (SYSTEM_COLUMNS.has(trimmed) || INTERNAL_SHEET_COLUMNS.has(trimmed)) return true;
+  return /^__[\w]+__$/.test(trimmed);
+}
+
 /** Spouse cells stay empty for Single clients. Married rows are checked separately. */
 const SPOUSE_COLUMNS = new Set([
   "Spouse Name + Surname",
@@ -297,7 +307,7 @@ function flagUncheckedEmptyColumns(
   const checked = checkedSheetHeaders(mapping);
   for (const [header, raw] of Object.entries(row)) {
     const name = header.trim();
-    if (!name || SYSTEM_COLUMNS.has(name) || checked.has(name)) continue;
+    if (!name || isIgnorableSheetColumn(name) || checked.has(name)) continue;
     if (SPOUSE_COLUMNS.has(name) && !married) continue;
     if (!isMissingValue(raw)) continue;
     errors.push({
@@ -514,17 +524,8 @@ function mapRow(
   pushError(errors, maxPriceResult, "maxPrice", maxPriceRaw);
 
   const employerNameRaw = getCell(row, mapping.employerName);
-  const employerNameResult = requireText(
-    employerNameRaw,
-    "EMPLOYER_EMPTY",
-    "Employer name is empty"
-  );
-  pushError(errors, employerNameResult, "employerName", employerNameRaw);
 
-  // Seriti requires work telephone — empty employer phone blocks Work Next.
-  const employerPhoneRaw = getCell(row, mapping.employerPhone);
-  const employerPhoneResult = transformMobile(employerPhoneRaw);
-  pushError(errors, employerPhoneResult, "employerPhone", employerPhoneRaw);
+  let employerPhoneRaw = getCell(row, mapping.employerPhone);
 
   const provinceRaw = mapping.province ? getCell(row, mapping.province) : getCell(row, "Province");
   const provinceResult = requireText(provinceRaw, "PROVINCE_EMPTY", "Province is empty");
@@ -548,26 +549,42 @@ function mapRow(
     sheetIndustry: industryRaw,
     sheetEmployerName: employerNameRaw,
   });
+  let employerNameForLoad = employerNameRaw;
   if (selfEmployed) {
     industryRaw = seriti.self_employed_industry;
     occupationRaw = selfEmployedOccupation(seriti);
-    const copied = copyResidentialOntoEmployer({
-      selfEmployed: true,
+    const mirrored = mirrorSelfEmployedEmployerFromPersonal({
+      fullName: name.original || `${name.firstName} ${name.surname}`.trim(),
+      mobile: mobileResult.valid ? mobileResult.value : mobileRaw,
       residentialAddress: addressResult.value,
       residentialPostal: postalResult.value,
       residentialProvince: provinceResult.value,
+      employerName: employerNameRaw,
+      employerPhone: employerPhoneRaw,
       employerAddress: employerAddressRaw,
       employerPostal: employerPostalRaw,
       employerProvince: employerProvinceRaw,
     });
-    employerAddressRaw = copied.employerAddress;
-    employerPostalRaw = copied.employerPostal;
-    employerProvinceRaw = copied.employerProvince;
+    employerNameForLoad = mirrored.employerName;
+    employerPhoneRaw = mirrored.employerPhone;
+    employerAddressRaw = mirrored.employerAddress;
+    employerPostalRaw = mirrored.employerPostal;
+    employerProvinceRaw = mirrored.employerProvince;
   } else {
     // Remap sheet Occupation through Seriti menus so the old LABOURER (SKILLED)
     // default becomes OPERATOR even when the sheet was written before the change.
     occupationRaw = mapOccupation(occupationRaw, seriti);
   }
+
+  const employerPhoneResult = transformMobile(employerPhoneRaw);
+  pushError(errors, employerPhoneResult, "employerPhone", employerPhoneRaw);
+
+  const employerNameResult = requireText(
+    employerNameForLoad,
+    "EMPLOYER_EMPTY",
+    "Employer name is empty"
+  );
+  pushError(errors, employerNameResult, "employerName", employerNameForLoad);
 
   const industryResult = requireText(
     industryRaw,
@@ -702,7 +719,7 @@ function mapRow(
     spouseId: spouseId || undefined,
     maritalDate: maritalDate || undefined,
     maxPrice: maxPriceResult.value,
-    employerName: employerNameResult.value,
+    employerName: selfEmployed ? employerNameForLoad : employerNameResult.value,
     employerPhone: employerPhoneResult.valid ? employerPhoneResult.value : employerPhoneRaw,
     employerAddress: employerAddressResult.value,
     employerPostalCode: employerPostalResult.value,

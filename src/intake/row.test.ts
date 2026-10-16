@@ -123,7 +123,7 @@ describe("output row contract", () => {
     assert.equal(values["Employer street address (online search)"], "12 Main Road Pretoria");
     assert.equal(values["Employer postal code (online search)"], "0083");
     assert.equal(values["Employer province (online search)"], "Gauteng");
-    assert.equal(values["Employer telephone number (online search)"], "");
+    assert.equal(values["Employer telephone number (online search)"], "0821234567");
   });
 
   it("remaps sheet-only SELF Employed occupation onto the Seriti menu", () => {
@@ -144,7 +144,7 @@ describe("output row contract", () => {
     assert.equal(fixed["Industry (AI based on employer)"], "BUSINESS SERVICES");
   });
 
-  it("keeps a searched employer address when the client is self-employed", () => {
+  it("overwrites employer address with residential when the client is self-employed", () => {
     const values = buildOutputValues(
       mapping,
       {
@@ -156,9 +156,9 @@ describe("output row contract", () => {
       { ...intakeAda, Employment: "Self-employed" },
       new Date(2026, 9, 5)
     );
-    assert.equal(values["Employer street address (online search)"], "1 Work Ave");
-    assert.equal(values["Employer postal code (online search)"], "2196");
-    assert.equal(values["Employer province (online search)"], "Limpopo");
+    assert.match(values["Employer street address (online search)"], /12 Main Road/);
+    assert.equal(values["Employer postal code (online search)"], "0083");
+    assert.equal(values["Employer province (online search)"], "Gauteng");
   });
 
   it("remaps a sheet LABOURER (SKILLED) default to OPERATOR when the job title is unclear", () => {

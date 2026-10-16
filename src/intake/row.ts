@@ -2,13 +2,12 @@ import { cell, firstFilled, joinFilled } from "./headers.js";
 import { copyColumns, joinColumns } from "./mapping.js";
 import type { IntakeMapping } from "./mapping.js";
 import {
-  copyResidentialOntoEmployer,
   clientSelfEmployed,
-  isSelfEmployed,
   loadSeritiOptions,
   mapIndustry,
   mapLevel,
   mapOccupation,
+  mirrorSelfEmployedEmployerFromPersonal,
   selfEmployedOccupation,
 } from "./seritiOptions.js";
 import {
@@ -380,25 +379,39 @@ export function applyDeterministicFixes(
     );
   }
 
-  // Residential address may fill employer address only when the client is self-employed.
+  // Self-employed: work contact/address mirrors personal (only allowed duplicate).
   if (mapping) {
     const employment = firstFilled(intakeValues, intakeHeadersFor(mapping, "employment"));
     const jobTitle = firstFilled(intakeValues, intakeHeadersFor(mapping, "job_title"));
     const employerName = firstFilled(intakeValues, intakeHeadersFor(mapping, "employer_name"));
-    if (isSelfEmployed(employment, jobTitle, employerName)) {
-      const copied = copyResidentialOntoEmployer({
-        selfEmployed: true,
+    const selfEmployed = clientSelfEmployed({
+      employment,
+      jobTitle,
+      employerName,
+      sheetOccupation: next.Occupation,
+      sheetIndustry: next["Industry (AI based on employer)"],
+      sheetEmployerName: next["Employer name"],
+    });
+    if (selfEmployed) {
+      const mirrored = mirrorSelfEmployedEmployerFromPersonal({
+        fullName: next["Full name"] || next["First names + surname"] || "",
+        mobile:
+          next["Mobile number"] || next["Client cellphone number (add again at the end)"] || "",
         residentialAddress: next["Address line"] || "",
         residentialPostal: next["Postal code"] || "",
         residentialProvince:
           next.Province || firstFilled(intakeValues, intakeHeadersFor(mapping, "province")),
+        employerName: next["Employer name"] || employerName || "",
+        employerPhone: next["Employer telephone number (online search)"] || "",
         employerAddress: next["Employer street address (online search)"] || "",
         employerPostal: next["Employer postal code (online search)"] || "",
         employerProvince: next["Employer province (online search)"] || "",
       });
-      next["Employer street address (online search)"] = copied.employerAddress;
-      next["Employer postal code (online search)"] = copied.employerPostal;
-      next["Employer province (online search)"] = copied.employerProvince;
+      next["Employer name"] = mirrored.employerName;
+      next["Employer telephone number (online search)"] = mirrored.employerPhone;
+      next["Employer street address (online search)"] = mirrored.employerAddress;
+      next["Employer postal code (online search)"] = mirrored.employerPostal;
+      next["Employer province (online search)"] = mirrored.employerProvince;
     }
   }
 
