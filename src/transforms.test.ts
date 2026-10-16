@@ -185,11 +185,12 @@ describe("validateSalaryPair", () => {
     assert.equal(parseMoneyAmount("15000"), 15_000);
   });
 
-  it("rejects nett below R12000 with AFFORDABILITY_ERROR", () => {
-    const errors = validateSalaryPair("15000", "11000");
+  it("rejects nett below R9000 with AFFORDABILITY_ERROR", () => {
+    const errors = validateSalaryPair("15000", "8500");
     assert.ok(errors.some((e) => e.code === "AFFORDABILITY_ERROR" && e.field === "nettSalary"));
-    assert.equal(validateSalaryPair("15000", "12000").length, 0);
-    assert.equal(validateSalaryPair("11000", "10000").some((e) => e.code === "AFFORDABILITY_ERROR"), true);
+    assert.equal(validateSalaryPair("15000", "9000").length, 0);
+    assert.equal(validateSalaryPair("15000", "11000").length, 0);
+    assert.equal(validateSalaryPair("11000", "8000").some((e) => e.code === "AFFORDABILITY_ERROR"), true);
   });
 
   it("rejects implausible high salaries without rewriting them", () => {

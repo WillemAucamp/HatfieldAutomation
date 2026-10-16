@@ -593,7 +593,7 @@ export function parseMoneyAmount(raw: string | undefined | null): number | null 
 }
 
 /** Hatfield minimum monthly nett before a Seriti load is allowed. */
-export const MIN_MONTHLY_NETT = 12_000;
+export const MIN_MONTHLY_NETT = 9_000;
 
 /**
  * Monthly salaries above this are treated as client typos (e.g. R1000000 for R100000),
@@ -610,7 +610,7 @@ export interface SalaryCheckError {
 
 /**
  * Affordability + sanity checks on Gross / Nett. Never rewrites the client's figure.
- * - Nett below R12 000 → AFFORDABILITY_ERROR (do not load)
+ * - Nett below R9 000 → AFFORDABILITY_ERROR (do not load)
  * - Gross or Nett above R500 000 → SALARY_IMPLAUSIBLE (likely typo; do not load)
  * - Nett greater than Gross → SALARY_NETT_ABOVE_GROSS
  */
