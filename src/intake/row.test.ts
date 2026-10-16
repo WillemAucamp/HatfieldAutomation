@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { loadIntakeMapping } from "./mapping.js";
-import { accountTypeForBank, buildOutputValues, normalizeEmail } from "./row.js";
+import {
+  accountTypeForBank,
+  applyDeterministicFixes,
+  buildOutputValues,
+  normalizeEmail,
+} from "./row.js";
 
 const mapping = loadIntakeMapping("./config/intake-mapping.yaml");
 
@@ -119,6 +124,24 @@ describe("output row contract", () => {
     assert.equal(values["Employer postal code (online search)"], "0083");
     assert.equal(values["Employer province (online search)"], "Gauteng");
     assert.equal(values["Employer telephone number (online search)"], "");
+  });
+
+  it("remaps sheet-only SELF Employed occupation onto the Seriti menu", () => {
+    const fixed = applyDeterministicFixes(
+      {
+        "Industry (AI based on employer)": "BUSINESS SERVICES",
+        Occupation: "SELF Employed",
+        "Employee level": "MANAGEMENT",
+        "Employer name": "Retail",
+        "Address line": "Daffodilweg 57",
+        "Postal code": "8801",
+        Province: "Northern Cape",
+      },
+      {},
+      mapping
+    );
+    assert.equal(fixed.Occupation, "SELF EMPLOYED (NON PROFESSIONAL)");
+    assert.equal(fixed["Industry (AI based on employer)"], "BUSINESS SERVICES");
   });
 
   it("keeps a searched employer address when the client is self-employed", () => {

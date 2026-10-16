@@ -3,6 +3,7 @@ import { copyColumns, joinColumns } from "./mapping.js";
 import type { IntakeMapping } from "./mapping.js";
 import {
   copyResidentialOntoEmployer,
+  clientSelfEmployed,
   isSelfEmployed,
   loadSeritiOptions,
   mapIndustry,
@@ -342,7 +343,14 @@ export function applyDeterministicFixes(
       intakeValues,
       intakeHeadersFor(mapping, "employer_name")
     );
-    const selfEmployed = isSelfEmployed(employment, jobTitle, employerName);
+    const selfEmployed = clientSelfEmployed({
+      employment,
+      jobTitle,
+      employerName,
+      sheetOccupation: next.Occupation,
+      sheetIndustry: next["Industry (AI based on employer)"],
+      sheetEmployerName: next["Employer name"],
+    });
 
     if (selfEmployed) {
       next["Industry (AI based on employer)"] = seriti.self_employed_industry;

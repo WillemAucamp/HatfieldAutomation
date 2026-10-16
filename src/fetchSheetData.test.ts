@@ -476,7 +476,10 @@ describe("fetchSheetData", () => {
     const selfEmployed = employed.slice();
     selfEmployed[15] = "RETAIL";
     selfEmployed[16] = "Self-employed";
-    const csv = [headers, employed, selfEmployed]
+    const mixedCase = employed.slice();
+    mixedCase[15] = "BUSINESS SERVICES";
+    mixedCase[16] = "SELF Employed";
+    const csv = [headers, employed, selfEmployed, mixedCase]
       .map((cols) => cols.map((c) => `"${c.replaceAll('"', '""')}"`).join(","))
       .join("\n");
     writeFileSync(csvPath, csv);
@@ -487,9 +490,10 @@ describe("fetchSheetData", () => {
       localCsvPath: csvPath,
       includeCompleted: true,
     });
-    assert.equal(applicants.length, 2);
+    assert.equal(applicants.length, 3);
     const employedRow = applicants[0]!;
     const selfRow = applicants[1]!;
+    const mixedRow = applicants[2]!;
 
     assert.equal(employedRow.employerAddress, "");
     assert.ok(
@@ -509,6 +513,9 @@ describe("fetchSheetData", () => {
     assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_ADDRESS_EMPTY"));
     assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_POSTAL_EMPTY"));
     assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_PROVINCE_EMPTY"));
+
+    assert.equal(mixedRow.industry, "BUSINESS SERVICES");
+    assert.equal(mixedRow.occupation, "SELF EMPLOYED (NON PROFESSIONAL)");
   });
 
   it("remaps sheet Occupation LABOURER (SKILLED) to OPERATOR at load", async () => {

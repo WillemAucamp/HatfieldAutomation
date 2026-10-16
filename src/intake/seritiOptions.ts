@@ -87,6 +87,7 @@ export function mapOccupation(
 ): string {
   const value = String(raw ?? "").trim();
   if (!value) return options.occupation_fallback;
+  if (isSelfEmployed(value)) return selfEmployedOccupation(options);
   const aliases = options.occupation_aliases ?? {};
   const aliased = aliasLookup(aliases, value);
   if (aliased) return aliased;
@@ -108,6 +109,25 @@ export function mapOccupation(
 export function isSelfEmployed(employmentRaw: string, jobTitle = "", employerName = ""): boolean {
   const blob = `${employmentRaw} ${jobTitle} ${employerName}`.toLowerCase();
   return /\bself[-\s]?employ/.test(blob) || /\bown(?:er|ed)?\s+business\b/.test(blob);
+}
+
+/** Form Employment and/or automation-sheet Industry / Occupation / Employer text. */
+export function clientSelfEmployed(input: {
+  employment?: string;
+  jobTitle?: string;
+  employerName?: string;
+  sheetOccupation?: string;
+  sheetIndustry?: string;
+  sheetEmployerName?: string;
+}): boolean {
+  if (isSelfEmployed(input.employment ?? "", input.jobTitle ?? "", input.employerName ?? "")) {
+    return true;
+  }
+  return isSelfEmployed(
+    input.sheetOccupation ?? "",
+    input.sheetIndustry ?? "",
+    input.sheetEmployerName ?? ""
+  );
 }
 
 /** Seriti Occupation shown when the client said they are self-employed. */

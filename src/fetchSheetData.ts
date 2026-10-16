@@ -19,7 +19,7 @@ import {
 } from "./transforms.js";
 import {
   copyResidentialOntoEmployer,
-  isSelfEmployed,
+  clientSelfEmployed,
   loadSeritiOptions,
   mapOccupation,
   selfEmployedOccupation,
@@ -543,7 +543,11 @@ function mapRow(
   // Self-employed clients are loaded strictly as BUSINESS SERVICES / SELF EMPLOYED.
   // Their residential address is the only column that may fill employer address.
   const seriti = loadSeritiOptions();
-  const selfEmployed = isSelfEmployed(occupationRaw, industryRaw, employerNameRaw);
+  const selfEmployed = clientSelfEmployed({
+    sheetOccupation: occupationRaw,
+    sheetIndustry: industryRaw,
+    sheetEmployerName: employerNameRaw,
+  });
   if (selfEmployed) {
     industryRaw = seriti.self_employed_industry;
     occupationRaw = selfEmployedOccupation(seriti);
