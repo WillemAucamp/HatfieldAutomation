@@ -249,6 +249,7 @@ function checkedSheetHeaders(mapping: ColumnMapping): Set<string> {
       "Spouse ID number",
       "Spouse ID",
       "Spouse ID Type",
+      mapping.maritalDate,
       "Marital date",
       "Marital Date (MM DD YYYY)",
       mapping.nextOfKinRelationship,
@@ -471,8 +472,9 @@ function mapRow(
     const spouseIdRaw = mapping.spouseId
       ? getCell(row, mapping.spouseId)
       : getCell(row, "Spouse ID number") || getCell(row, "Spouse ID");
-    const maritalDateRaw =
-      getCell(row, "Marital date") || getCell(row, "Marital Date (MM DD YYYY)");
+    const maritalDateRaw = mapping.maritalDate
+      ? getCell(row, mapping.maritalDate)
+      : getCell(row, "Marital date") || getCell(row, "Marital Date (MM DD YYYY)");
     const spouseIdResult = validateIdNumber(spouseIdRaw);
     if (spouseIdResult.valid) {
       spouseId = spouseIdResult.value;
@@ -499,7 +501,7 @@ function mapRow(
         code: "MARITAL_DATE_EMPTY",
         field: "maritalDate",
         message:
-          "Not Single requires Marital Date on Seriti; add Marital date on the sheet (Form does not collect it)",
+          "Not Single requires Marital Date on Seriti; copy Marital date from the Form (DD/MM/YYYY)",
         value: maritalDateRaw,
       });
     }

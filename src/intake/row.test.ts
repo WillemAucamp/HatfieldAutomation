@@ -112,6 +112,7 @@ describe("output row contract", () => {
         "Marital Status": "Married in community of property",
         "Spouse Name + Surname": "Frieda Tobias",
         "Spouse ID number": "8705135782080",
+        "Marital date (DD/MM/YYYY) e.g. 06/08/2023": "06/08/2023",
       },
       new Date(2026, 9, 5)
     );
@@ -120,6 +121,7 @@ describe("output row contract", () => {
     assert.equal(values["Spouse ID number"], "8705135782080");
     assert.equal(values["Spouse ID Type"], "RSA ID");
     assert.equal(values["ID Type"], "RSA ID");
+    assert.equal(values["Marital date"], "08 06 2023");
   });
 
   it("does not treat an old 10-digit spouse mobile as a spouse RSA ID", () => {

@@ -275,6 +275,15 @@ export function coerceToMmDdYyyy(raw: string | undefined | null): string {
     return `${spacedYmd[2]} ${spacedYmd[3]} ${spacedYmd[1]}`;
   }
 
+  // Form asks DD/MM/YYYY (e.g. 06/08/2023). Do not treat slashes as US MM/DD.
+  const dmy = value.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+  if (dmy) {
+    const day = dmy[1]!.padStart(2, "0");
+    const month = dmy[2]!.padStart(2, "0");
+    const year = dmy[3]!;
+    return `${month} ${day} ${year}`;
+  }
+
   return value;
 }
 

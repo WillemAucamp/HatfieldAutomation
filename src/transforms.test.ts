@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandSelectNeedles, formatDateForForm, initialsFromFirstNames, normalizeMaritalStatus, parseDurationToMmDdYyyy, parseMoneyAmount, parsePersonName, postalSearchNeedles, requiresSpouse, restoreIdNumber, restorePostalCode, splitNextOfKinName, titleFromGender, usableIdDigits, validateDateFormat, validateIdNumber, validateSalaryPair, valuesMatch } from "./transforms.js";
+import { coerceToMmDdYyyy, expandSelectNeedles, formatDateForForm, initialsFromFirstNames, normalizeMaritalStatus, parseDurationToMmDdYyyy, parseMoneyAmount, parsePersonName, postalSearchNeedles, requiresSpouse, restoreIdNumber, restorePostalCode, splitNextOfKinName, titleFromGender, usableIdDigits, validateDateFormat, validateIdNumber, validateSalaryPair, valuesMatch } from "./transforms.js";
 
 describe("expandSelectNeedles", () => {
   it("maps FNB to Firstrand search terms", () => {
@@ -186,6 +186,12 @@ describe("formatDateForForm", () => {
 
   it("converts Apps Script Date cells to the form display", () => {
     assert.equal(formatDateForForm("2021-10-05 02:00:00"), "05 Oct 2021");
+  });
+
+  it("treats Form marital dates as DD/MM/YYYY, not US MM/DD", () => {
+    assert.equal(coerceToMmDdYyyy("06/08/2023"), "08 06 2023");
+    assert.equal(formatDateForForm("06/08/2023"), "06 Aug 2023");
+    assert.equal(validateDateFormat("6/8/2023", "Marital date", "EMPTY", "FORMAT").value, "08 06 2023");
   });
 });
 

@@ -51,6 +51,7 @@ intake_columns:
   - marital_status
   - spouse_name
   - spouse_id_number
+  - marital_date
   - food_spend
   - cellphone_spend
   - accounts_spend
@@ -86,11 +87,12 @@ intake_headers:
   blacklisted: Are you Blacklisted
   on_itc: Are you on ITC?
   debt_review: Are you on Debt review or Credit bureau?
-  housing_status: Column 18
+  housing_status: Column 19
   marital_status: Marital Status
   spouse_name: Spouse Name + Surname
   spouse_id_number: Spouse ID number
   spouse_number: Spouse number
+  marital_date: "Marital date (DD/MM/YYYY) e.g. 06/08/2023"
   food_spend: "How much do you spend on food?"
   cellphone_spend: "How much do you spend on a cellphone?"
   accounts_spend: "How much do you spend on a accounts?"
@@ -116,6 +118,7 @@ required_intake_headers:
   - consent
   - marital_status
   - spouse_id_number
+  - marital_date
   - food_spend
   - cellphone_spend
   - employment
@@ -374,6 +377,7 @@ passthrough_not_on_destination:
   - spouse_name
   - spouse_id_number
   - spouse_number
+  - marital_date
   - employment
 
 rules:

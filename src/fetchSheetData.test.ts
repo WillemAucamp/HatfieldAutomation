@@ -345,7 +345,7 @@ describe("fetchSheetData", () => {
       "8705135782080",
       "Willem Christoffel",
       "Van Der Merwe",
-      "01 06 2018",
+      "06/08/2023",
       "Shop",
       "0111234567",
       "2 Work Ave",
@@ -380,7 +380,7 @@ describe("fetchSheetData", () => {
     assert.equal(row.surname, "Van Der Merwe");
     assert.equal(row.maritalStatus, "Married");
     assert.equal(row.spouseId, "8705135782080");
-    assert.equal(row.maritalDate, "01 06 2018");
+    assert.equal(row.maritalDate, "08 06 2023");
     assert.ok(!row.errors.some((e) => e.code === "SPOUSE_ID_EMPTY"));
     assert.ok(!row.errors.some((e) => e.code === "SPOUSE_PHONE_EMPTY"));
     assert.ok(!row.errors.some((e) => e.code === "MARITAL_DATE_EMPTY"));

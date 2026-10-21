@@ -15,7 +15,7 @@ import {
   removeLocalOutcomesForRows,
   removeProcessedRowIds,
 } from "./sheetWriter.js";
-import { isMissingValue, parseDurationToMmDdYyyy } from "./transforms.js";
+import { coerceToMmDdYyyy, isMissingValue, parseDurationToMmDdYyyy } from "./transforms.js";
 
 const DEFAULT_RETRY_ROWS = [
   286, 287, 289, 290, 291, 292, 294, 295, 299, 301, 302, 304, 307, 308, 311, 312, 313, 314, 315,
@@ -152,6 +152,14 @@ async function main(): Promise<void> {
     if (spouseId) {
       updates.push({ row: rowIndex, column: "Spouse ID number", value: spouseId });
       updates.push({ row: rowIndex, column: "Spouse ID Type", value: "RSA ID" });
+    }
+    const maritalDateRaw = firstFilled(intake.values, [
+      mapping.intake_headers.marital_date,
+      "Marital date",
+    ]);
+    const maritalDate = coerceToMmDdYyyy(maritalDateRaw);
+    if (/^\d{2}\s+\d{2}\s+\d{4}$/.test(maritalDate)) {
+      updates.push({ row: rowIndex, column: "Marital date", value: maritalDate });
     }
 
     const lived = firstFilled(intake.values, [mapping.intake_headers.years_at_address]);

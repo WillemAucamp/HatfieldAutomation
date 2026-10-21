@@ -44,6 +44,7 @@ const BANK_ACCOUNT_TYPE: Record<string, string> = {
 const DATE_COLUMNS = [
   "Year start living at address (MM DD YYYY format ONLY)",
   "Year they started working there (calculate from years provided)",
+  "Marital date",
 ] as const;
 
 const EXPENSE_COLUMNS = ["Telephone payment", "Transport cost", "Food cost"] as const;
@@ -361,6 +362,16 @@ export function applyDeterministicFixes(
     }
     if (spouseName || spouseId || !isMissingValue(next["Spouse ID number"])) {
       next["Spouse ID Type"] = "RSA ID";
+    }
+    const maritalDateRaw = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, undefined, ["marital_date"])
+    );
+    const maritalDate = coerceToMmDdYyyy(maritalDateRaw);
+    if (DATE_PATTERN.test(maritalDate)) {
+      next["Marital date"] = maritalDate;
+    } else if (maritalDateRaw && !isMissingValue(maritalDateRaw)) {
+      next["Marital date"] = maritalDateRaw.replace(/\s+/g, " ").trim();
     }
     const seriti = loadSeritiOptions();
     const employment = firstFilled(
