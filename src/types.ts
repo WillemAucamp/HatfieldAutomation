@@ -15,6 +15,7 @@ export interface ColumnMapping {
   spouseFullName?: string;
   spousePhone?: string;
   spouseId?: string;
+  maritalDate?: string;
   nextOfKinRelationship?: string;
   maxPrice?: string;
   idNumber: string;

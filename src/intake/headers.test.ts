@@ -78,10 +78,18 @@ describe("intake headers", () => {
   it("matches the new intakes sheet debt-review and housing headers", () => {
     const row = {
       "Are you on Debt review or Credit bureau? ": "No",
-      "Column 18": "Renting",
+      "Column 19": "Renting",
     };
     assert.equal(cell(row, "Are you on Debt review or Credit bureau?"), "No");
-    assert.equal(cell(row, "Column 18"), "Renting");
+    assert.equal(cell(row, "Column 19"), "Renting");
+  });
+
+  it("matches the Form marital date question including the example", () => {
+    const row = {
+      "Marital date (DD/MM/YYYY) e.g. 06/08/2023": "06/08/2023",
+    };
+    assert.equal(cell(row, "Marital date (DD/MM/YYYY) e.g. 06/08/2023"), "06/08/2023");
+    assert.equal(cell(row, "Marital date"), "06/08/2023");
   });
 
   it("does not treat applicant Name and surname as Spouse Name + Surname", () => {

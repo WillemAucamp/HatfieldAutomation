@@ -72,6 +72,7 @@ const PATCH_COLUMNS = [
   "Spouse number",
   "Spouse ID number",
   "Spouse ID Type",
+  "Marital date",
   "Max price range",
   "Employer name",
   "Employer telephone number (online search)",

@@ -34,6 +34,7 @@ describe("intake mapping", () => {
     assert.ok(requiredIntakeHeaderLabels(mapping).includes("First Name"));
     assert.ok(requiredIntakeHeaderLabels(mapping).includes("Surname"));
     assert.ok(requiredIntakeHeaderLabels(mapping).includes("Spouse ID number"));
+    assert.ok(requiredIntakeHeaderLabels(mapping).some((h) => /Marital date/i.test(h)));
     assert.equal(mapping.destination_columns[0], "NR");
     assert.equal(mapping.destination_columns.at(-1), "Timing");
     assert.equal(mapping.destination_columns.length, 38);
