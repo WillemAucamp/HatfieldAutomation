@@ -178,7 +178,8 @@ export async function doctorMain(): Promise<number> {
 
 const SAMPLE_INTAKE: Record<string, string> = {
   Timestamp: "2026-09-09 12:00:00",
-  "Name and surname": "Thabo Sample",
+  "First Name": "Thabo",
+  Surname: "Sample",
   "Email address": "thabo.sample@example.com",
   "Call Phone number": "0820000001",
   "Whatsapp Phone number": "0820000001",

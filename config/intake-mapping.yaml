@@ -22,7 +22,8 @@ destination:
 intake_columns:
   - timestamp
   - vehicle_interest
-  - name_and_surname
+  - first_name
+  - surname
   - email
   - call_phone
   - whatsapp_phone
@@ -49,7 +50,7 @@ intake_columns:
   - housing_status
   - marital_status
   - spouse_name
-  - spouse_number
+  - spouse_id_number
   - food_spend
   - cellphone_spend
   - accounts_spend
@@ -59,6 +60,8 @@ intake_columns:
 intake_headers:
   timestamp: Timestamp
   vehicle_interest: "Which vehicle are you thinking of? Remember we can always compare later and give you options to consider"
+  first_name: First Name
+  surname: Surname
   name_and_surname: Name and surname
   email: Email address
   call_phone: Call Phone number
@@ -86,6 +89,7 @@ intake_headers:
   housing_status: Column 18
   marital_status: Marital Status
   spouse_name: Spouse Name + Surname
+  spouse_id_number: Spouse ID number
   spouse_number: Spouse number
   food_spend: "How much do you spend on food?"
   cellphone_spend: "How much do you spend on a cellphone?"
@@ -94,7 +98,8 @@ intake_headers:
 
 # Headers that must exist on the live Form sheet. Missing any aborts the ingest run.
 required_intake_headers:
-  - name_and_surname
+  - first_name
+  - surname
   - email
   - street_address
   - province
@@ -110,6 +115,7 @@ required_intake_headers:
   - id_number
   - consent
   - marital_status
+  - spouse_id_number
   - food_spend
   - cellphone_spend
   - employment
@@ -181,8 +187,9 @@ field_map:
     notes: Next integer after the last data row (row 2 = 1). Do not let the LLM invent NR.
 
   - destination: Full name
-    source: name_and_surname
-    mode: copy
+    sources: [first_name, surname]
+    mode: join
+    notes: Form First Name + Surname. Legacy combined "Name and surname" is still joined in code.
 
   - destination: Email
     source: email
@@ -194,8 +201,8 @@ field_map:
     notes: Derived in code from Gender (Male→Mr, Female→Ms). Empty gender is an error.
 
   - destination: First names + surname
-    source: name_and_surname
-    mode: copy
+    sources: [first_name, surname]
+    mode: join
 
   - destination: ID Type
     mode: writer
@@ -323,8 +330,8 @@ field_map:
     notes: Mapped in code from Bank name (Capitec/Discovery=Savings/Transactional; FNB/ABSA/Nedbank/Standard/Investec=Cheque/Current).
 
   - destination: Account holder name and surname (same as client)
-    source: name_and_surname
-    mode: copy
+    sources: [first_name, surname]
+    mode: join
 
   - destination: Client cellphone number (add again at the end)
     sources: [whatsapp_phone, call_phone]
@@ -335,9 +342,9 @@ field_map:
     source: marital_status
     mode: copy
     notes: >-
-      Copy from the Form. When Form marital is blank and there is no spouse
-      name/phone, standing default Single is applied. Spouse name or phone does
-      not fill Marital status — that cell stays empty and the loader reports it.
+      Copy from the Form. COP/ANC wording is collapsed to Married in code.
+      When Form marital is blank and there is no spouse name/ID, standing default
+      Single is applied. Spouse columns do not fill Marital status.
 
   - destination: Next of kin relationship
     mode: writer
@@ -365,6 +372,7 @@ passthrough_not_on_destination:
   - debt_review
   - housing_status
   - spouse_name
+  - spouse_id_number
   - spouse_number
   - employment
 

@@ -16,6 +16,7 @@ import {
 } from "./intake/gemini.js";
 import { cell, flattenRow } from "./intake/headers.js";
 import { loadIntakeMapping } from "./intake/mapping.js";
+import { formApplicantName } from "./intake/name.js";
 import { readSheetRows } from "./intake/sheets.js";
 import {
   clearRowStatus,
@@ -61,7 +62,7 @@ function matchIntake(
   for (const row of intakeRows) {
     const iEmail = norm(cell(row.values, mapping.intake_headers.email));
     const iId = cell(row.values, mapping.intake_headers.id_number).replace(/\D/g, "");
-    const iName = norm(cell(row.values, mapping.intake_headers.name_and_surname));
+    const iName = norm(formApplicantName(row.values, mapping));
     if (email && iEmail && email === iEmail) return row.values;
     if (id && iId && id === iId) return row.values;
     if (name && iName && name === iName) return row.values;

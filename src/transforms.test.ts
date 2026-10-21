@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandSelectNeedles, formatDateForForm, initialsFromFirstNames, parseDurationToMmDdYyyy, parseMoneyAmount, parsePersonName, postalSearchNeedles, restoreIdNumber, restorePostalCode, splitNextOfKinName, titleFromGender, usableIdDigits, validateDateFormat, validateIdNumber, validateSalaryPair, valuesMatch } from "./transforms.js";
+import { expandSelectNeedles, formatDateForForm, initialsFromFirstNames, normalizeMaritalStatus, parseDurationToMmDdYyyy, parseMoneyAmount, parsePersonName, postalSearchNeedles, requiresSpouse, restoreIdNumber, restorePostalCode, splitNextOfKinName, titleFromGender, usableIdDigits, validateDateFormat, validateIdNumber, validateSalaryPair, valuesMatch } from "./transforms.js";
 
 describe("expandSelectNeedles", () => {
   it("maps FNB to Firstrand search terms", () => {
@@ -139,6 +139,17 @@ describe("restoreIdNumber", () => {
   });
 });
 
+
+describe("normalizeMaritalStatus", () => {
+  it("collapses Form COP/ANC wording to Married", () => {
+    assert.equal(normalizeMaritalStatus("Married in community of property"), "Married");
+    assert.equal(normalizeMaritalStatus("Married ANC without ACCRUAL"), "Married");
+    assert.equal(normalizeMaritalStatus("Single"), "Single");
+    assert.equal(requiresSpouse("Married ANC with ACCRUAL"), true);
+    assert.equal(requiresSpouse("Single"), false);
+    assert.equal(requiresSpouse(""), false);
+  });
+});
 
 describe("usableIdDigits", () => {
   it("accepts valid RSA IDs and rejects consent Yes", () => {

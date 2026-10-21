@@ -26,10 +26,14 @@ describe("intake mapping", () => {
     assert.ok(llm.includes("Industry (AI based on employer)"));
     assert.ok(llm.includes("Postal code"));
     assert.ok(joinColumns(mapping).some((e) => e.destination === "Address line"));
+    assert.ok(joinColumns(mapping).some((e) => e.destination === "Full name"));
     assert.ok(
       joinColumns(mapping).some((e) => e.destination === "Next of kin name + Surname")
     );
     assert.ok(requiredIntakeHeaderLabels(mapping).some((h) => /STREET address/i.test(h)));
+    assert.ok(requiredIntakeHeaderLabels(mapping).includes("First Name"));
+    assert.ok(requiredIntakeHeaderLabels(mapping).includes("Surname"));
+    assert.ok(requiredIntakeHeaderLabels(mapping).includes("Spouse ID number"));
     assert.equal(mapping.destination_columns[0], "NR");
     assert.equal(mapping.destination_columns.at(-1), "Timing");
     assert.equal(mapping.destination_columns.length, 38);

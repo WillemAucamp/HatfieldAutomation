@@ -16,14 +16,6 @@ export function coreHeader(value: string): string {
     .trim();
 }
 
-function significantTokens(value: string): string[] {
-  return coreHeader(value)
-    .split(" ")
-    .map((token) => token.replace(/[^a-z0-9]/g, ""))
-    .filter((token) => token.length >= 3)
-    .filter((token) => !["example", "your", "the", "and", "for", "with", "from"].includes(token));
-}
-
 /** Tokens that qualify a person/role — must not be ignored when fuzzy-matching. */
 const ROLE_QUALIFIERS = new Set([
   "spouse",
@@ -37,17 +29,36 @@ const ROLE_QUALIFIERS = new Set([
   "account",
   "holder",
   "next",
+  "id",
 ]);
+
+function significantTokens(value: string): string[] {
+  return coreHeader(value)
+    .split(" ")
+    .map((token) => token.replace(/[^a-z0-9]/g, ""))
+    .filter((token) => token.length >= 3 || ROLE_QUALIFIERS.has(token))
+    .filter((token) => !["example", "your", "the", "and", "for", "with", "from"].includes(token));
+}
 
 function headersCompatible(have: string, want: string): boolean {
   const a = coreHeader(have);
   const b = coreHeader(want);
   if (!a || !b) return false;
   if (a === b) return true;
-  if (a.includes(b) || b.includes(a)) return true;
-
   const aTokens = significantTokens(have);
   const bTokens = significantTokens(want);
+  const rolesAgree = [...ROLE_QUALIFIERS].every(
+    (role) => aTokens.includes(role) === bTokens.includes(role)
+  );
+
+  // Substring match only when both sides talk about the same role. Otherwise
+  // "Surname" matches "Relative or friend surname" and "Spouse number" matches
+  // "Spouse ID number".
+  if ((a.includes(b) || b.includes(a)) && rolesAgree) {
+    if (a === b) return true;
+    if (Math.min(aTokens.length, bTokens.length) >= 2) return true;
+  }
+
   if (!bTokens.length) return false;
   // Require every significant token from the shorter side to appear in the longer
   // (Form "Food spend" ↔ mapping "How much do you spend on food?").
@@ -58,10 +69,7 @@ function headersCompatible(have: string, want: string): boolean {
 
   // Role qualifiers must agree on both sides — otherwise "Name and surname"
   // matches "Spouse Name + Surname" via shared name/surname tokens.
-  for (const role of ROLE_QUALIFIERS) {
-    if (aTokens.includes(role) !== bTokens.includes(role)) return false;
-  }
-  return true;
+  return rolesAgree;
 }
 
 export function findHeaderKey(

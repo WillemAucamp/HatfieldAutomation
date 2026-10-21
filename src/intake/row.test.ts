@@ -11,7 +11,8 @@ import {
 const mapping = loadIntakeMapping("./config/intake-mapping.yaml");
 
 const intakeAda = {
-  "Name and surname": "Ada Lovelace",
+  "First Name": "Ada",
+  Surname: "Lovelace",
   "Email address": "ada@example.com",
   Gender: "Female",
   "Highest education": "Grade 12",
@@ -83,9 +84,57 @@ describe("output row contract", () => {
     assert.equal(values["Client cellphone number (add again at the end)"], "0821234567");
     assert.equal(values["Account type (AI—most likely option based on bank)"], "Savings/Transactional");
     assert.equal(values["Account holder name and surname (same as client)"], "Ada Lovelace");
+    assert.equal(values.Name, "Ada");
+    assert.equal(values.Surname, "Lovelace");
     assert.equal(values["Year start living at address (MM DD YYYY format ONLY)"], "10 05 2023");
     assert.equal(values.NR, undefined);
     assert.equal(mapping.destination_columns.length, 38);
+  });
+
+  it("still joins a legacy combined Name and surname Form column", () => {
+    const { "First Name": _first, Surname: _surname, ...legacy } = intakeAda;
+    const values = buildOutputValues(
+      mapping,
+      {},
+      { ...legacy, "Name and surname": "Ada Lovelace" },
+      new Date(2026, 9, 5)
+    );
+    assert.equal(values["Full name"], "Ada Lovelace");
+    assert.equal(values.Surname, undefined);
+  });
+
+  it("joins split First Name + Surname and copies a valid spouse RSA ID", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "Marital Status": "Married in community of property",
+        "Spouse Name + Surname": "Frieda Tobias",
+        "Spouse ID number": "8705135782080",
+      },
+      new Date(2026, 9, 5)
+    );
+    assert.equal(values["Marital status"], "Married");
+    assert.equal(values["Spouse Name + Surname"], "Frieda Tobias");
+    assert.equal(values["Spouse ID number"], "8705135782080");
+    assert.equal(values["Spouse ID Type"], "RSA ID");
+    assert.equal(values["ID Type"], "RSA ID");
+  });
+
+  it("does not treat an old 10-digit spouse mobile as a spouse RSA ID", () => {
+    const values = buildOutputValues(
+      mapping,
+      {},
+      {
+        ...intakeAda,
+        "Marital Status": "Married",
+        "Spouse Name + Surname": "Frieda Tobias",
+        "Spouse ID number": "0786454285",
+      }
+    );
+    assert.equal(values["Spouse ID number"], undefined);
+    assert.equal(values["Spouse Name + Surname"], "Frieda Tobias");
   });
 
   it("maps free-text Industry/Level onto Seriti menus and falls back Occupation", () => {

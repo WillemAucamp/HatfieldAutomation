@@ -301,9 +301,90 @@ describe("fetchSheetData", () => {
     assert.equal(row.spouseFullName, "Frieda Tobias");
     assert.equal(row.spousePhone, "0786454285");
     assert.equal(row.maritalDate, undefined);
+    assert.equal(row.maritalStatus, "Married");
+    assert.ok(!row.errors.some((e) => e.code === "SPOUSE_PHONE_EMPTY"));
     // Seriti requires Spouse ID and Marital date for Married — do not copy residency.
     assert.ok(row.errors.some((e) => e.code === "SPOUSE_ID_EMPTY"));
     assert.ok(row.errors.some((e) => e.code === "MARITAL_DATE_EMPTY"));
+  });
+
+  it("loads split Name + Surname columns and a Form spouse RSA ID", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "hatfield-sheet-"));
+    const csvPath = join(dir, "split-name.csv");
+    const headers = [
+      ...HEADERS.slice(0, 18),
+      "Marital status",
+      "Spouse Name + Surname",
+      "Spouse ID number",
+      "Name",
+      "Surname",
+      "Marital date",
+      ...HEADERS.slice(18),
+    ];
+    const values = [
+      "350",
+      "Willem Christoffel Van Der Merwe",
+      "willem@example.com",
+      "Mr",
+      "Willem Christoffel Van Der Merwe",
+      "South African ID",
+      "8606045216088",
+      "Grade 12",
+      "0821234567",
+      "1 Main Road",
+      "2196",
+      "Gauteng",
+      "10 08 2020",
+      "Friend Name",
+      "0821234568",
+      "Retail",
+      "Clerk",
+      "Staff",
+      "Married in community of property",
+      "Frieda Tobias",
+      "8705135782080",
+      "Willem Christoffel",
+      "Van Der Merwe",
+      "01 06 2018",
+      "Shop",
+      "0111234567",
+      "2 Work Ave",
+      "2196",
+      "Gauteng",
+      "04 08 2025",
+      "10000",
+      "8000",
+      "200",
+      "300",
+      "500",
+      "Capitec",
+      "Savings/Transactional",
+      "Willem Christoffel Van Der Merwe",
+      "0821234567",
+      "",
+      "",
+    ];
+    const csv = [headers, values]
+      .map((cols) => cols.map((c) => `"${c.replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    writeFileSync(csvPath, csv);
+
+    const applicants = await fetchSheetData({
+      csvUrl: "",
+      mapping: loadColumnMapping("./mapping.json"),
+      localCsvPath: csvPath,
+      includeCompleted: true,
+    });
+    const row = applicants[0]!;
+    assert.equal(row.firstName, "Willem Christoffel");
+    assert.equal(row.surname, "Van Der Merwe");
+    assert.equal(row.maritalStatus, "Married");
+    assert.equal(row.spouseId, "8705135782080");
+    assert.equal(row.maritalDate, "01 06 2018");
+    assert.ok(!row.errors.some((e) => e.code === "SPOUSE_ID_EMPTY"));
+    assert.ok(!row.errors.some((e) => e.code === "SPOUSE_PHONE_EMPTY"));
+    assert.ok(!row.errors.some((e) => e.code === "MARITAL_DATE_EMPTY"));
+    assert.ok(!row.errors.some((e) => e.code === "NAME_MISSING_SURNAME"));
   });
 
   it("rejects a row when next-of-kin phone is blank", async () => {
