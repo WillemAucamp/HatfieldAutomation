@@ -2,6 +2,12 @@ import { cell, firstFilled, joinFilled } from "./headers.js";
 import { copyColumns, joinColumns } from "./mapping.js";
 import type { IntakeMapping } from "./mapping.js";
 import {
+  formApplicantName,
+  intakeFirstNameHeaders,
+  intakeSurnameHeaders,
+  joinPersonName,
+} from "./name.js";
+import {
   clientSelfEmployed,
   loadSeritiOptions,
   mapIndustry,
@@ -14,6 +20,7 @@ import {
   coerceToMmDdYyyy,
   isMissingValue,
   normalizeExpenseAmount,
+  normalizeMaritalStatus,
   parseDurationToMmDdYyyy,
   restorePostalCode,
   titleFromGender,
@@ -114,13 +121,15 @@ export function applyDeterministicFixes(
   today: Date = new Date()
 ): Record<string, string> {
   const next = { ...fields };
+  const formFirst = mapping ? firstFilled(intakeValues, intakeFirstNameHeaders(mapping)) : "";
+  const formSurname = mapping ? firstFilled(intakeValues, intakeSurnameHeaders(mapping)) : "";
   const name =
-    (mapping
-      ? firstFilled(intakeValues, intakeHeadersFor(mapping, "name_and_surname"))
-      : "") ||
+    (mapping ? formApplicantName(intakeValues, mapping) : "") ||
     next["Full name"] ||
     next["First names + surname"] ||
     "";
+  if (formFirst) next.Name = formFirst;
+  if (formSurname) next.Surname = formSurname;
   if (name) {
     next["Full name"] = name;
     next["First names + surname"] = name;
@@ -155,13 +164,11 @@ export function applyDeterministicFixes(
   next["ID Type"] = "RSA ID";
 
   // Form answers like "Married in community of property" must map to a Seriti
-  // marital option. Keep Married/Single/Divorced/Widowed; collapse COP wording
-  // to Married so Seriti does not open COP-only fields we cannot fill from Form.
+  // marital option. Keep Married/Single/Divorced/Widowed; collapse COP/ANC
+  // wording to Married so Seriti does not open COP-only fields we cannot fill.
   {
-    const marital = String(next["Marital status"] || "").trim();
-    if (/married/i.test(marital) && /community of property|anc|cop\b/i.test(marital)) {
-      next["Marital status"] = "Married";
-    }
+    const marital = normalizeMaritalStatus(next["Marital status"]);
+    if (marital) next["Marital status"] = marital;
   }
   // Never keep Form leaks like consent "Yes" in the ID column.
   {
@@ -314,10 +321,15 @@ export function applyDeterministicFixes(
 
     // Spouse lives on the automation sheet (loader mapping) even though it is
     // outside the 38-column Gemini contract — copy from Form when present.
-    const spouseName = firstFilled(
+    const spouseFirst = firstFilled(
       intakeValues,
-      intakeHeadersFor(mapping, "spouse_name")
+      intakeHeadersFor(mapping, undefined, ["spouse_first_name", "spouse_name"])
     );
+    const spouseSurname = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, "spouse_surname")
+    );
+    const spouseName = joinPersonName(spouseFirst, spouseSurname) || spouseFirst;
     if (spouseName) next["Spouse Name + Surname"] = spouseName;
     const spousePhone = firstFilled(
       intakeValues,
@@ -331,6 +343,24 @@ export function applyDeterministicFixes(
         const spouseMobile = transformMobile(candidate);
         next["Spouse number"] = spouseMobile.valid ? spouseMobile.value : "";
       }
+    }
+    // Form column is "Spouse ID number". Never copy a 10-digit mobile leftover
+    // from the old Spouse number question into the RSA ID field.
+    const spouseIdRaw = firstFilled(
+      intakeValues,
+      intakeHeadersFor(mapping, undefined, ["spouse_id_number", "spouse_id"])
+    );
+    const spouseId = usableIdDigits(spouseIdRaw);
+    if (spouseId) {
+      next["Spouse ID number"] = spouseId;
+    } else if (typedDigits(spouseIdRaw).length === 13 || typedDigits(spouseIdRaw).length === 12) {
+      const digits = typedDigits(spouseIdRaw);
+      next["Spouse ID number"] = digits.length === 12 ? `0${digits}` : digits;
+    } else if (spouseIdRaw && !transformMobile(spouseIdRaw).valid) {
+      next["Spouse ID number"] = typedDigits(spouseIdRaw);
+    }
+    if (spouseName || spouseId || !isMissingValue(next["Spouse ID number"])) {
+      next["Spouse ID Type"] = "RSA ID";
     }
     const seriti = loadSeritiOptions();
     const employment = firstFilled(
@@ -426,7 +456,9 @@ export function applyDeterministicFixes(
     // Spouse columns do not fill Marital status. Leave it empty so the loader
     // reports the missing cell instead of guessing Married or Single.
     const hasSpouse =
-      !isMissingValue(next["Spouse Name + Surname"]) || !isMissingValue(next["Spouse number"]);
+      !isMissingValue(next["Spouse Name + Surname"]) ||
+      !isMissingValue(next["Spouse number"]) ||
+      !isMissingValue(next["Spouse ID number"]);
     if (maritalWasMissing && hasSpouse) next["Marital status"] = "";
   }
 

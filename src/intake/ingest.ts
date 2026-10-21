@@ -1,6 +1,7 @@
 import type { AppConfig } from "../types.js";
 import { enrichWithGemini } from "./gemini.js";
-import { assertIntakeHeadersPresent, cell, firstFilled, flattenRow, hasConsent } from "./headers.js";
+import { assertIntakeHeadersPresent, cell, flattenRow, hasConsent } from "./headers.js";
+import { formApplicantName } from "./name.js";
 import { loadIntakeMapping, requiredIntakeHeaderLabels } from "./mapping.js";
 import { formatErrorCell } from "../outcome.js";
 import { validateIdNumber } from "../transforms.js";
@@ -77,10 +78,7 @@ export async function ingestNewRows(
   const enrich = extras.enrich ?? enrichWithGemini;
 
   for (const intake of intakeRows) {
-    const name = firstFilled(intake.values, [
-      mapping.intake_headers.name_and_surname,
-      "Name and surname",
-    ]);
+    const name = formApplicantName(intake.values, mapping);
     const label = `intake row ${intake.rowIndex}${name ? ` (${name})` : ""}`;
     const consent = cell(intake.values, mapping.intake_headers.consent);
     if (!hasConsent(consent) && consent) {

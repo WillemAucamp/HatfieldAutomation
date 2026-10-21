@@ -16,7 +16,8 @@ describe("matchIntakeRow", () => {
     rowIndex: 209,
     values: {
       Email: "Samuelkgabomojela@gmail.com",
-      "Name and surname": "Kgabo Samuel mojela",
+      "First Name": "Kgabo Samuel",
+      Surname: "mojela",
       "ID Number": "Yes",
       "Enrichment Status": "skipped_already_loaded",
     },
@@ -26,7 +27,8 @@ describe("matchIntakeRow", () => {
     rowIndex: 301,
     values: {
       Email: "Samuelkgabomojela@gmail.com",
-      "Name and surname": "Kgabo Samuel mojela",
+      "First Name": "Kgabo Samuel",
+      Surname: "mojela",
       "ID Number": "8603206249081",
       "Enrichment Status": "enriched row 344 nr 345",
     },

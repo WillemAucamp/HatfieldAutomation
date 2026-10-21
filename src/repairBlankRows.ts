@@ -31,8 +31,8 @@ import { isMissingValue, usableIdDigits } from "./transforms.js";
 const UNRECOVERABLE_CODES = new Set([
   "ID_CHECKSUM_INVALID",
   "ID_NOT_13_DIGITS",
-  // Form does not collect spouse RSA ID; cannot invent one for Seriti Married.
-  "SPOUSE_ID_EMPTY",
+  // Invalid spouse RSA IDs still need a human Form fix; empty IDs can be
+  // copied from the Form Spouse ID number column on a later repair.
   // Form put a numeric code in the bank column (e.g. "3800").
   "BANK_NOT_NAME",
   // Below R9k nett — client cannot afford; do not keep retrying Seriti.
@@ -45,6 +45,8 @@ const UNRECOVERABLE_CODES = new Set([
 const PATCH_COLUMNS = [
   "Full name",
   "First names + surname",
+  "Name",
+  "Surname",
   "Title",
   "ID Type",
   "ID number",
@@ -68,6 +70,8 @@ const PATCH_COLUMNS = [
   "Marital status",
   "Spouse Name + Surname",
   "Spouse number",
+  "Spouse ID number",
+  "Spouse ID Type",
   "Max price range",
   "Employer name",
   "Employer telephone number (online search)",
@@ -196,7 +200,10 @@ async function main(): Promise<void> {
               col === "Email" ||
               col === "Client cellphone number (add again at the end)" ||
               col === "Full name" ||
-              col === "First names + surname")
+              col === "First names + surname" ||
+              col === "Name" ||
+              col === "Surname" ||
+              col === "Spouse ID number")
           ) {
             continue;
           }

@@ -314,6 +314,21 @@ export function isMissingValue(raw: string | undefined | null): boolean {
   return /^(unknown|n\/a|na|none|-|null|undefined)$/i.test(value);
 }
 
+/** Map Form wording (COP / ANC) onto the Seriti Married/Single menus. */
+export function normalizeMaritalStatus(raw: string | undefined | null): string {
+  const marital = String(raw ?? "").trim();
+  if (!marital || isMissingValue(marital)) return "";
+  if (/^single$/i.test(marital)) return "Single";
+  if (/married/i.test(marital)) return "Married";
+  return marital;
+}
+
+/** Seriti spouse fields open for every status except Single. */
+export function requiresSpouse(raw: string | undefined | null): boolean {
+  const marital = normalizeMaritalStatus(raw);
+  return Boolean(marital) && !/^single$/i.test(marital);
+}
+
 /**
  * Form answers sometimes land in the ID column ("Yes" from consent).
  * Only digit-like values are usable as RSA IDs (12–13 digits after restore).

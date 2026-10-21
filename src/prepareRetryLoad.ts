@@ -138,11 +138,20 @@ async function main(): Promise<void> {
       mapping.intake_headers.spouse_number,
       "Spouse number",
     ]);
+    const spouseId = firstFilled(intake.values, [
+      mapping.intake_headers.spouse_id_number,
+      "Spouse ID number",
+      "Spouse ID",
+    ]);
     if (spouseName) {
       updates.push({ row: rowIndex, column: "Spouse Name + Surname", value: spouseName });
     }
     if (spousePhone) {
       updates.push({ row: rowIndex, column: "Spouse number", value: spousePhone });
+    }
+    if (spouseId) {
+      updates.push({ row: rowIndex, column: "Spouse ID number", value: spouseId });
+      updates.push({ row: rowIndex, column: "Spouse ID Type", value: "RSA ID" });
     }
 
     const lived = firstFilled(intake.values, [mapping.intake_headers.years_at_address]);

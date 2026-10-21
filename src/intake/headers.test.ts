@@ -8,6 +8,7 @@ import {
   missingIntakeHeaders,
   normalizeHeader,
 } from "./headers.js";
+import { joinPersonName } from "./name.js";
 
 describe("intake headers", () => {
   it("matches Form titles that contain newlines or extra example text", () => {
@@ -34,6 +35,13 @@ describe("intake headers", () => {
     );
   });
 
+  it("joins given names and surname without duplicating the surname", () => {
+    assert.equal(joinPersonName("Ada", "Lovelace"), "Ada Lovelace");
+    assert.equal(joinPersonName("Ada Lovelace", "Lovelace"), "Ada Lovelace");
+    assert.equal(joinPersonName("Ada Lovelace", ""), "Ada Lovelace");
+    assert.equal(joinPersonName("Lucky", "Lucky"), "Lucky");
+  });
+
   it("joins next-of-kin first name and surname columns", () => {
     const row = {
       "Relative or friend Name\nExample: Vusi": "Vusi",
@@ -50,13 +58,13 @@ describe("intake headers", () => {
 
   it("fails loudly when a required Form header is missing", () => {
     const missing = missingIntakeHeaders(
-      ["Name and surname", "Email address"],
-      ["Name and surname", "Current STREET address and House number Example: 1058 Steve Biko Road"]
+      ["First Name", "Surname", "Email address"],
+      ["First Name", "Current STREET address and House number Example: 1058 Steve Biko Road"]
     );
     assert.equal(missing.length, 1);
     assert.match(missing[0]!, /STREET address/i);
     assert.throws(() =>
-      assertIntakeHeadersPresent(["Name and surname"], ["Name and surname", "ID Number"])
+      assertIntakeHeadersPresent(["First Name"], ["First Name", "ID Number"])
     );
   });
 
@@ -84,5 +92,27 @@ describe("intake headers", () => {
     assert.equal(cell(row, "Spouse Name + Surname"), "Frieda Tobias");
     assert.equal(cell(row, "Name and surname"), "Ada Lovelace");
     assert.equal(cell({ "Name and surname": "Ada Lovelace" }, "Spouse Name + Surname"), "");
+  });
+
+  it("keeps First Name, Surname, and Spouse ID number distinct", () => {
+    const row = {
+      "First Name": "Ada",
+      Surname: "Lovelace",
+      "Relative or friend surname Example: Nel": "Nel",
+      "Spouse ID number": "8705135782080",
+      "ID Number": "8001015800084",
+    };
+    assert.equal(cell(row, "First Name"), "Ada");
+    assert.equal(cell(row, "Surname"), "Lovelace");
+    assert.equal(cell(row, "Spouse ID number"), "8705135782080");
+    assert.equal(cell(row, "ID Number"), "8001015800084");
+    assert.equal(cell(row, "Spouse number"), "");
+    assert.equal(
+      cell(
+        { "Relative or friend surname Example: Nel": "Nel" },
+        "Surname"
+      ),
+      ""
+    );
   });
 });

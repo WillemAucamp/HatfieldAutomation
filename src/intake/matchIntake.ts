@@ -1,5 +1,6 @@
 import { cell } from "./headers.js";
 import type { IntakeMapping } from "./mapping.js";
+import { formApplicantName } from "./name.js";
 import { usableIdDigits } from "../transforms.js";
 
 function norm(value: string): string {
@@ -34,7 +35,7 @@ export function scoreIntakeMatch(
   const iEmail = norm(cell(intake.values, mapping.intake_headers.email));
   const iIdRaw = cell(intake.values, mapping.intake_headers.id_number);
   const iId = usableIdDigits(iIdRaw);
-  const iName = norm(cell(intake.values, mapping.intake_headers.name_and_surname));
+  const iName = norm(formApplicantName(intake.values, mapping));
 
   let score = 0;
   if (email && iEmail && email === iEmail) score += 10;

@@ -14,8 +14,11 @@ import {
   initialsFromFirstNames,
   transformMobile,
   validateDateFormat,
+  usableIdDigits,
   validateIdNumber,
   validateSalaryPair,
+  normalizeMaritalStatus,
+  requiresSpouse,
 } from "./transforms.js";
 import {
   clientSelfEmployed,
@@ -213,6 +216,7 @@ const SPOUSE_COLUMNS = new Set([
   "Spouse number",
   "Spouse ID number",
   "Spouse ID",
+  "Spouse ID Type",
   "Marital date",
   "Marital Date (MM DD YYYY)",
 ]);
@@ -241,8 +245,10 @@ function checkedSheetHeaders(mapping: ColumnMapping): Set<string> {
       "Spouse Name + Surname",
       mapping.spousePhone,
       "Spouse number",
+      mapping.spouseId,
       "Spouse ID number",
       "Spouse ID",
+      "Spouse ID Type",
       "Marital date",
       "Marital Date (MM DD YYYY)",
       mapping.nextOfKinRelationship,
@@ -441,47 +447,44 @@ function mapRow(
   const maritalRaw = mapping.maritalStatus
     ? getCell(row, mapping.maritalStatus)
     : getCell(row, maritalHeader);
+  const maritalNormalized = normalizeMaritalStatus(maritalRaw) || maritalRaw;
   const maritalResult = requireText(
-    maritalRaw,
+    maritalNormalized,
     "MARITAL_STATUS_EMPTY",
     `Missing information in "${maritalHeader}"`
   );
   pushError(errors, maritalResult, "maritalStatus", maritalRaw);
-  if (/married/i.test(maritalRaw) && !spouseFullNameRaw.trim()) {
+  const spouseRequired = requiresSpouse(maritalResult.value || maritalNormalized);
+  if (spouseRequired && !spouseFullNameRaw.trim()) {
     errors.push({
       code: "SPOUSE_NAME_EMPTY",
       field: "spouseFullName",
-      message: "Marital status is Married but Spouse Name + Surname is empty",
+      message: "Marital status is not Single but Spouse Name + Surname is empty",
       value: "",
     });
   }
-  if (/married/i.test(maritalRaw) && !spousePhoneResult.valid) {
-    errors.push({
-      code: "SPOUSE_PHONE_EMPTY",
-      field: "spousePhone",
-      message:
-        "Marital status is Married but Spouse number is missing or not a valid mobile",
-      value: spousePhoneRaw,
-    });
-  }
-  // Seriti Married requires Spouse ID Type + Spouse ID + Marital Date. Form does
-  // not collect spouse ID/date. Marital date falls back to residency start.
-  // Missing spouse ID hard-blocks — Seriti Personal Next will not advance without it.
+  // Seriti spouse fields require RSA ID Type + Spouse ID. Form now collects
+  // Spouse ID number. Spouse mobile is not on this Seriti build.
   let spouseId = "";
   let maritalDate = "";
-  if (/married/i.test(maritalRaw)) {
-    const spouseIdRaw = getCell(row, "Spouse ID number") || getCell(row, "Spouse ID");
+  if (spouseRequired) {
+    const spouseIdRaw = mapping.spouseId
+      ? getCell(row, mapping.spouseId)
+      : getCell(row, "Spouse ID number") || getCell(row, "Spouse ID");
     const maritalDateRaw =
       getCell(row, "Marital date") || getCell(row, "Marital Date (MM DD YYYY)");
-    spouseId = String(spouseIdRaw || "").replace(/\D/g, "");
-    if (spouseId.length === 12) spouseId = `0${spouseId}`;
-    if (!spouseId) {
+    const spouseIdResult = validateIdNumber(spouseIdRaw);
+    if (spouseIdResult.valid) {
+      spouseId = spouseIdResult.value;
+    } else {
+      spouseId = usableIdDigits(spouseIdRaw);
       errors.push({
-        code: "SPOUSE_ID_EMPTY",
+        code: spouseId ? spouseIdResult.code ?? "SPOUSE_ID_EMPTY" : "SPOUSE_ID_EMPTY",
         field: "spouseId",
-        message:
-          "Married requires Spouse ID on Seriti; add Spouse ID number on the sheet (Form does not collect it)",
-        value: "",
+        message: spouseId
+          ? `Spouse ID is not a valid RSA ID (${spouseIdResult.message ?? spouseIdResult.code})`
+          : "Not Single requires Spouse ID on Seriti; copy Spouse ID number from the Form",
+        value: spouseIdRaw,
       });
     }
     const maritalDateResult = validateDateFormat(
@@ -496,7 +499,7 @@ function mapRow(
         code: "MARITAL_DATE_EMPTY",
         field: "maritalDate",
         message:
-          "Married requires Marital Date on Seriti; add Marital date on the sheet (Form does not collect it)",
+          "Not Single requires Marital Date on Seriti; add Marital date on the sheet (Form does not collect it)",
         value: maritalDateRaw,
       });
     }
@@ -689,7 +692,7 @@ function mapRow(
   );
   pushError(errors, accountTypeResult, "accountType", accountTypeRaw);
 
-  flagUncheckedEmptyColumns(row, mapping, errors, /married/i.test(maritalResult.value));
+  flagUncheckedEmptyColumns(row, mapping, errors, spouseRequired);
 
   return {
     rowIndex,

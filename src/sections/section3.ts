@@ -1,5 +1,6 @@
 import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
+import { requiresSpouse } from "../transforms.js";
 import {
   clickNextAndWait,
   matchSelectOption,
@@ -187,8 +188,9 @@ export async function runSection3(ctx: FillContext): Promise<void> {
     ids: ["ddlClientMaritalStatus"],
   }, data.maritalStatus);
 
-  // Married expands Marriage Type/Date + Spouse name/ID (no spouse mobile on this build).
-  if (/married/i.test(data.maritalStatus || "")) {
+  // Anything except Single expands Marriage Type/Date + Spouse name/ID
+  // (no spouse mobile on this Seriti build). ID Type is always RSA ID.
+  if (requiresSpouse(data.maritalStatus)) {
     await waitForSelectorVisible(
       form,
       '[id*="txtClientMarriageDate"], [id*="clientMarriageDate"], [id="txtSpouseFirstName"], [id="ddlClientMarriageType"]',
