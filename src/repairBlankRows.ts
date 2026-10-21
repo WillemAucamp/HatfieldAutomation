@@ -1,6 +1,10 @@
 /**
- * Repair blank-Status automation rows using live Form data + Seriti mappings,
- * then report which rows are ready to load.
+ * Repair blank-Status automation rows (and recoverable Form-copy errors)
+ * using live Form data + Seriti mappings, then report which rows are ready.
+ *
+ * Recovers MARITAL_DATE_EMPTY / SPOUSE_ID_EMPTY when the Form already has
+ * the value — ingest skips already-enriched Form rows, so those errors
+ * otherwise stay stuck.
  *
  * Always rebuilds matched rows through buildOutputValues so Seriti menus,
  * dates, address/NOK joins, expenses, and ID Type stick permanently.
@@ -23,7 +27,15 @@ import { loadIntakeMapping } from "./intake/mapping.js";
 import { applyDeterministicFixes, buildOutputValues } from "./intake/row.js";
 import { readSheetRows } from "./intake/sheets.js";
 import { formatErrorCell } from "./outcome.js";
-import { postWebhookJson } from "./sheetWriter.js";
+import {
+  isRepairableAutomationStatus,
+  shouldClearRepairedStatus,
+} from "./repairableStatus.js";
+import {
+  postWebhookJson,
+  removeLocalOutcomesForRows,
+  removeProcessedRowIds,
+} from "./sheetWriter.js";
 import { isMissingValue, usableIdDigits } from "./transforms.js";
 
 /** Client typos / Form gaps Seriti will never accept — stamp Status so GHA stops retrying.
@@ -127,20 +139,22 @@ async function main(): Promise<void> {
 
   if (!config.sheetWebhookUrl) throw new Error("SHEET_WEBHOOK_URL is required");
 
-  console.log("Reading automation sheet (blank Status)…");
+  console.log("Reading automation sheet (blank Status + recoverable Form-copy errors)…");
   let autoRows = await readWithRetry("auto", () =>
     readSheetRows({
       webhookUrl: config.sheetWebhookUrl!,
       spreadsheetId: config.sheetId,
-      unprocessedOnly: true,
+      unprocessedOnly: false,
       statusColumn: "Status",
-      processableStatuses: [""],
     })
+  );
+  autoRows = autoRows.filter((r) =>
+    isRepairableAutomationStatus(r.values.Status || r.status)
   );
   if (onlyRows.length) {
     autoRows = autoRows.filter((r) => onlyRows.includes(r.rowIndex));
   }
-  console.log(`Blank-Status rows to repair: ${autoRows.length}`);
+  console.log(`Repairable rows: ${autoRows.length}`);
 
   console.log("Reading Form intake sheet…");
   const intakeRows = await readWithRetry("intake", () =>
@@ -157,6 +171,7 @@ async function main(): Promise<void> {
   let reenriched = 0;
   let skipped = 0;
   const updates: Array<{ row: number; column: string; value: string }> = [];
+  const clearedRows: number[] = [];
 
   for (const auto of autoRows) {
     const label = `row ${auto.rowIndex}`;
@@ -294,6 +309,13 @@ async function main(): Promise<void> {
         updates.push({ row: auto.rowIndex, column: col, value: after });
       }
     }
+    const previousStatus = String(auto.values.Status || auto.status || "");
+    if (shouldClearRepairedStatus(previousStatus, next)) {
+      updates.push({ row: auto.rowIndex, column: "Status", value: "" });
+      updates.push({ row: auto.rowIndex, column: "Timing", value: "" });
+      clearedRows.push(auto.rowIndex);
+      console.log(`Clear Status ${label} (was ${previousStatus.split(":")[0]})`);
+    }
     patched += 1;
   }
 
@@ -323,7 +345,19 @@ async function main(): Promise<void> {
     console.log(`Wrote updates ${i + 1}-${i + chunk.length}`);
   }
 
-  console.log("Re-previewing blank-Status rows…");
+  if (clearedRows.length) {
+    const clearedIds = clearedRows
+      .map((rowIndex) => {
+        const row = autoRows.find((candidate) => candidate.rowIndex === rowIndex);
+        return String(row?.values["ID number"] || "");
+      })
+      .filter(Boolean);
+    removeLocalOutcomesForRows(clearedRows);
+    removeProcessedRowIds(clearedIds);
+    console.log(`Cleared Status on ${clearedRows.length} recovered row(s): ${clearedRows.join(",")}`);
+  }
+
+  console.log("Re-previewing repaired rows…");
   const columnMapping = loadColumnMapping(config.mappingPath);
   const applicants = await fetchSheetData({
     csvUrl: config.sheetCsvUrl,

@@ -79,9 +79,10 @@ jobs:
           set -euo pipefail
           echo "mode=${MODE} maxIntakeRows=${MAX_INTAKE_ROWS} dryRun=${DRY_RUN} event=${{ github.event_name }}"
           AUTO_LOAD=false npm run ingest
-      # Rebuild blank-Status rows through deterministic Seriti maps + employer search
-      # so free-text Gemini leftovers never reach the loader.
-      - name: Repair blank-Status rows (Seriti maps + employer phone search)
+      # Rebuild blank-Status rows (and MARITAL_DATE_EMPTY / SPOUSE_ID_EMPTY)
+      # through deterministic Seriti maps + employer search so free-text
+      # Gemini leftovers and missed Form columns never reach the loader.
+      - name: Repair blank-Status and recoverable Form-copy errors
         if: ${{ (github.event_name == 'schedule' || github.event.inputs.mode != 'load-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
