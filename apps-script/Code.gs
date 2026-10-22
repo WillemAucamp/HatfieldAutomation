@@ -31,8 +31,10 @@ var INTAKE_SHEET_ID = "1qzp0v1_lHzAUj7TGXIj-cz0zuWctBX8de1wR46hKcLY";
 /** Willem/Sihle person tab only — other assignee tabs are ignored. From sheet URL gid=. */
 var INTAKE_SHEET_GID = 880063023;
 var INTAKE_SHEET_NAME = "Willem/ Sihle";
-/** Leads tab (Status Approved/Declined → WhatsApp). From sheet URL gid=. */
-var LEADS_SHEET_GID = 1730847217;
+/** Leads tab (Name / Number / Status). From the sheet URL gid=. */
+var LEADS_SHEET_GID = 2126384446;
+/** Approved follow-up tab. Approvals on Leads are copied here. */
+var APPROVED_SHEET_GID = 1730847217;
 var LEADS_STATUS_HEADER = "Status";
 var LEADS_WHATSAPP_SENT_HEADER = "WhatsApp sent";
 
@@ -41,7 +43,7 @@ function doGet() {
   // returns this probe instead of the doPost JSON — keep shape stable.
   return json_({
     ok: true,
-    version: "hatfield-intake-2",
+    version: "hatfield-intake-3",
     actions: [
       "appendLoaded",
       "writeStatus",
@@ -51,6 +53,7 @@ function doGet() {
       "appendApplicant",
     ],
     leadsSheetGid: LEADS_SHEET_GID,
+    approvedSheetGid: APPROVED_SHEET_GID,
   });
 }
 
@@ -91,20 +94,66 @@ function inferAction_(data) {
 }
 
 function writePhone_(sheet, row, col, value) {
-  sheet.getRange(row, col).setNumberFormat("@").setValue(String(value));
+  var text = String(value == null ? "" : value).replace(/^'/, "");
+  sheet.getRange(row, col).setNumberFormat("@").setValue(text);
+}
+
+function normalizeSaMobile_(raw) {
+  var text = String(raw == null ? "" : raw).trim();
+  var digits = text.replace(/\D/g, "");
+  if (/e\+/i.test(text)) {
+    var asNum = Number(text);
+    if (isFinite(asNum)) digits = String(Math.round(asNum));
+  }
+  if (digits.indexOf("27") === 0 && digits.length >= 11) digits = digits.substring(2);
+  if (digits.length === 9) digits = "0" + digits;
+  if (digits.length === 10 && digits.charAt(0) === "0") return digits;
+  return "";
+}
+
+function normPerson_(raw) {
+  return String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function collapseDoubled_(name) {
+  var parts = name.split(" ");
+  if (parts.length === 2 && parts[0] === parts[1]) return parts[0];
+  return name;
+}
+
+function samePerson_(a, b) {
+  var left = normPerson_(a);
+  var right = normPerson_(b);
+  if (!left || !right) return false;
+  return collapseDoubled_(left) === collapseDoubled_(right);
+}
+
+function sheetByGid_(ss, gid) {
+  var id = Number(gid);
+  if (!isNaN(id)) {
+    var byId = ss.getSheetById(id);
+    if (byId) return byId;
+  }
+  return ss.getSheets()[0];
 }
 
 function appendLoaded_(data) {
   var ss = SpreadsheetApp.openById(data.loadedSheetId || LOADED_SHEET_ID);
-  var sheet = ss.getSheets()[0];
+  var gid = data.sheetGid != null ? Number(data.sheetGid) : LEADS_SHEET_GID;
+  var sheet = sheetByGid_(ss, gid);
   var nameColumn = data.nameColumn || "Name";
   var numberColumn = data.numberColumn || "Number";
   var headers = ensureHeaders_(sheet, [nameColumn, numberColumn]);
   var nameCol = headers.indexOf(nameColumn) + 1;
   var numberCol = headers.indexOf(numberColumn) + 1;
 
-  var name = String(data.name || "").trim();
-  var number = String(data.number || data.mobile || "").trim();
+  var name = String(data.name || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  var number = normalizeSaMobile_(data.number || data.mobile) || String(data.number || data.mobile || "").trim();
   if (!name || !number) {
     return { ok: false, error: "name and number are required" };
   }
@@ -113,35 +162,74 @@ function appendLoaded_(data) {
   if (last >= 2) {
     var names = sheet.getRange(2, nameCol, last - 1, 1).getValues();
     var numbers = sheet.getRange(2, numberCol, last - 1, 1).getValues();
-    var updated = 0;
-    var lastRow = 0;
     for (var i = 0; i < names.length; i++) {
-      if (String(names[i][0]).trim().toLowerCase() !== name.toLowerCase()) continue;
-      lastRow = i + 2;
-      if (String(numbers[i][0]).trim() === number) {
-        updated++;
-        continue;
+      if (!samePerson_(names[i][0], name)) continue;
+      var row = i + 2;
+      var existing = normalizeSaMobile_(numbers[i][0]);
+      var incoming = normalizeSaMobile_(number);
+      if (existing && incoming && existing === incoming) {
+        return { ok: true, skipped: true, row: row, name: name, number: number };
       }
-      writePhone_(sheet, lastRow, numberCol, number);
-      updated++;
-    }
-    if (updated > 0) {
-      return { ok: true, updated: true, row: lastRow, name: name, number: number, count: updated };
+      writePhone_(sheet, row, numberCol, incoming || number);
+      return { ok: true, updated: true, row: row, name: name, number: incoming || number };
     }
     for (var j = 0; j < numbers.length; j++) {
-      if (String(numbers[j][0]).trim() === number) {
-        return { ok: true, skipped: true, row: j + 2, number: number };
+      var stored = normalizeSaMobile_(numbers[j][0]);
+      if (!stored || stored !== normalizeSaMobile_(number)) continue;
+      if (String(names[j][0] || "").trim()) continue;
+      writePhone_(sheet, j + 2, numberCol, number);
+      sheet.getRange(j + 2, nameCol).setValue(name);
+      return { ok: true, updated: true, row: j + 2, name: name, number: number };
+    }
+  }
+
+  var appendRow = last + 1;
+  if (last === 1 && !sheet.getRange(1, nameCol).getValue()) {
+    appendRow = 2;
+  }
+  sheet.getRange(appendRow, nameCol).setValue(name);
+  writePhone_(sheet, appendRow, numberCol, normalizeSaMobile_(number) || number);
+  return { ok: true, row: appendRow, name: name, number: number };
+}
+
+/**
+ * Put an Approved lead on the Approved follow-up tab if they are not already there.
+ * Same cellphone under a different name still gets a row — do not hide the new client.
+ */
+function carryApprovedLead_(name, number) {
+  var cleanName = String(name || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  var phone = normalizeSaMobile_(number);
+  if (!cleanName || !phone) return { ok: false, error: "name and number are required" };
+
+  var ss = SpreadsheetApp.openById(LOADED_SHEET_ID);
+  var sheet = ss.getSheetById(APPROVED_SHEET_GID);
+  if (!sheet) return { ok: false, error: "Approved tab missing" };
+
+  var headers = ensureHeaders_(sheet, ["Name", "Number"]);
+  var nameCol = headers.indexOf("Name") + 1;
+  var numberCol = headers.indexOf("Number") + 1;
+  var last = Math.max(sheet.getLastRow(), 1);
+  if (last >= 2) {
+    var names = sheet.getRange(2, nameCol, last - 1, 1).getValues();
+    var numbers = sheet.getRange(2, numberCol, last - 1, 1).getValues();
+    for (var i = 0; i < names.length; i++) {
+      if (samePerson_(names[i][0], cleanName)) {
+        return { ok: true, skipped: true, row: i + 2, name: cleanName };
+      }
+      if (!String(names[i][0] || "").trim() && normalizeSaMobile_(numbers[i][0]) === phone) {
+        sheet.getRange(i + 2, nameCol).setValue(cleanName);
+        writePhone_(sheet, i + 2, numberCol, phone);
+        return { ok: true, updated: true, row: i + 2, name: cleanName };
       }
     }
   }
 
-  var row = last + 1;
-  if (last === 1 && !sheet.getRange(1, nameCol).getValue()) {
-    row = 2;
-  }
-  sheet.getRange(row, nameCol).setValue(name);
-  writePhone_(sheet, row, numberCol, number);
-  return { ok: true, row: row, name: name, number: number };
+  var row = Math.max(last + 1, 2);
+  sheet.getRange(row, nameCol).setValue(cleanName);
+  writePhone_(sheet, row, numberCol, phone);
+  return { ok: true, row: row, name: cleanName, number: phone };
 }
 
 function writeStatus_(data) {
@@ -509,6 +597,8 @@ function isPhoneColumn_(name) {
   if (/payment|cost|salary|expense|gross|nett/i.test(n)) return false;
   // "Spouse number" has no phone/mobile/cell token but must stay text (leading 0).
   if (/spouse\s*number/i.test(n)) return true;
+  // Money-sheet cellphone column. Not "ID number" / "Spouse number".
+  if (/^number$/i.test(n.trim())) return true;
   return /(phone|mobile|cell)/i.test(n);
 }
 
@@ -543,6 +633,7 @@ function writePlain_(sheet, row, col, name, value) {
     isDateColumn_(name) ||
     isPostalColumn_(name)
   ) {
+    if (isPhoneColumn_(name)) text = text.replace(/^'/, "");
     sheet.getRange(row, col).setNumberFormat("@").setValue(text);
     return;
   }
@@ -925,13 +1016,23 @@ function onLeadsEdit(e) {
     var row = startRow + r;
     var status = String(sheet.getRange(row, statusCol).getValue() || "").trim();
     if (!isNotifiableLeadStatus_(status)) continue;
+    var leadName = nameCol ? String(sheet.getRange(row, nameCol).getValue() || "") : "";
+    var leadNumber = numberCol ? String(sheet.getRange(row, numberCol).getValue() || "") : "";
+    // Copy even when WhatsApp was already sent — the Approved tab is a separate miss.
+    if (String(status).trim().toLowerCase() === "approved") {
+      try {
+        carryApprovedLead_(leadName, leadNumber);
+      } catch (carryErr) {
+        console.error(carryErr);
+      }
+    }
     var sent = sentCol ? String(sheet.getRange(row, sentCol).getValue() || "").trim() : "";
     if (/^yes$/i.test(sent) || /^sent/i.test(sent)) continue;
     notified.push({
       rowIndex: row,
       status: status,
-      name: nameCol ? String(sheet.getRange(row, nameCol).getValue() || "") : "",
-      number: numberCol ? String(sheet.getRange(row, numberCol).getValue() || "") : "",
+      name: leadName,
+      number: leadNumber,
     });
   }
   if (!notified.length) return;

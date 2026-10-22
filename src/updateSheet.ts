@@ -8,7 +8,8 @@
  *   npm run sheet-update -- --row 5 --set Status=Declined
  *   npm run sheet-update -- --insert-column-after C --header "Email sent" --dropdown Yes,No
  *
- * Defaults to the Leads tab gid=1730847217 on the money / loaded-clients spreadsheet.
+ * Defaults to the Leads tab gid=2126384446 on the money workbook.
+ * The Approved follow-up tab is gid=1730847217.
  * When Status is set to Approved/Declined, also runs WhatsApp notify for those rows
  * (unless --skip-whatsapp).
  */
@@ -17,7 +18,7 @@ import { isNotifiableLeadStatus } from "./whatsapp/phone.js";
 import { notifyPendingLeads } from "./whatsapp/leads.js";
 
 const DEFAULT_SPREADSHEET_ID = "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM";
-const DEFAULT_GID = 1730847217;
+const DEFAULT_GID = 2126384446;
 
 function parseAssign(raw: string): { key: string; value: string } {
   const eq = raw.indexOf("=");
