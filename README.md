@@ -283,7 +283,7 @@ Postal code: type the sheet value (and town from the address if needed), then se
 
 ## Leads WhatsApp (Approved / Declined)
 
-When a row on the Leads tab (`gid=1730847217`) is set to **Approved** or **Declined**, this repo can send a pre-approved WhatsApp via **your** API (no Meta/Twilio SDK).
+When a row on the Leads tab (`gid=2126384446`) is set to **Approved** or **Declined**, this repo can send a pre-approved WhatsApp via **your** API (no Meta/Twilio SDK). An Approved row is also copied onto the Approved follow-up tab (`gid=1730847217`) if that client is not already there. Paste `apps-script/Code.gs` and deploy a new web app version so the sheet edit does this immediately; the intake workflow also copies any recent misses.
 
 ```bash
 npm run notify-leads -- --dry-run   # scan only

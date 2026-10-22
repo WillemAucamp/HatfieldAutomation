@@ -160,7 +160,10 @@ export interface AppConfig {
   maxIntakeRows: number;
   /** Leads workbook (money sheet) — Status Approved/Declined → WhatsApp. */
   leadsSpreadsheetId: string;
+  /** Leads tab gid (Name / Number / Status). Not the Approved follow-up tab. */
   leadsSheetGid: number;
+  /** Approved follow-up tab on the money workbook. */
+  approvedSheetGid: number;
   leadsNameColumn: string;
   leadsNumberColumn: string;
   leadsStatusColumn: string;

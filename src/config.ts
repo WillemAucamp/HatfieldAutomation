@@ -185,7 +185,9 @@ export function loadConfig(): AppConfig {
       process.env.LOADED_SHEET_ID ||
       fileConfig.loadedSheetId ||
       "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM",
-    leadsSheetGid: parseInt(process.env.LEADS_SHEET_GID ?? "1730847217", 10) || 1730847217,
+    // Leads tab (Status). 1730847217 is the Approved follow-up tab, not Leads.
+    leadsSheetGid: parseInt(process.env.LEADS_SHEET_GID ?? "2126384446", 10) || 2126384446,
+    approvedSheetGid: parseInt(process.env.APPROVED_SHEET_GID ?? "1730847217", 10) || 1730847217,
     leadsNameColumn: process.env.LEADS_NAME_COLUMN || "Name",
     leadsNumberColumn: process.env.LEADS_NUMBER_COLUMN || "Number",
     leadsStatusColumn: process.env.LEADS_STATUS_COLUMN || "Status",

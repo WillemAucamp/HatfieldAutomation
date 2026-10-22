@@ -1,5 +1,10 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import {
+  planLoadedUpsert,
+  sheetTextPhone,
+  type LoadedIdentityRow,
+} from "./loadedClientIdentity.js";
 import type { ApplicantRecord, AppConfig, ColumnMapping } from "./types.js";
 
 const LOCAL_REFERENCES = "application-references.json";
@@ -323,30 +328,40 @@ function parseWebhookBody(body: string): WebhookJson {
   }
 }
 
-/**
- * Overwrite Number on an existing Name row. Uses the already-deployed writeStatus
- * action (it can target any spreadsheet + column) so this works without a redeploy.
- */
-async function updateLoadedNumberByName(
-  webhook: string,
-  config: AppConfig,
-  name: string,
-  number: string
-): Promise<boolean> {
-  const parsed = await postWebhookJson(webhook, {
-    action: "writeStatus",
-    sourceSheetId: config.loadedSheetId,
-    email: name,
-    emailColumn: config.loadedNameColumn,
-    status: number,
-    statusColumn: config.loadedNumberColumn,
-    timingColumn: config.loadedNumberColumn,
-  });
-  if (parsed.ok === false) {
-    if (/could not match/i.test(parsed.error || "")) return false;
-    throw new Error(parsed.error || "Loaded-clients name update failed");
+function cellValue(values: Record<string, string>, header: string): string {
+  const direct = values[header];
+  if (direct != null && String(direct).trim()) return String(direct).trim();
+  const found = Object.entries(values).find(
+    ([key]) => key.trim().toLowerCase() === header.trim().toLowerCase()
+  );
+  return found ? String(found[1] ?? "").trim() : "";
+}
+
+export interface MoneySheetRow extends LoadedIdentityRow {
+  status: string;
+}
+
+function loadedRowsFromWebhook(
+  rows: unknown,
+  nameColumn: string,
+  numberColumn: string,
+  statusColumn = ""
+): MoneySheetRow[] {
+  if (!Array.isArray(rows)) return [];
+  const loaded: MoneySheetRow[] = [];
+  for (const row of rows) {
+    const rec = row as { rowIndex?: number; values?: Record<string, string> };
+    const values = rec.values ?? {};
+    const rowIndex = Number(rec.rowIndex);
+    if (!Number.isFinite(rowIndex)) continue;
+    loaded.push({
+      rowIndex,
+      name: cellValue(values, nameColumn),
+      number: cellValue(values, numberColumn),
+      status: statusColumn ? cellValue(values, statusColumn) : "",
+    });
   }
-  return Boolean(parsed.row);
+  return loaded;
 }
 
 async function writeViaWebhook(
@@ -585,40 +600,151 @@ async function renumberViaSheetsApi(config: AppConfig, nrColumn: string): Promis
   return count;
 }
 
-/** Upsert Name + cellphone on the loaded-clients spreadsheet after a successful submit. */
+async function legacyAppendLoaded(
+  webhook: string,
+  config: AppConfig,
+  name: string,
+  number: string
+): Promise<LoadedClientWrite> {
+  const parsed = await postWebhookJson(webhook, {
+    action: "appendLoaded",
+    name,
+    number,
+    mobile: number,
+    loadedSheetId: config.loadedSheetId,
+    sheetGid: config.leadsSheetGid,
+    nameColumn: config.loadedNameColumn,
+    numberColumn: config.loadedNumberColumn,
+  });
+  if (parsed.ok === false) {
+    throw new Error(parsed.error || "Webhook appendLoaded returned ok=false");
+  }
+  const skipped = Boolean(parsed.skipped);
+  const wasUpdate = Boolean(parsed.updated);
+  console.log(
+    `  [sheetWriter] Loaded-clients sheet: ${name} → ${number}` +
+      (skipped ? " (already present)" : wasUpdate ? " (updated)" : "")
+  );
+  return { written: true, skipped, updated: wasUpdate };
+}
+
+/** Append one Name + cellphone row on a money-workbook tab. Number is forced to text. */
+export async function appendMoneySheetRow(
+  config: AppConfig,
+  sheetGid: number,
+  name: string,
+  phone: string
+): Promise<void> {
+  const webhook = config.loadedSheetWebhookUrl || config.sheetWebhookUrl;
+  if (!webhook) throw new Error("SHEET_WEBHOOK_URL is required");
+  const textPhone = sheetTextPhone(phone);
+  if (!name.trim() || !textPhone) throw new Error("name and number are required");
+  const parsed = await postWebhookJson(webhook, {
+    action: "updateSheet",
+    spreadsheetId: config.loadedSheetId || config.leadsSpreadsheetId,
+    sheetGid,
+    append: {
+      [config.loadedNameColumn]: name.trim(),
+      [config.loadedNumberColumn]: textPhone,
+    },
+  });
+  if (parsed.ok === false) {
+    throw new Error(parsed.error || "updateSheet append failed");
+  }
+}
+
+export async function readMoneySheetRows(
+  config: AppConfig,
+  sheetGid: number,
+  nameColumn: string,
+  numberColumn: string,
+  statusColumn = ""
+): Promise<MoneySheetRow[]> {
+  const webhook = config.loadedSheetWebhookUrl || config.sheetWebhookUrl;
+  if (!webhook) throw new Error("SHEET_WEBHOOK_URL is required");
+  const parsed = await postWebhookJson(webhook, {
+    action: "readSheet",
+    spreadsheetId: config.loadedSheetId || config.leadsSpreadsheetId,
+    sheetGid,
+    unprocessedOnly: false,
+  });
+  if (parsed.ok === false) {
+    throw new Error(parsed.error || "readSheet failed");
+  }
+  return loadedRowsFromWebhook(parsed.rows, nameColumn, numberColumn, statusColumn);
+}
+
+/**
+ * Upsert Name + cellphone on the Leads tab after a successful Seriti submit.
+ * Same person (even if Sheets dropped the leading 0) is not appended again.
+ * A different person who shares a cellphone is still appended.
+ */
 export async function appendLoadedClient(
   config: AppConfig,
   name: string,
   number: string
 ): Promise<LoadedClientWrite> {
+  const cleanName = String(name ?? "").trim().replace(/\s+/g, " ");
+  const phone = String(number ?? "").trim();
   const webhook = config.loadedSheetWebhookUrl || config.sheetWebhookUrl;
   if (webhook) {
+    let rows: LoadedIdentityRow[];
     try {
-      const updated = await updateLoadedNumberByName(webhook, config, name, number);
-      if (updated) {
-        console.log(`  [sheetWriter] Loaded-clients sheet: ${name} → ${number} (updated)`);
+      rows = await readMoneySheetRows(
+        config,
+        config.leadsSheetGid,
+        config.loadedNameColumn,
+        config.loadedNumberColumn
+      );
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      console.error(`  [sheetWriter] Leads read failed (${error}); falling back to appendLoaded`);
+      try {
+        return await legacyAppendLoaded(webhook, config, cleanName, phone);
+      } catch (fallbackErr) {
+        const message = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+        return { written: false, error: message };
+      }
+    }
+
+    const plan = planLoadedUpsert(rows, cleanName, phone);
+    try {
+      if (plan.action === "present") {
+        console.log(
+          `  [sheetWriter] Loaded-clients sheet: ${cleanName} → ${phone} (already present, row ${plan.rowIndex})`
+        );
+        return { written: true, skipped: true };
+      }
+      if (plan.action === "update") {
+        const parsed = await postWebhookJson(webhook, {
+          action: "updateSheet",
+          spreadsheetId: config.loadedSheetId,
+          sheetGid: config.leadsSheetGid,
+          updates: [
+            { row: plan.rowIndex, column: config.loadedNameColumn, value: plan.name },
+            {
+              row: plan.rowIndex,
+              column: config.loadedNumberColumn,
+              value: sheetTextPhone(plan.number),
+            },
+          ],
+        });
+        if (parsed.ok === false) {
+          throw new Error(parsed.error || "updateSheet failed");
+        }
+        console.log(
+          `  [sheetWriter] Loaded-clients sheet: ${plan.name} → ${plan.number} (updated row ${plan.rowIndex})`
+        );
         return { written: true, updated: true };
       }
-
-      const parsed = await postWebhookJson(webhook, {
-        action: "appendLoaded",
-        name,
-        number,
-        mobile: number,
-        loadedSheetId: config.loadedSheetId,
-        nameColumn: config.loadedNameColumn,
-        numberColumn: config.loadedNumberColumn,
-      });
-      if (parsed.ok === false) {
-        throw new Error(parsed.error || "Webhook appendLoaded returned ok=false");
+      if (plan.sharedPhoneName) {
+        console.log(
+          `  [sheetWriter] ${cleanName} shares a cellphone with ${plan.sharedPhoneName}; appending a separate Leads row`
+        );
       }
-      const skipped = Boolean(parsed.skipped);
-      const wasUpdate = Boolean(parsed.updated);
-      console.log(
-        `  [sheetWriter] Loaded-clients sheet: ${name} → ${number}` +
-          (skipped ? " (already present)" : wasUpdate ? " (updated)" : "")
-      );
-      return { written: true, skipped, updated: wasUpdate };
+      await appendMoneySheetRow(config, config.leadsSheetGid, cleanName, phone);
+      console.log(`  [sheetWriter] Loaded-clients sheet: ${cleanName} → ${phone}`);
+      return { written: true };
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       console.error(`  [sheetWriter] Loaded-clients webhook failed: ${error}`);
@@ -628,8 +754,8 @@ export async function appendLoadedClient(
 
   if (config.googleServiceAccountFile) {
     try {
-      await appendLoadedViaSheetsApi(config, name, number);
-      console.log(`  [sheetWriter] Loaded-clients sheet: ${name} → ${number}`);
+      await appendLoadedViaSheetsApi(config, cleanName, phone);
+      console.log(`  [sheetWriter] Loaded-clients sheet: ${cleanName} → ${phone}`);
       return { written: true };
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
@@ -663,7 +789,9 @@ async function appendLoadedViaSheetsApi(
   });
   const sheets = google.sheets({ version: "v4", auth });
   const meta = await sheets.spreadsheets.get({ spreadsheetId });
-  const sheetTitle = meta.data.sheets?.[0]?.properties?.title;
+  const tabs = meta.data.sheets ?? [];
+  const match = tabs.find((tab) => tab.properties?.sheetId === config.leadsSheetGid);
+  const sheetTitle = match?.properties?.title || tabs[0]?.properties?.title;
   if (!sheetTitle) throw new Error("Could not read the loaded-clients worksheet title");
 
   const headerRes = await sheets.spreadsheets.values.get({
@@ -700,25 +828,32 @@ async function appendLoadedViaSheetsApi(
   ]);
   const names = nameRes.data.values ?? [];
   const numbers = numberRes.data.values ?? [];
-  const nameKey = name.trim().toLowerCase();
-  const updates: { range: string; values: string[][] }[] = [];
-  for (let i = 0; i < names.length; i++) {
-    if (String(names[i]?.[0] ?? "").trim().toLowerCase() !== nameKey) continue;
-    updates.push({
-      range: `'${sheetTitle}'!${numberCol}${i + 2}`,
-      values: [[number]],
+  const rows: LoadedIdentityRow[] = [];
+  const length = Math.max(names.length, numbers.length);
+  for (let i = 0; i < length; i++) {
+    rows.push({
+      rowIndex: i + 2,
+      name: String(names[i]?.[0] ?? ""),
+      number: String(numbers[i]?.[0] ?? ""),
     });
   }
-  if (updates.length > 0) {
+  const plan = planLoadedUpsert(rows, name, number);
+  if (plan.action === "present") return;
+  if (plan.action === "update") {
     await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId,
-      requestBody: { valueInputOption: "USER_ENTERED", data: updates },
+      requestBody: {
+        valueInputOption: "RAW",
+        data: [
+          {
+            range: `'${sheetTitle}'!${numberCol}${plan.rowIndex}`,
+            values: [[plan.number]],
+          },
+        ],
+      },
     });
     return;
   }
-
-  const already = numbers.some((row) => String(row[0] ?? "").trim() === number);
-  if (already) return;
 
   const rowRes = await sheets.spreadsheets.values.get({
     spreadsheetId,

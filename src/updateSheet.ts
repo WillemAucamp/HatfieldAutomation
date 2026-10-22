@@ -8,16 +8,18 @@
  *   npm run sheet-update -- --row 5 --set Status=Declined
  *   npm run sheet-update -- --insert-column-after C --header "Email sent" --dropdown Yes,No
  *
- * Defaults to the Leads tab gid=1730847217 on the money / loaded-clients spreadsheet.
+ * Defaults to the Leads tab gid=2126384446 on the money workbook.
+ * The Approved follow-up tab is gid=1730847217.
  * When Status is set to Approved/Declined, also runs WhatsApp notify for those rows
  * (unless --skip-whatsapp).
  */
+import { carryRecentApprovedLeads } from "./carryApprovedLeads.js";
 import { loadConfig } from "./config.js";
 import { isNotifiableLeadStatus } from "./whatsapp/phone.js";
 import { notifyPendingLeads } from "./whatsapp/leads.js";
 
 const DEFAULT_SPREADSHEET_ID = "1V8re1qmdC0AXyDKt9G3gQxcqmn3q9hAJeM_YpUkjRLM";
-const DEFAULT_GID = 1730847217;
+const DEFAULT_GID = 2126384446;
 
 function parseAssign(raw: string): { key: string; value: string } {
   const eq = raw.indexOf("=");
@@ -264,6 +266,41 @@ async function main(): Promise<void> {
       }
     }
   }
+
+  if (marksApproved(set, updates)) {
+    try {
+      const carried = await carryRecentApprovedLeads(config);
+      console.log(
+        carried.length
+          ? `Approved tab: carried ${carried.join(", ")}`
+          : "Approved tab already has the recent Approved leads."
+      );
+    } catch (err) {
+      console.error(
+        `Approved-tab carry failed: ${err instanceof Error ? err.message : err}`
+      );
+    }
+  }
+}
+
+function marksApproved(
+  set: Record<string, string> | undefined,
+  updates: Array<Record<string, unknown>>
+): boolean {
+  if (
+    set &&
+    Object.entries(set).some(
+      ([key, value]) => /^status$/i.test(key) && value.trim().toLowerCase() === "approved"
+    )
+  ) {
+    return true;
+  }
+  return updates.some((item) => {
+    const column = String(item.column ?? item.header ?? "");
+    const value = String(item.value ?? "").trim().toLowerCase();
+    if (value !== "approved") return false;
+    return !column || /^status$/i.test(column);
+  });
 }
 
 main().catch((err) => {

@@ -50,7 +50,7 @@ Each run:
 3. npm run doctor
 4. If doctor says the Apps Script deploy is old, STOP and report that.
 5. Run: npm run notify-leads -- --once
-   That reads the Leads tab (gid 1730847217), finds rows where Status is Approved or Declined and "WhatsApp sent" is empty, POSTs Meta Cloud API template messages, then marks "WhatsApp sent" = Yes.
+   That reads the Leads tab (gid 2126384446), finds rows where Status is Approved or Declined and "WhatsApp sent" is empty, POSTs Meta Cloud API template messages, then marks "WhatsApp sent" = Yes.
 6. Reply with: scanned, pending, sent, skipped, failed. Do not print phone numbers or API keys in full.
 
 If there is nothing to send, say so and do nothing else.
