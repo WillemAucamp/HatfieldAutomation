@@ -132,12 +132,12 @@ function samePerson_(a, b) {
 }
 
 function sheetByGid_(ss, gid) {
+  if (gid == null || gid === "") return ss.getSheets()[0];
   var id = Number(gid);
-  if (!isNaN(id)) {
-    var byId = ss.getSheetById(id);
-    if (byId) return byId;
-  }
-  return ss.getSheets()[0];
+  if (isNaN(id)) throw new Error("No sheet with gid " + gid);
+  var byId = ss.getSheetById(id);
+  if (!byId) throw new Error("No sheet with gid " + id);
+  return byId;
 }
 
 function appendLoaded_(data) {
@@ -190,6 +190,48 @@ function appendLoaded_(data) {
   sheet.getRange(appendRow, nameCol).setValue(name);
   writePhone_(sheet, appendRow, numberCol, normalizeSaMobile_(number) || number);
   return { ok: true, row: appendRow, name: name, number: number };
+}
+
+/**
+ * updateSheet writes do not fire onEdit. If this write set Leads Status to Approved,
+ * copy that client onto the Approved tab.
+ */
+function maybeCarryApprovedFromWrites_(sheet, written) {
+  if (!sheet || sheet.getSheetId() !== LEADS_SHEET_GID) return;
+  var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  var statusCol = headers.indexOf(LEADS_STATUS_HEADER) + 1;
+  var nameCol = headers.indexOf("Name") + 1;
+  var numberCol = headers.indexOf("Number") + 1;
+  if (!statusCol || !nameCol || !numberCol) return;
+
+  var rows = {};
+  for (var i = 0; i < written.length; i++) {
+    var item = written[i] || {};
+    var rowNum = Number(item.row) || 0;
+    var colName = String(item.column || "");
+    if (item.a1) {
+      var colLetter = String(item.a1).replace(/[0-9]/g, "");
+      rowNum = parseInt(String(item.a1).replace(/\D/g, ""), 10) || 0;
+      if (columnLetterToIndex_(colLetter) !== statusCol) continue;
+      colName = LEADS_STATUS_HEADER;
+    }
+    if (!rowNum || !/^status$/i.test(colName)) continue;
+    if (String(item.value || "").trim().toLowerCase() !== "approved") continue;
+    rows[rowNum] = true;
+  }
+
+  for (var key in rows) {
+    if (!rows.hasOwnProperty(key)) continue;
+    var r = Number(key);
+    try {
+      carryApprovedLead_(
+        String(sheet.getRange(r, nameCol).getValue() || ""),
+        String(sheet.getRange(r, numberCol).getValue() || "")
+      );
+    } catch (carryErr) {
+      console.error(carryErr);
+    }
+  }
 }
 
 /**
@@ -440,6 +482,9 @@ function updateSheet_(data) {
         "Nothing to write. Provide updates[], find+set, append, insertColumn, or dataValidation.",
     };
   }
+
+  // Webhook edits do not fire onEdit, so copy Approved leads here too.
+  maybeCarryApprovedFromWrites_(sheet, written);
 
   return {
     ok: true,

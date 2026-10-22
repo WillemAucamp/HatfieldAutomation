@@ -13,6 +13,7 @@
  * When Status is set to Approved/Declined, also runs WhatsApp notify for those rows
  * (unless --skip-whatsapp).
  */
+import { carryRecentApprovedLeads } from "./carryApprovedLeads.js";
 import { loadConfig } from "./config.js";
 import { isNotifiableLeadStatus } from "./whatsapp/phone.js";
 import { notifyPendingLeads } from "./whatsapp/leads.js";
@@ -265,6 +266,41 @@ async function main(): Promise<void> {
       }
     }
   }
+
+  if (marksApproved(set, updates)) {
+    try {
+      const carried = await carryRecentApprovedLeads(config);
+      console.log(
+        carried.length
+          ? `Approved tab: carried ${carried.join(", ")}`
+          : "Approved tab already has the recent Approved leads."
+      );
+    } catch (err) {
+      console.error(
+        `Approved-tab carry failed: ${err instanceof Error ? err.message : err}`
+      );
+    }
+  }
+}
+
+function marksApproved(
+  set: Record<string, string> | undefined,
+  updates: Array<Record<string, unknown>>
+): boolean {
+  if (
+    set &&
+    Object.entries(set).some(
+      ([key, value]) => /^status$/i.test(key) && value.trim().toLowerCase() === "approved"
+    )
+  ) {
+    return true;
+  }
+  return updates.some((item) => {
+    const column = String(item.column ?? item.header ?? "");
+    const value = String(item.value ?? "").trim().toLowerCase();
+    if (value !== "approved") return false;
+    return !column || /^status$/i.test(column);
+  });
 }
 
 main().catch((err) => {

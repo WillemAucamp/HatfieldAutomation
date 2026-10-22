@@ -5,6 +5,7 @@
  * Buhle Masinga (automation row 483) was approved on Leads and never copied
  * with the rest of that batch, so F&I working the Approved tab missed her.
  */
+import { pathToFileURL } from "node:url";
 import { loadConfig } from "./config.js";
 import { approvedLeadsToCarry } from "./loadedClientIdentity.js";
 import { appendMoneySheetRow, readMoneySheetRows } from "./sheetWriter.js";
@@ -51,7 +52,13 @@ async function main(): Promise<void> {
   console.log(`Carried ${carried.length} approved lead(s) onto the Approved tab.`);
 }
 
-main().catch((err) => {
-  console.error(err instanceof Error ? err.message : err);
-  process.exit(1);
-});
+const invokedDirectly = process.argv[1]
+  ? import.meta.url === pathToFileURL(process.argv[1]).href
+  : false;
+
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
+}

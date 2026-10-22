@@ -101,7 +101,7 @@ jobs:
           echo "mode=${MODE} dryRun=${DRY_RUN} rowFilter=${ROW_FILTER:-}"
           AUTO_LOAD=true npm run dev
       - name: Copy recent Approved leads onto the Approved tab
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.dryRun != 'true' }}
+        if: ${{ always() && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
         env:
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
         run: npx tsx src/carryApprovedLeads.ts
