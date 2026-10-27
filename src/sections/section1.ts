@@ -2,9 +2,11 @@ import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
 import {
   clickNext,
+  dismissCookieBanners,
   fillRadioGroupsByAnswer,
   fillSelectByVisibleText,
   screenshotSection,
+  waitForFinanceFormReady,
   waitForSelectorVisible,
 } from "../formUtils.js";
 
@@ -14,23 +16,13 @@ export async function runSection1(ctx: FillContext): Promise<void> {
   const { page, form, config } = ctx;
   const data = ctx.applicant;
 
-  // Cookie banners can cover/obscure the first step controls.
-  await page
-    .getByRole("button", { name: /got it|accept|accept cookies/i })
-    .first()
-    .click({ timeout: 5000 })
-    .catch(() => undefined);
+  await dismissCookieBanners(page);
 
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before", config);
 
-  const emailAlreadyVisible = await form
-    .locator('[id="txtEmailAddress"]')
-    .first()
-    .isVisible()
-    .catch(() => false);
+  const start = await waitForFinanceFormReady(form);
 
-  if (!emailAlreadyVisible) {
-    // Sub-step 1: Applicant type (radio-style label click)
+  if (start === "applicant-type") {
     const applicantTypePatterns: RegExp[] = [
       /Private Individual/i,
       /Private/i,
@@ -40,10 +32,9 @@ export async function runSection1(ctx: FillContext): Promise<void> {
     for (const re of applicantTypePatterns) {
       const label = form.locator("label").filter({ hasText: re }).first();
       try {
-        // The applicant-type control can appear slightly late depending on network timing.
-        await label.waitFor({ state: "visible", timeout: 15000 });
+        await label.waitFor({ state: "visible", timeout: 8000 });
         await label.scrollIntoViewIfNeeded().catch(() => undefined);
-        await label.click({ timeout: 15000 });
+        await label.click({ timeout: 8000 });
         clicked = true;
         break;
       } catch {
@@ -51,37 +42,39 @@ export async function runSection1(ctx: FillContext): Promise<void> {
       }
     }
     if (!clicked) {
-      // As a fallback, try clicking a radio by accessible name.
       const radio = form
         .getByRole("radio", { name: /Private Individual|Private|Individual/i })
         .first();
       try {
-        await radio.waitFor({ state: "visible", timeout: 15000 });
+        await radio.waitFor({ state: "visible", timeout: 8000 });
         await radio.scrollIntoViewIfNeeded().catch(() => undefined);
-        await radio.click({ timeout: 15000 });
+        await radio.click({ timeout: 8000 });
         clicked = true;
       } catch {
         // ignore
       }
     }
-  if (!clicked) {
-    // Last-resort: click the first visible radio control on the page.
-    // Some form variants may not expose stable accessible names.
-    const anyRadios = form.getByRole("radio").filter({ visible: true });
-    if ((await anyRadios.count()) > 0) {
-      await anyRadios.first().scrollIntoViewIfNeeded().catch(() => undefined);
-      await anyRadios.first().click({ timeout: 15000 });
-      clicked = true;
-    }
-  }
     if (!clicked) {
-      throw new Error('Applicant type selector not found (expected "Private Individual").');
+      const anyRadios = form.getByRole("radio").filter({ visible: true });
+      if ((await anyRadios.count()) > 0) {
+        await anyRadios.first().scrollIntoViewIfNeeded().catch(() => undefined);
+        await anyRadios.first().click({ timeout: 8000 });
+        clicked = true;
+      }
+    }
+    if (!clicked) {
+      throw new Error(
+        "Seriti finance form did not open (applicant type visible but not clickable). Not a sheet cell. Clear Status, run load-only."
+      );
     }
 
     if (!config.dryRun) {
       await clickNext(form, config);
-      await waitForSelectorVisible(form, '[id="txtEmailAddress"]');
     }
+  }
+
+  if (start === "email" || !config.dryRun) {
+    await waitForSelectorVisible(form, '[id="txtEmailAddress"]');
   }
 
   await screenshotSection(page, form, ctx.screenshotDir, `${SECTION}-step2`, "before", config);

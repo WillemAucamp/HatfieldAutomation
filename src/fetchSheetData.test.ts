@@ -557,9 +557,11 @@ describe("fetchSheetData", () => {
     const selfEmployed = employed.slice();
     selfEmployed[15] = "RETAIL";
     selfEmployed[16] = "Self-employed";
+    selfEmployed[18] = "None";
     const mixedCase = employed.slice();
     mixedCase[15] = "BUSINESS SERVICES";
     mixedCase[16] = "SELF Employed";
+    mixedCase[18] = "Some Business";
     const csv = [headers, employed, selfEmployed, mixedCase]
       .map((cols) => cols.map((c) => `"${c.replaceAll('"', '""')}"`).join(","))
       .join("\n");
@@ -586,18 +588,22 @@ describe("fetchSheetData", () => {
     assert.equal(employedRow.occupation, "CLERK");
     assert.notEqual(employedRow.employerProvince, employedRow.province);
 
+    assert.equal(employedRow.employerName, "Test Shop");
     assert.equal(selfRow.industry, "BUSINESS SERVICES");
     assert.equal(selfRow.occupation, "SELF EMPLOYED (NON PROFESSIONAL)");
+    assert.equal(selfRow.employerName, "Ada Lovelace");
     assert.equal(selfRow.employerAddress, "12 Main Road Pretoria");
     assert.equal(selfRow.employerPostalCode, "0083");
     assert.equal(selfRow.employerProvince, "Gauteng");
     assert.equal(selfRow.employerPhone, "0821234567");
+    assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_EMPTY"));
     assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_ADDRESS_EMPTY"));
     assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_POSTAL_EMPTY"));
     assert.ok(!selfRow.errors.some((e) => e.code === "EMPLOYER_PROVINCE_EMPTY"));
 
     assert.equal(mixedRow.industry, "BUSINESS SERVICES");
     assert.equal(mixedRow.occupation, "SELF EMPLOYED (NON PROFESSIONAL)");
+    assert.equal(mixedRow.employerName, "Ada Lovelace");
   });
 
   it("remaps sheet Occupation LABOURER (SKILLED) to OPERATOR at load", async () => {

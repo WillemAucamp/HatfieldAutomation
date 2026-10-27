@@ -2,6 +2,7 @@ import { buildEmployerSearchPrompt, buildSystemPrompt, buildUserPrompt } from ".
 import type { IntakeMapping } from "./mapping.js";
 import { llmColumns } from "./mapping.js";
 import { isMissingValue, transformMobile } from "../transforms.js";
+import { isSelfEmployed } from "./seritiOptions.js";
 
 export interface GeminiClientOptions {
   apiKey: string;
@@ -250,7 +251,15 @@ export async function enrichWithGemini(
   }
 
   let fields = result.fields;
-  if (needsEmployerPhone(fields) || needsEmployerSearch(fields, mapping)) {
+  const selfEmployed = isSelfEmployed(
+    formText,
+    fields.Occupation ?? "",
+    fields["Employer name"] ?? ""
+  );
+  if (
+    !selfEmployed &&
+    (needsEmployerPhone(fields) || needsEmployerSearch(fields, mapping))
+  ) {
     fields = await enrichEmployerWithSearch(mapping, formText, options, fields);
   }
 

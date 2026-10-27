@@ -9,7 +9,70 @@ import {
 import { normalizeAddressLine } from "./transforms.js";
 import { randomDelay } from "./utils.js";
 
+export type FormScope = Page | Frame;
+
 const FORM_FRAME_PATTERN = /seritisolutions/i;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Cookie overlay can sit on top of Apply for Finance and the Seriti iframe. */
+export async function dismissCookieBanners(page: Page): Promise<void> {
+  const locators = [
+    page.locator("button").filter({ hasText: /got it/i }),
+    page.getByRole("button", { name: /got it|accept cookies/i }),
+  ];
+  for (const locator of locators) {
+    const button = locator.first();
+    if (await button.isVisible({ timeout: 4000 }).catch(() => false)) {
+      await button.click({ timeout: 5000 }).catch(() => undefined);
+      await sleep(400);
+      return;
+    }
+  }
+}
+
+/**
+ * Seriti sometimes skips the applicant-type radio and opens on email, and the
+ * email field can exist in the DOM while a loader/404 placeholder is showing.
+ * Wait until a usable first step is actually visible.
+ */
+export async function waitForFinanceFormReady(
+  form: FormScope,
+  timeoutMs = 25000
+): Promise<"email" | "applicant-type"> {
+  const deadline = Date.now() + timeoutMs;
+  const email = form.locator('[id="txtEmailAddress"]').first();
+  const applicantLabel = form.locator("label").filter({ hasText: /Private Individual/i }).first();
+  const applicantRadio = form.getByRole("radio", { name: /Private Individual/i }).first();
+  const error404 = form.locator(".error404").first();
+  while (Date.now() < deadline) {
+    const emailVisible = await email.isVisible().catch(() => false);
+    const emailPresent = (await email.count().catch(() => 0)) > 0;
+    const showing404 = await error404.isVisible().catch(() => false);
+    if (emailVisible || (emailPresent && !showing404)) return "email";
+    if (
+      (await applicantLabel.isVisible().catch(() => false)) ||
+      (await applicantRadio.isVisible().catch(() => false))
+    ) {
+      return "applicant-type";
+    }
+    await sleep(200);
+  }
+  const body = ((await form.locator("body").innerText().catch(() => "")) || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+  const hint = " Not a sheet cell. Clear Status, run load-only.";
+  if (/\b404\b/.test(body)) {
+    throw new Error(`Seriti finance form did not open (iframe 404).${hint}`);
+  }
+  throw new Error(
+    `Seriti finance form did not open (no applicant type or email field).${hint}` +
+      (body ? ` Visible text: ${body}` : "")
+  );
+}
 
 export async function waitForFormFrame(page: Page, timeoutMs = 30000): Promise<Frame> {
   const deadline = Date.now() + timeoutMs;
@@ -28,17 +91,12 @@ export async function clickApplyForFinance(page: Page, config: AppConfig): Promi
   const applyLink = page.getByRole("link", { name: /apply for finance/i }).first();
   const applyButton = page.getByRole("button", { name: /apply for finance/i }).first();
 
-  // Cookie banners may block the click transition into the form.
-  await page
-    .getByRole("button", { name: /got it|accept|accept cookies/i })
-    .first()
-    .click({ timeout: 5000 })
-    .catch(() => undefined);
+  await dismissCookieBanners(page);
+  await sleep(500);
 
-  // Sometimes the initial click doesn't transition into the actual application form.
-  // Retry a few times and only return once the applicant type control is visible in-frame.
-  let lastFrame: Frame | undefined;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  // One Apply click, then wait. Re-clicking while the SPA is routing resets
+  // the iframe back to a 404 placeholder.
+  const clickApply = async () => {
     if (await applyLink.isVisible({ timeout: 5000 }).catch(() => false)) {
       await applyLink.click().catch(() => undefined);
     } else if (await applyButton.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -46,39 +104,29 @@ export async function clickApplyForFinance(page: Page, config: AppConfig): Promi
     } else {
       await page.getByText(/apply for finance/i).first().click().catch(() => undefined);
     }
-
     await randomDelay(config);
+  };
+
+  let lastError = "Finance application iframe did not load";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    if (!page.frame({ url: FORM_FRAME_PATTERN }) || attempt > 1) {
+      await clickApply();
+    }
+    let frame: Frame;
     try {
-      lastFrame = await waitForFormFrame(page);
-    } catch (e) {
-      // If the iframe didn't appear, try the next click attempt.
+      frame = await waitForFormFrame(page);
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
       continue;
     }
-
-    const applicantTypeLabel = lastFrame
-      .locator("label")
-      .filter({ hasText: /Private Individual|Private|Individual/i })
-      .first();
-    const applicantTypeRadio = lastFrame
-      .getByRole("radio", { name: /Private Individual|Private|Individual/i })
-      .first();
-
-    if (
-      (await applicantTypeLabel.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false)) ||
-      (await applicantTypeRadio
-        .waitFor({ state: "visible", timeout: 5000 })
-        .then(() => true)
-        .catch(() => false))
-    ) {
-      return lastFrame;
+    try {
+      await waitForFinanceFormReady(frame, 25000);
+      return frame;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
     }
   }
-
-  if (!lastFrame) {
-    // Final fallback (will throw if iframe never loads)
-    return waitForFormFrame(page);
-  }
-  return lastFrame;
+  throw new Error(lastError);
 }
 
 export async function waitForHeading(form: FormScope, pattern: RegExp, timeoutMs = 20000): Promise<void> {
@@ -299,5 +347,3 @@ export async function clickNextAndWait(
     );
   }
 }
-
-export type FormScope = Page | Frame;
