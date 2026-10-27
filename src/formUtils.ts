@@ -21,7 +21,7 @@ function sleep(ms: number): Promise<void> {
 export async function dismissCookieBanners(page: Page): Promise<void> {
   const locators = [
     page.locator("button").filter({ hasText: /got it/i }),
-    page.getByRole("button", { name: /got it|accept cookies/i }),
+    page.getByRole("button", { name: /^(got it|accept cookies|accept)$/i }),
   ];
   for (const locator of locators) {
     const button = locator.first();
@@ -48,16 +48,15 @@ export async function waitForFinanceFormReady(
   const applicantRadio = form.getByRole("radio", { name: /Private Individual/i }).first();
   const error404 = form.locator(".error404").first();
   while (Date.now() < deadline) {
+    const applicantVisible =
+      (await applicantLabel.isVisible().catch(() => false)) ||
+      (await applicantRadio.isVisible().catch(() => false));
+    if (applicantVisible) return "applicant-type";
     const emailVisible = await email.isVisible().catch(() => false);
+    if (emailVisible) return "email";
     const emailPresent = (await email.count().catch(() => 0)) > 0;
     const showing404 = await error404.isVisible().catch(() => false);
-    if (emailVisible || (emailPresent && !showing404)) return "email";
-    if (
-      (await applicantLabel.isVisible().catch(() => false)) ||
-      (await applicantRadio.isVisible().catch(() => false))
-    ) {
-      return "applicant-type";
-    }
+    if (emailPresent && !showing404) return "email";
     await sleep(200);
   }
   const body = ((await form.locator("body").innerText().catch(() => "")) || "")
