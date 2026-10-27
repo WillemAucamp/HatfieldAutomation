@@ -97,7 +97,7 @@ At ~8 rows/day, **B1 is enough**.
 1. Fake Form submit → Workflow A fires → automation sheet gains a 35-col row with blank Status.  
 2. `/load` runs → Seriti fill → Status gets `ZAHTVW…` or `error …`.  
 3. Disable Cursor always-on agent (`config/cursor-automation.md` is obsolete for production).  
-4. Disable or delete `.github/workflows/intake-to-melrose.yml` schedule if it would double-run.
+4. Disable or delete `.github/workflows/intake-to-melrose.yml` schedule (`*/5 * * * *`) if it would double-run.
 
 ## API quick reference
 

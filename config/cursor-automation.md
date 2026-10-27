@@ -2,7 +2,7 @@
 
 **Do not use this for production.** It burns Cursor tokens on a 5-minute schedule.
 
-Production path is a **manual GitHub Actions click** (optional Sheet menu). See [`config/YOU_DO.md`](./YOU_DO.md).
+Production path is GitHub Actions **Intake to Melrose**: free 5-minute cron on `main`, plus the same manual click (optional Sheet menu). See [`config/YOU_DO.md`](./YOU_DO.md).
 
 n8n + `trigger-server` is an unused leftover ([`config/n8n-setup.md`](./n8n-setup.md)).
 
