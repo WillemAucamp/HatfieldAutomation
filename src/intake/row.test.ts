@@ -171,10 +171,26 @@ describe("output row contract", () => {
     );
     assert.equal(values["Industry (AI based on employer)"], "BUSINESS SERVICES");
     assert.equal(values.Occupation, "SELF EMPLOYED (NON PROFESSIONAL)");
+    assert.equal(values["Employer name"], "Ada Lovelace");
     assert.equal(values["Employer street address (online search)"], "12 Main Road Pretoria");
     assert.equal(values["Employer postal code (online search)"], "0083");
     assert.equal(values["Employer province (online search)"], "Gauteng");
     assert.equal(values["Employer telephone number (online search)"], "0821234567");
+  });
+
+  it("replaces Form company None with the client name when self-employed", () => {
+    const values = buildOutputValues(
+      mapping,
+      { "Employer name": "None" },
+      {
+        ...intakeAda,
+        Employment: "Self-employed",
+        "Name of Company you work for?": "None",
+      },
+      new Date(2026, 9, 5)
+    );
+    assert.equal(values["Employer name"], "Ada Lovelace");
+    assert.equal(values.Occupation, "SELF EMPLOYED (NON PROFESSIONAL)");
   });
 
   it("remaps sheet-only SELF Employed occupation onto the Seriti menu", () => {
@@ -183,7 +199,8 @@ describe("output row contract", () => {
         "Industry (AI based on employer)": "BUSINESS SERVICES",
         Occupation: "SELF Employed",
         "Employee level": "MANAGEMENT",
-        "Employer name": "Retail",
+        "Full name": "Ada Lovelace",
+        "Employer name": "None",
         "Address line": "Daffodilweg 57",
         "Postal code": "8801",
         Province: "Northern Cape",
@@ -193,6 +210,7 @@ describe("output row contract", () => {
     );
     assert.equal(fixed.Occupation, "SELF EMPLOYED (NON PROFESSIONAL)");
     assert.equal(fixed["Industry (AI based on employer)"], "BUSINESS SERVICES");
+    assert.equal(fixed["Employer name"], "Ada Lovelace");
   });
 
   it("overwrites employer address with residential when the client is self-employed", () => {

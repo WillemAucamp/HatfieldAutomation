@@ -73,6 +73,20 @@ describe("classifyRuntimeError", () => {
       classifyRuntimeError("Work & Salary Next did not open the next page. Waiting for [id=\"ddlBank\"]", 4),
       "WORK_NEXT_FAILED"
     );
+    assert.equal(
+      classifyRuntimeError(
+        'Applicant type selector not found (expected "Private Individual").',
+        0
+      ),
+      "FORM_START_FAILED"
+    );
+    assert.equal(
+      classifyRuntimeError(
+        "Seriti finance form did not open (iframe 404). Not a sheet cell. Clear Status, run load-only.",
+        0
+      ),
+      "FORM_START_FAILED"
+    );
   });
 });
 
@@ -94,6 +108,15 @@ describe("formatRuntimeErrorCell", () => {
     );
     assert.match(cell, /^error WORK_NEXT_FAILED:/);
     assert.match(cell, /Not telephone\/bank/);
+  });
+
+  it("explains FORM_START_FAILED is not applicant sheet data", () => {
+    const cell = formatRuntimeErrorCell(
+      'Applicant type selector not found (expected "Private Individual").',
+      0
+    );
+    assert.match(cell, /^error FORM_START_FAILED:/);
+    assert.match(cell, /Not a sheet cell/);
   });
 });
 

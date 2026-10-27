@@ -276,6 +276,7 @@ The only automatic rewrites are known Google Sheets artefacts:
 | `DROPDOWN_OPTION_MISSING` | A Seriti menu had no match. Status now names the field and value. **Bank / Account type / Province** = change that sheet column. Other menus are form labels, not sheet cells |
 | `FINISH_NO_REFERENCE` | Finish clicked but no `ZAHTVW` popup |
 | `FORM_IFRAME_TIMEOUT` | Finance iframe did not load |
+| `FORM_START_FAILED` | Seriti opened but the first step (email / applicant type) never appeared — loader or 404, **not** a sheet cell. Clear Status and retry load-only |
 | `SUBMIT_FAILED` | Unclassified runtime failure |
 
 Fix the named sheet cell (or ignore the row if Status says “Not a sheet cell”), then clear **Status** and re-run load-only. Error codes are written to **Status** as `error CODE: what to do`, and also stored in `run-log.json` / `run-log.csv`.

@@ -48,6 +48,8 @@ export function classifyRuntimeError(error: string, sectionReached: number): str
   const text = error.replace(/\s+/g, " ");
 
   if (/iframe did not load/i.test(text)) return "FORM_IFRAME_TIMEOUT";
+  if (/Seriti finance form did not open/i.test(text)) return "FORM_START_FAILED";
+  if (/Applicant type selector not found/i.test(text)) return "FORM_START_FAILED";
   if (/apply for finance/i.test(text)) return "APPLY_CLICK_FAILED";
   if (/Finish was clicked but no application reference/i.test(text)) return "FINISH_NO_REFERENCE";
   if (/angucomplete-row/i.test(text)) return "POSTAL_AUTOCOMPLETE_FAILED";
@@ -124,6 +126,12 @@ export function humanHintForError(error: string, code: string): string {
   }
   if (code === "POSTAL_AUTOCOMPLETE_FAILED") {
     return "Postal code did not match Seriti’s suburb list. Fix Postal code/address, clear Status, run load-only.";
+  }
+  if (code === "FORM_START_FAILED") {
+    return (
+      "Seriti did not open the finance form (loader/404, not applicant data)." +
+      " Not a sheet cell. Clear Status, run load-only."
+    );
   }
   return text.slice(0, 160);
 }

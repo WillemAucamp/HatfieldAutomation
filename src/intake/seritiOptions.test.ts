@@ -69,7 +69,27 @@ describe("seriti option mapping", () => {
     assert.equal(mirrored.employerAddress, "12 Main Road");
     assert.equal(mirrored.employerPostal, "0083");
     assert.equal(mirrored.employerProvince, "Gauteng");
-    assert.equal(mirrored.employerName, "My Shop");
+    assert.equal(mirrored.employerName, "Ada Lovelace");
+  });
+
+  it("uses the person's name when the Form company field is None", () => {
+    const mirrored = mirrorSelfEmployedEmployerFromPersonal({
+      fullName: "Mlungisi Zulu",
+      mobile: "0786024207",
+      residentialAddress: "Dalton road Durban",
+      residentialPostal: "4001",
+      residentialProvince: "KZN",
+      employerName: "None",
+      employerPhone: "",
+      employerAddress: "",
+      employerPostal: "",
+      employerProvince: "",
+    });
+    assert.equal(mirrored.employerName, "Mlungisi Zulu");
+    assert.equal(mirrored.employerPhone, "0786024207");
+    assert.equal(mirrored.employerAddress, "Dalton road Durban");
+    assert.equal(mirrored.employerPostal, "4001");
+    assert.equal(mirrored.employerProvince, "KZN");
   });
 
   it("detects self-employed Employment answers", () => {

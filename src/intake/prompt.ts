@@ -21,7 +21,7 @@ Today's date for relative calculations is ${todayStamp}.
 - Expense amounts MUST be numeric when the Form gives a figure. Prefer the dedicated Food / Cellphone / Accounts Form columns when present. If the Form has no expenses, leave those keys empty.
 - Industry and Employee level MUST be copied exactly from the Seriti lists below (character-for-character). Never invent free-text labels like "Consulting", "Entry Level", or "Manager".
 - If no Industry or Level fits, leave that key "".
-- Employer telephone, street, postal code, and province: leave empty in this pass if not certain. A separate google_search pass finds the employer telephone. Do not copy the client's home address, postal code, province, or mobile into employer fields. Code copies the residential address onto the employer address only when the client is self-employed.
+- Employer telephone, street, postal code, and province: leave empty in this pass if not certain. A separate google_search pass finds the employer telephone. Do not copy the client's home address, postal code, province, or mobile into employer fields. Code copies the client's name, mobile, and residential address onto employer fields when the client is self-employed.
 - Postal code: prefer a real South African 4-digit code for the client's city/suburb. If you cannot determine it, leave "". Never use a generic substitute code.
 - Every key below must be present. Use "" when unknown. Do not output "Unknown". Do not reuse the client's first name or any other filled field as a stand-in.
 
@@ -92,8 +92,8 @@ ${strategy}
 [HARD RULES]
 - Search the business name online before answering.
 - Telephone must be a real number found (or clearly listed) for that employer — South African landline or mobile, preferably 0XXXXXXXXX.
-- Do NOT copy the client's personal mobile, home address, home postal code, or home province into employer fields. Residential address is copied onto the employer address in code only when the client is self-employed.
-- If the Form says self-employed / own business with no public listing, leave employer telephone "". Code copies the client's mobile onto the work telephone when self-employed.
+- Do NOT copy the client's personal mobile, home address, home postal code, or home province into employer fields. Code copies the client's name, mobile, and residential address onto employer fields when the client is self-employed.
+- If the Form says self-employed / own business with no public listing, leave employer telephone "". Do not search for a business. Code copies the client's mobile onto the work telephone when self-employed.
 - Prefer switchboard / main contact numbers over personal staff mobiles when both appear.
 - Return ONLY a JSON object (no markdown, no commentary).
 

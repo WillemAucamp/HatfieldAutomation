@@ -25,6 +25,7 @@ import {
 import { matchIntakeRow } from "./intake/matchIntake.js";
 import { loadIntakeMapping } from "./intake/mapping.js";
 import { applyDeterministicFixes, buildOutputValues } from "./intake/row.js";
+import { clientSelfEmployed } from "./intake/seritiOptions.js";
 import { readSheetRows } from "./intake/sheets.js";
 import { formatErrorCell } from "./outcome.js";
 import {
@@ -249,7 +250,17 @@ async function main(): Promise<void> {
     }
 
     const employerName = String(next["Employer name"] || "").trim();
-    if (needsEmployerPhone(next) && employerName && !dryRun) {
+    const selfEmployed = clientSelfEmployed({
+      employment: intake?.Employment,
+      jobTitle: intake?.["Job title?"],
+      employerName: intake?.["Name of Company you work for?"],
+      sheetOccupation: next.Occupation,
+      sheetIndustry: next["Industry (AI based on employer)"],
+      sheetEmployerName: next["Employer name"],
+    });
+    if (selfEmployed && needsEmployerPhone(next)) {
+      console.log(`Skip employer google_search for ${label} (self-employed — using personal contact)`);
+    } else if (needsEmployerPhone(next) && employerName && !dryRun) {
       const searchText = intake
         ? flattenRow(intake)
         : [

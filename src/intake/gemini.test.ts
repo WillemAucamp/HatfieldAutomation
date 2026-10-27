@@ -74,6 +74,30 @@ describe("employer columns", () => {
     };
   }
 
+  it("skips google_search when the Form says self-employed", async () => {
+    const payload: Record<string, string> = { "Postal code": "2196" };
+    for (const column of searchCols) payload[column] = "";
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return jsonResponse(payload);
+    }) as typeof fetch;
+
+    const fields = await enrichWithGemini(
+      mapping,
+      "Employment: Self-employed\nName of Company you work for?: None",
+      {
+        apiKey: "test-key",
+        model: "gemini-3.6-flash",
+        fetchImpl,
+        employerSearchAttempts: 3,
+      }
+    );
+    assert.equal(bodies.length, 1);
+    assert.equal(bodies[0].tools, undefined);
+    assert.equal(fields[phoneCol], "");
+  });
+
   it("skips google_search when employer phone is already valid", async () => {
     const payload: Record<string, string> = {
       "Postal code": "2196",

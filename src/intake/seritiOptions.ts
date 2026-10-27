@@ -201,8 +201,12 @@ export function mirrorSelfEmployedEmployerFromPersonal(input: {
   });
   const mobile = transformMobile(input.mobile);
   const employerPhone = mobile.valid ? mobile.value : String(input.mobile ?? "").trim();
-  const employerName =
-    String(input.employerName ?? "").trim() || String(input.fullName ?? "").trim();
+  // Self-employed clients are their own employer. Seriti still needs a work
+  // name, so use the person's name. Placeholders like "None" / "N/A" from the
+  // Form company field must not survive as EMPLOYER_EMPTY.
+  const personalName = String(input.fullName ?? "").trim();
+  const sheetName = String(input.employerName ?? "").trim();
+  const employerName = personalName || (isMissingValue(sheetName) ? "" : sheetName);
   return {
     employerName,
     employerPhone,
