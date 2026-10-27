@@ -2,7 +2,7 @@
 
 I cannot log into GitHub secrets, Google Apps Script, or Cursor Automations from this agent. Everything in the repo is ready. Do these in order. Skip anything already done.
 
-The Cursor always-on agent is **already Off**. Do not turn it back on. A click in GitHub (or the Sheet menu) now starts intake → Gemini → automation sheet → Seriti.
+The Cursor always-on agent is **already Off**. Do not turn it back on. GitHub Actions **Intake to Melrose** is the production runner: a free 5-minute schedule on `main`, plus the same manual **Run workflow** click (or Sheet menu).
 
 ---
 
@@ -12,7 +12,7 @@ The Cursor always-on agent is **already Off**. Do not turn it back on. A click i
 2. Find **Hatfield intake to Melrose**
 3. Leave it **Off**. Delete it if you prefer.
 
-That 5-minute live agent was the token burn. Nothing in this PR starts it again.
+That 5-minute Cursor agent was the token burn. The 5-minute GitHub cron is the replacement — it runs the same Actions job as your manual click, not a Cursor agent.
 
 ---
 
@@ -31,12 +31,16 @@ If `SHEET_WEBHOOK_URL` currently looks like `SHEET_WEBHOOK_URL=https://script.go
 
 ---
 
-## 3. First run from GitHub (required)
+## 3. GitHub schedule + optional extra click
 
-Until this PR is merged, pick branch **`cursor/full-chain-seriti-df0d`**. After merge, use **`main`**.
+After this is merged to **`main`**, GitHub fires **Intake to Melrose** every 5 minutes (`*/5 * * * *`). Public-repo Actions minutes are free. That is the 24h path.
+
+GitHub only schedules the default branch. Cron can arrive a few minutes late. GitHub pauses schedules after ~60 days with no repo activity — push or open Actions if it goes quiet.
+
+Until merge, pick this PR’s branch for a **manual** click. After merge, use **`main`**.
 
 1. Open https://github.com/WillemAucamp/HatfieldAutomation/actions/workflows/intake-to-melrose.yml
-2. Click **Run workflow** and choose:
+2. Click **Run workflow** when you want an extra run right now:
    - Branch: this PR’s branch (or `main` after merge)
    - mode: **`full`**
    - maxIntakeRows: **`5`** (do not jump to 15 — Gemini is ~1 min/row when it needs web search)

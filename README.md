@@ -7,10 +7,11 @@ Manual pipeline (no Cursor live agent):
 3. One 38-column row is appended to the **automation sheet** (`NR` … `Status` `Timing`)
 4. Playwright fills [VW Melrose / Seriti](https://vwmelrose.hatfieldgroup.co.za/finance) for **every blank-Status** automation row (new plus leftovers)
 
-**How you start it:** GitHub → Actions → **Intake to Melrose** → **Run workflow**.  
+**How it runs:** GitHub Actions **Intake to Melrose** — the same `full` pipeline you can still click by hand, plus a free `*/5 * * * *` schedule on `main` (public-repo Actions minutes). Idle ticks only probe the sheets; Playwright/Seriti run when there is work.
+
 Optional: a **Hatfield** menu on the Google Sheet fires that same workflow.
 
-There is no 24/7 agent. Do not re-enable the Cursor automation **Hatfield intake to Melrose**.
+Do not re-enable the Cursor automation **Hatfield intake to Melrose** (that path burns Cursor tokens).
 
 ## Operator steps (you)
 
@@ -20,7 +21,7 @@ Short version:
 
 1. Leave Cursor automations **Off**
 2. Set GitHub secrets `GEMINI_API_KEY` and `SHEET_WEBHOOK_URL` (URL only)
-3. Click **Run workflow** with mode **`full`** (two jobs: Gemini ingest, then Seriti). Keep `maxIntakeRows` at 5.
+3. After this is on **`main`**, GitHub triggers **Intake to Melrose** every 5 minutes (same defaults as a manual `full` click: `maxIntakeRows` 5). Click **Run workflow** anytime you want an immediate extra run.
 4. Optional: paste `apps-script/Code.gs` and add `GITHUB_TOKEN` for the Sheet menu
 
 ```bash
