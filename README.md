@@ -7,7 +7,7 @@ Manual pipeline (no Cursor live agent):
 3. One 38-column row is appended to the **automation sheet** (`NR` … `Status` `Timing`)
 4. Playwright fills [VW Melrose / Seriti](https://vwmelrose.hatfieldgroup.co.za/finance) for **every blank-Status** automation row (new plus leftovers)
 
-**How it runs:** GitHub Actions **Intake to Melrose** — the same `full` pipeline you can still click by hand, plus a free `*/5 * * * *` schedule on `main` (public-repo Actions minutes). Idle ticks only probe the sheets; Playwright/Seriti run when there is work.
+**How it runs:** GitHub Actions **Intake to Melrose** — manual **Run workflow**, optional Sheet menu, plus **external cron** every ~5 minutes via `workflow_dispatch` ([`config/external-cron-github.md`](./config/external-cron-github.md)). Polled ticks skip Playwright when sheets are idle; GitHub’s daily schedule is only a backup.
 
 Optional: a **Hatfield** menu on the Google Sheet fires that same workflow.
 
@@ -21,7 +21,7 @@ Short version:
 
 1. Leave Cursor automations **Off**
 2. Set GitHub secrets `GEMINI_API_KEY` and `SHEET_WEBHOOK_URL` (URL only)
-3. After this is on **`main`**, GitHub triggers **Intake to Melrose** every 5 minutes (same defaults as a manual `full` click: `maxIntakeRows` 5). Click **Run workflow** anytime you want an immediate extra run.
+3. Set up **external cron** (see [`config/external-cron-github.md`](./config/external-cron-github.md)) or click **Run workflow** anytime for an immediate run
 4. Optional: paste `apps-script/Code.gs` and add `GITHUB_TOKEN` for the Sheet menu
 
 ```bash

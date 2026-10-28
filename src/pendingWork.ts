@@ -21,6 +21,23 @@ export interface ScheduledPipelinePlan {
   reason: string;
 }
 
+/** Manual workflow_dispatch runs always execute ingest/load; polled ticks use {@link planScheduledPipeline}. */
+export function resolvePipelinePlan(
+  counts: PendingWorkCounts,
+  applyIdleProbe: boolean
+): ScheduledPipelinePlan {
+  if (!applyIdleProbe) {
+    return {
+      shouldRun: true,
+      intake: counts.intake,
+      loadable: counts.loadable,
+      approved: counts.approved,
+      reason: "manual run — idle probe skipped",
+    };
+  }
+  return planScheduledPipeline(counts);
+}
+
 /** Idle GitHub ticks skip Playwright when there is nothing to ingest, load, or copy. */
 export function planScheduledPipeline(counts: PendingWorkCounts): ScheduledPipelinePlan {
   const intake = Math.max(0, counts.intake);
@@ -98,7 +115,8 @@ export async function pendingWorkMain(): Promise<number> {
   try {
     const config = loadConfig();
     const counts = await countPendingWork(config);
-    const plan = planScheduledPipeline(counts);
+    const applyIdleProbe = process.env.APPLY_IDLE_PROBE === "true";
+    const plan = resolvePipelinePlan(counts, applyIdleProbe);
     for (const line of githubOutputLines(plan)) {
       console.log(line);
     }
