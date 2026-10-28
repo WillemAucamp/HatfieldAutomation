@@ -19,6 +19,7 @@
  *
  * Operator menu (after this file is in Apps Script, reload the spreadsheet):
  *   Hatfield → Process now / Ingest only / Load open rows
+ *   Hatfield → Turn on 5-minute GitHub poll — external cron using GITHUB_TOKEN (idle-aware)
  *   Needs script properties GITHUB_TOKEN (and optional GITHUB_REPO / GITHUB_REF).
  *
  * The account that deploys this must be able to edit the intake Form sheet
@@ -881,6 +882,9 @@ function onOpen() {
     .addItem("Ingest only (Gemini → automation sheet)", "menuIngestOnly")
     .addItem("Load open rows (Seriti only)", "menuLoadOnly")
     .addSeparator()
+    .addItem("Turn on 5-minute GitHub poll", "menuTurnOnPipelinePoll")
+    .addItem("Turn off 5-minute GitHub poll", "menuTurnOffPipelinePoll")
+    .addSeparator()
     .addItem("Mark old Form rows skipped…", "menuSkipHistorical")
     .addToUi();
 }
@@ -897,26 +901,73 @@ function menuLoadOnly() {
   dispatchGitHubWorkflow_("load-only");
 }
 
+/** Time-driven trigger — no UI. Dispatches with scheduledTick so idle ticks stay cheap. */
+function pollGitHubPipeline_() {
+  dispatchGitHubWorkflowCore_("full", true, false);
+}
+
+function menuTurnOnPipelinePoll() {
+  var ui = SpreadsheetApp.getUi();
+  var removed = deleteProjectTriggers_("pollGitHubPipeline_");
+  ScriptApp.newTrigger("pollGitHubPipeline_").timeBased().everyMinutes(5).create();
+  ui.alert(
+    "5-minute poll enabled",
+    "Google will call GitHub Actions about every 5 minutes when this script project is active.\n\n" +
+      "Uses the same GITHUB_TOKEN as Process now, with scheduledTick=true (skip Seriti when idle).\n\n" +
+      (removed > 0 ? "Replaced " + removed + " old poll trigger(s).\n\n" : "") +
+      "Requires intake-to-melrose.yml on main with the scheduledTick input (merged PR #36).",
+    ui.ButtonSet.OK
+  );
+}
+
+function menuTurnOffPipelinePoll() {
+  var ui = SpreadsheetApp.getUi();
+  var removed = deleteProjectTriggers_("pollGitHubPipeline_");
+  ui.alert(
+    "Poll disabled",
+    removed > 0 ? "Removed " + removed + " poll trigger(s)." : "No poll trigger was active.",
+    ui.ButtonSet.OK
+  );
+}
+
+function deleteProjectTriggers_(handlerName) {
+  var triggers = ScriptApp.getProjectTriggers();
+  var removed = 0;
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === handlerName) {
+      ScriptApp.deleteTrigger(triggers[i]);
+      removed++;
+    }
+  }
+  return removed;
+}
+
 function dispatchGitHubWorkflow_(mode) {
+  dispatchGitHubWorkflowCore_(mode, false, true);
+}
+
+function dispatchGitHubWorkflowCore_(mode, scheduledTick, showUi) {
   var props = PropertiesService.getScriptProperties();
   var token = props.getProperty("GITHUB_TOKEN");
   var repo = props.getProperty("GITHUB_REPO") || "WillemAucamp/HatfieldAutomation";
   var workflow = props.getProperty("GITHUB_WORKFLOW") || "intake-to-melrose.yml";
   var ref = props.getProperty("GITHUB_REF") || "main";
   var maxRows = props.getProperty("MAX_INTAKE_ROWS") || "5";
-  var ui = SpreadsheetApp.getUi();
+  var ui = showUi ? SpreadsheetApp.getUi() : null;
 
   if (!token) {
-    ui.alert(
-      "GitHub token missing",
-      "Open Extensions → Apps Script → Project Settings → Script properties and add:\n\n" +
-        "GITHUB_TOKEN = a GitHub personal access token with Actions: write\n" +
-        "GITHUB_REPO = WillemAucamp/HatfieldAutomation  (optional)\n" +
-        "GITHUB_REF = main  (or cursor/full-chain-seriti-df0d until that PR is merged)\n\n" +
-        "Until then, run the pipeline from GitHub → Actions → Intake to Melrose → Run workflow.",
-      ui.ButtonSet.OK
-    );
-    return;
+    if (ui) {
+      ui.alert(
+        "GitHub token missing",
+        "Open Extensions → Apps Script → Project Settings → Script properties and add:\n\n" +
+          "GITHUB_TOKEN = a GitHub personal access token with Actions: write\n" +
+          "GITHUB_REPO = WillemAucamp/HatfieldAutomation  (optional)\n" +
+          "GITHUB_REF = main  (or cursor/full-chain-seriti-df0d until that PR is merged)\n\n" +
+          "Until then, run the pipeline from GitHub → Actions → Intake to Melrose → Run workflow.",
+        ui.ButtonSet.OK
+      );
+    }
+    return { ok: false, code: 0, error: "GITHUB_TOKEN missing" };
   }
 
   var url =
@@ -927,6 +978,7 @@ function dispatchGitHubWorkflow_(mode) {
       mode: String(mode || "full"),
       maxIntakeRows: String(maxRows),
       dryRun: "false",
+      scheduledTick: scheduledTick ? "true" : "false",
     },
   };
 
@@ -944,26 +996,31 @@ function dispatchGitHubWorkflow_(mode) {
   });
   var code = res.getResponseCode();
   if (code === 204 || code === 200) {
+    if (ui) {
+      ui.alert(
+        "Started",
+        "GitHub Actions is running mode=" +
+          mode +
+          " on " +
+          repo +
+          "@" +
+          ref +
+          ".\n\nWatch it at:\nhttps://github.com/" +
+          repo +
+          "/actions",
+        ui.ButtonSet.OK
+      );
+    }
+    return { ok: true, code: code };
+  }
+  if (ui) {
     ui.alert(
-      "Started",
-      "GitHub Actions is running mode=" +
-        mode +
-        " on " +
-        repo +
-        "@" +
-        ref +
-        ".\n\nWatch it at:\nhttps://github.com/" +
-        repo +
-        "/actions",
+      "GitHub did not start the run",
+      "HTTP " + code + "\n" + res.getContentText().slice(0, 500),
       ui.ButtonSet.OK
     );
-    return;
   }
-  ui.alert(
-    "GitHub did not start the run",
-    "HTTP " + code + "\n" + res.getContentText().slice(0, 500),
-    ui.ButtonSet.OK
-  );
+  return { ok: false, code: code, body: res.getContentText().slice(0, 500) };
 }
 
 /**

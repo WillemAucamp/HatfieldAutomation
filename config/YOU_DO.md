@@ -33,17 +33,18 @@ If `SHEET_WEBHOOK_URL` currently looks like `SHEET_WEBHOOK_URL=https://script.go
 
 ## 3. External cron (~5 min) + optional extra click
 
-GitHub’s `schedule` cron is **unreliable** at five minutes. After this PR is on **`main`**, set up external polling:
+GitHub’s `schedule` cron is **unreliable** at five minutes. After **`main`** has PR #36, pick one:
 
-**Full steps:** [`config/external-cron-github.md`](./external-cron-github.md)
+**A — Hatfield menu (recommended if `GITHUB_TOKEN` is already in Apps Script)**
 
-Short version:
+1. Paste the latest `apps-script/Code.gs` from **`main`** into Apps Script (same project as the webhook).
+2. Reload the spreadsheet → **Hatfield → Turn on 5-minute GitHub poll** (one click).
 
-1. Create a GitHub PAT with **Actions: write** on this repo.
-2. Every **5 minutes**, POST to the **Intake to Melrose** workflow dispatch with `scheduledTick: true` (use `scripts/trigger-intake-workflow.sh` or cron-job.org — details in that doc).
-3. GitHub still runs a **daily** schedule on `main` as a backup only.
+**B — cron-job.org or a server**
 
-Until merge, point `GITHUB_REF` at this PR branch for testing. After merge, use **`main`**.
+[`config/external-cron-github.md`](./external-cron-github.md) — PAT + `scripts/trigger-intake-workflow.sh` or HTTP POST every 5 minutes.
+
+GitHub still runs a **daily** schedule on `main` as a backup only.
 
 Manual immediate run (idle probe **off** — processes even when sheets look idle):
 
