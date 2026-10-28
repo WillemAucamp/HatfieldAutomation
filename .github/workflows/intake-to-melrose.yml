@@ -1,10 +1,9 @@
-# Manual operator trigger + free GitHub cron every 5 minutes. No Cursor agent.
+# Manual operator trigger + optional external cron (workflow_dispatch every ~5 min).
 # Actions → Intake to Melrose → Run workflow
 #
 # One job: Gemini ingest then Seriti load (same runner, Playwright installed once).
-# On schedule, workflow_dispatch inputs are empty — defaults below keep the backlog capped.
-# Idle scheduled ticks skip Playwright after a cheap sheet probe (same full run when there is work).
-# GitHub only fires `schedule` on the default branch (main). Cron can lag a few minutes.
+# Polled ticks (GitHub schedule or dispatch with scheduledTick=true) skip Playwright when idle.
+# GitHub's built-in schedule is unreliable at */5 — use config/external-cron-github.md instead.
 
 name: Intake to Melrose
 
@@ -31,10 +30,13 @@ on:
         description: "Gemini mapping only — do not write sheets or open Seriti"
         type: boolean
         default: false
+      scheduledTick:
+        description: "Poll tick — skip ingest/Seriti when sheets are idle (same as GitHub schedule). External cron should set true."
+        type: boolean
+        default: false
   schedule:
-    # Every 5 minutes (GitHub's shortest interval). Public repo Actions minutes are free.
-    # GitHub disables schedules after 60 days without repo activity.
-    - cron: "*/5 * * * *"
+    # Daily safety net only. Reliable ~5 min polling: scripts/trigger-intake-workflow.sh + scheduledTick=true.
+    - cron: "0 6 * * *"
 
 concurrency:
   group: hatfield-pipeline
@@ -65,18 +67,19 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
+          APPLY_IDLE_PROBE: ${{ github.event_name == 'schedule' || github.event.inputs.scheduledTick == 'true' }}
         run: npx tsx src/pendingWork.ts
       - name: Cache Playwright browsers
-        if: ${{ (github.event_name != 'schedule' || steps.pending.outputs.should_run != 'false') && (github.event_name == 'schedule' || github.event.inputs.mode != 'ingest-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
+        if: ${{ ((github.event_name != 'schedule' && github.event.inputs.scheduledTick != 'true') || steps.pending.outputs.should_run != 'false') && (github.event_name == 'schedule' || github.event.inputs.mode != 'ingest-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
       - name: Install Playwright Chromium
-        if: ${{ (github.event_name != 'schedule' || steps.pending.outputs.should_run != 'false') && (github.event_name == 'schedule' || github.event.inputs.mode != 'ingest-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
+        if: ${{ ((github.event_name != 'schedule' && github.event.inputs.scheduledTick != 'true') || steps.pending.outputs.should_run != 'false') && (github.event_name == 'schedule' || github.event.inputs.mode != 'ingest-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
         run: npx playwright install --with-deps chromium
       - name: Enrich Form rows onto the automation sheet
-        if: ${{ (github.event_name != 'schedule' || steps.pending.outputs.should_run != 'false') && (github.event_name == 'schedule' || github.event.inputs.mode != 'load-only') }}
+        if: ${{ ((github.event_name != 'schedule' && github.event.inputs.scheduledTick != 'true') || steps.pending.outputs.should_run != 'false') && (github.event_name == 'schedule' || github.event.inputs.mode != 'load-only') }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
@@ -92,13 +95,13 @@ jobs:
       # through deterministic Seriti maps + employer search so free-text
       # Gemini leftovers and missed Form columns never reach the loader.
       - name: Repair blank-Status and recoverable Form-copy errors
-        if: ${{ (github.event_name != 'schedule' || steps.pending.outputs.should_run != 'false') && (github.event_name == 'schedule' || github.event.inputs.mode != 'load-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
+        if: ${{ ((github.event_name != 'schedule' && github.event.inputs.scheduledTick != 'true') || steps.pending.outputs.should_run != 'false') && (github.event_name == 'schedule' || github.event.inputs.mode != 'load-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
         run: npx tsx src/repairBlankRows.ts
       - name: Load blank-Status rows into Seriti
-        if: ${{ (github.event_name != 'schedule' || steps.pending.outputs.should_run != 'false') && (github.event_name == 'schedule' || github.event.inputs.mode != 'ingest-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
+        if: ${{ ((github.event_name != 'schedule' && github.event.inputs.scheduledTick != 'true') || steps.pending.outputs.should_run != 'false') && (github.event_name == 'schedule' || github.event.inputs.mode != 'ingest-only') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
@@ -110,7 +113,7 @@ jobs:
           echo "mode=${MODE} dryRun=${DRY_RUN} rowFilter=${ROW_FILTER:-}"
           AUTO_LOAD=true npm run dev
       - name: Copy recent Approved leads onto the Approved tab
-        if: ${{ always() && (github.event_name != 'schedule' || steps.pending.outputs.should_run != 'false') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
+        if: ${{ always() && ((github.event_name != 'schedule' && github.event.inputs.scheduledTick != 'true') || steps.pending.outputs.should_run != 'false') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
         env:
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
         run: npx tsx src/carryApprovedLeads.ts

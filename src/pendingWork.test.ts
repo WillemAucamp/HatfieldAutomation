@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { githubOutputLines, planScheduledPipeline } from "./pendingWork.js";
+import { githubOutputLines, planScheduledPipeline, resolvePipelinePlan } from "./pendingWork.js";
 
 describe("planScheduledPipeline", () => {
   it("skips idle ticks", () => {
@@ -25,6 +25,19 @@ describe("planScheduledPipeline", () => {
     const plan = planScheduledPipeline({ intake: 0, loadable: 0, approved: 3 });
     assert.equal(plan.shouldRun, true);
     assert.match(plan.reason, /Approved lead/);
+  });
+});
+
+describe("resolvePipelinePlan", () => {
+  it("always runs when idle probe is off", () => {
+    const plan = resolvePipelinePlan({ intake: 0, loadable: 0, approved: 0 }, false);
+    assert.equal(plan.shouldRun, true);
+    assert.match(plan.reason, /manual run/);
+  });
+
+  it("delegates to planScheduledPipeline when idle probe is on", () => {
+    const plan = resolvePipelinePlan({ intake: 0, loadable: 0, approved: 0 }, true);
+    assert.equal(plan.shouldRun, false);
   });
 });
 

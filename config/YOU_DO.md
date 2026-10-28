@@ -2,7 +2,7 @@
 
 I cannot log into GitHub secrets, Google Apps Script, or Cursor Automations from this agent. Everything in the repo is ready. Do these in order. Skip anything already done.
 
-The Cursor always-on agent is **already Off**. Do not turn it back on. GitHub Actions **Intake to Melrose** is the production runner: a free 5-minute schedule on `main`, plus the same manual **Run workflow** click (or Sheet menu).
+The Cursor always-on agent is **already Off**. Do not turn it back on. GitHub Actions **Intake to Melrose** is the production runner: **external cron** every ~5 minutes (see [`external-cron-github.md`](./external-cron-github.md)), plus manual **Run workflow** or the Sheet menu.
 
 ---
 
@@ -12,7 +12,7 @@ The Cursor always-on agent is **already Off**. Do not turn it back on. GitHub Ac
 2. Find **Hatfield intake to Melrose**
 3. Leave it **Off**. Delete it if you prefer.
 
-That 5-minute Cursor agent was the token burn. The 5-minute GitHub cron is the replacement — it runs the same Actions job as your manual click, not a Cursor agent.
+That 5-minute Cursor agent was the token burn. **External cron** hitting GitHub `workflow_dispatch` is the reliable 5-minute path — not GitHub’s built-in schedule.
 
 ---
 
@@ -31,23 +31,30 @@ If `SHEET_WEBHOOK_URL` currently looks like `SHEET_WEBHOOK_URL=https://script.go
 
 ---
 
-## 3. GitHub schedule + optional extra click
+## 3. External cron (~5 min) + optional extra click
 
-After this is merged to **`main`**, GitHub fires **Intake to Melrose** every 5 minutes (`*/5 * * * *`). Public-repo Actions minutes are free. That is the 24h path.
+GitHub’s `schedule` cron is **unreliable** at five minutes. After this PR is on **`main`**, set up external polling:
 
-GitHub only schedules the default branch. Cron can arrive a few minutes late. GitHub pauses schedules after ~60 days with no repo activity — push or open Actions if it goes quiet.
+**Full steps:** [`config/external-cron-github.md`](./external-cron-github.md)
 
-Until merge, pick this PR’s branch for a **manual** click. After merge, use **`main`**.
+Short version:
+
+1. Create a GitHub PAT with **Actions: write** on this repo.
+2. Every **5 minutes**, POST to the **Intake to Melrose** workflow dispatch with `scheduledTick: true` (use `scripts/trigger-intake-workflow.sh` or cron-job.org — details in that doc).
+3. GitHub still runs a **daily** schedule on `main` as a backup only.
+
+Until merge, point `GITHUB_REF` at this PR branch for testing. After merge, use **`main`**.
+
+Manual immediate run (idle probe **off** — processes even when sheets look idle):
 
 1. Open https://github.com/WillemAucamp/HatfieldAutomation/actions/workflows/intake-to-melrose.yml
-2. Click **Run workflow** when you want an extra run right now:
-   - Branch: this PR’s branch (or `main` after merge)
+2. Click **Run workflow**:
+   - Branch: `main` (or this PR branch before merge)
    - mode: **`full`**
-   - maxIntakeRows: **`5`** (do not jump to 15 — Gemini is ~1 min/row when it needs web search)
+   - maxIntakeRows: **`5`**
+   - scheduledTick: **unchecked**
    - dryRun: **unchecked**
-3. Open the run. You should see **two jobs** in order:
-   1. **Gemini ingest** — writes automation-sheet rows (Status still blank)
-   2. **Seriti load** — starts automatically after ingest, writes `ZAHTVW…` into Status
+3. Open the run. One job runs **Gemini ingest**, **repair**, **Seriti load**, then **Approved copy** when there is work.
 
 If **Status** is `error …` after Seriti:
 
