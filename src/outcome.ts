@@ -127,9 +127,20 @@ export function humanHintForError(error: string, code: string): string {
   if (code === "POSTAL_AUTOCOMPLETE_FAILED") {
     return "Postal code did not match Seriti’s suburb list. Fix Postal code/address, clear Status, run load-only.";
   }
-  if (code === "FORM_START_FAILED") {
+  if (code === "QUALIFYING_NEXT_FAILED") {
+    const visible = text.match(/Visible text: ([^.]+)/i);
     return (
-      "Seriti did not open the finance form (loader/404, not applicant data)." +
+      "Applicant type Next did not open the email step." +
+      (formSaid ? ` Form said: ${formSaid[1].trim()}.` : "") +
+      (visible ? ` Page showed: ${visible[1].trim()}.` : " Seriti stayed on the first page.") +
+      " Not a sheet cell. Clear Status, run load-only."
+    );
+  }
+  if (code === "FORM_START_FAILED") {
+    const said = text.match(/Seriti said: ([^.]+)/i);
+    return (
+      "Seriti did not open the finance form." +
+      (said ? ` Seriti said: ${said[1].trim()}.` : " Loader or 404, not applicant data.") +
       " Not a sheet cell. Clear Status, run load-only."
     );
   }
