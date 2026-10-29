@@ -252,6 +252,29 @@ async function verifyFill(
   return valuesMatch(expected, actual);
 }
 
+/** Playwright's scroll waits until layout stops moving. Seriti's form never does. */
+async function scrollTo(locator: Locator): Promise<void> {
+  await locator.evaluate((el) => {
+    (el as HTMLElement).scrollIntoView({ block: "center", inline: "nearest" });
+  });
+}
+
+/** Keystrokes without waiting for the element to be stable. Angucomplete listens for keyup. */
+async function typeInto(locator: Locator, value: string): Promise<void> {
+  await locator.evaluate((el, text) => {
+    const input = el as HTMLInputElement;
+    input.focus();
+    input.value = "";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    for (const key of text) {
+      input.value += key;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
+    }
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }, value);
+}
+
 async function fillTextInput(locator: Locator, value: string, _config: AppConfig): Promise<void> {
   await locator.fill(value, { timeout: 10000 });
   await locator.evaluate((el, val) => {
@@ -390,12 +413,10 @@ async function readDateValue(locator: Locator): Promise<string> {
 async function fillDateInput(locator: Locator, value: string, config: AppConfig): Promise<void> {
   const formatted = formatDateForForm(value);
   await locator.waitFor({ state: "visible", timeout: 15000 });
-  await locator.scrollIntoViewIfNeeded();
+  await scrollTo(locator);
 
   const typeDate = async (): Promise<string> => {
-    await locator.click({ timeout: 10000 });
-    await locator.fill("");
-    await locator.pressSequentially(formatted, { delay: 35 });
+    await typeInto(locator, formatted);
     await locator.evaluate((el) => {
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -430,16 +451,14 @@ async function fillPostalCode(
   provinceHint = ""
 ): Promise<void> {
   await locator.waitFor({ state: "visible", timeout: 15000 });
-  await locator.scrollIntoViewIfNeeded();
+  await scrollTo(locator);
 
   const expectedCode = restorePostalCode(value);
   const needles = postalSearchNeedles(value, addressHint, provinceHint);
   const codeDigits = expectedCode.replace(/\D/g, "");
 
   for (const needle of needles) {
-    await locator.click({ timeout: 10000 });
-    await locator.fill("");
-    await locator.pressSequentially(needle, { delay: 40 });
+    await typeInto(locator, needle);
     await randomDelay(config);
 
     const row = form
@@ -449,7 +468,7 @@ async function fillPostalCode(
       .first();
     try {
       await row.waitFor({ state: "visible", timeout: 8000 });
-      await row.click();
+      await row.evaluate((el) => (el as HTMLElement).click());
       await randomDelay(config);
       const selected = (await locator.inputValue().catch(() => "")).replace(/\D/g, "");
       const codeNeedle = needle === expectedCode || needle.startsWith(`${expectedCode} `);
