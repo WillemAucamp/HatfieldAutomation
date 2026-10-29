@@ -101,11 +101,49 @@ export async function waitForFormFrame(page: Page, timeoutMs = 30000): Promise<F
   throw new Error("Finance application iframe did not load");
 }
 
+/**
+ * VW Melrose still embeds CompanyCode=IXWS. Seriti now rejects that code
+ * ("not a valid child company of EXFA") and the iframe 404s before email.
+ * The same UniqueCode validates under HATF as branch HTVW022.
+ */
+function useHatfCompanyCode(url: string): string {
+  return url.replace(/CompanyCode=IXWS/gi, "CompanyCode=HATF");
+}
+
+async function rewriteRetiredCompanyCode(page: Page): Promise<void> {
+  await page
+    .evaluate(() => {
+      for (const frame of document.querySelectorAll("iframe")) {
+        const src = frame.getAttribute("src") || "";
+        if (/CompanyCode=IXWS/i.test(src)) {
+          frame.setAttribute("src", src.replace(/CompanyCode=IXWS/gi, "CompanyCode=HATF"));
+        }
+      }
+    })
+    .catch(() => undefined);
+
+  for (const frame of page.frames()) {
+    const url = frame.url();
+    const retired = /CompanyCode=IXWS/i.test(url);
+    const notFound = /\/app\/404/i.test(url);
+    if (!retired && !notFound) continue;
+    const parentSrc = await frame
+      .frameElement()
+      .then((el) => el.getAttribute("src"))
+      .catch(() => "");
+    const next = useHatfCompanyCode(retired ? url : parentSrc || "");
+    if (next.includes("CompanyCode=HATF") && next !== url) {
+      await frame.goto(next, { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => undefined);
+    }
+  }
+}
+
 export async function clickApplyForFinance(page: Page, config: AppConfig): Promise<Frame> {
   const applyLink = page.getByRole("link", { name: /apply for finance/i }).first();
   const applyButton = page.getByRole("button", { name: /apply for finance/i }).first();
 
   await dismissCookieBanners(page);
+  await rewriteRetiredCompanyCode(page);
   await sleep(500);
 
   // One Apply click, then wait. Re-clicking while the SPA is routing resets
@@ -124,8 +162,10 @@ export async function clickApplyForFinance(page: Page, config: AppConfig): Promi
   let lastError = "Finance application iframe did not load";
   const seritiSaid = watchCompanyCodeRejection(page);
   for (let attempt = 1; attempt <= 2; attempt++) {
+    await rewriteRetiredCompanyCode(page);
     if (!page.frame({ url: FORM_FRAME_PATTERN }) || attempt > 1) {
       await clickApply();
+      await rewriteRetiredCompanyCode(page);
     }
     let frame: Frame;
     try {
