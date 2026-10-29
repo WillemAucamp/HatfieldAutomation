@@ -46,24 +46,39 @@ export async function waitForFinanceFormReady(
   const email = form.locator('[id="txtEmailAddress"]').first();
   const applicantLabel = form.locator("label").filter({ hasText: /Private Individual/i }).first();
   const applicantRadio = form.getByRole("radio", { name: /Private Individual/i }).first();
-  const error404 = form.locator(".error404").first();
+  let saw404At = 0;
+  const hint = " Not a sheet cell. Clear Status, run load-only.";
   while (Date.now() < deadline) {
     const applicantVisible =
       (await applicantLabel.isVisible().catch(() => false)) ||
       (await applicantRadio.isVisible().catch(() => false));
     if (applicantVisible) return "applicant-type";
     const emailVisible = await email.isVisible().catch(() => false);
-    if (emailVisible) return "email";
-    const emailPresent = (await email.count().catch(() => 0)) > 0;
-    const showing404 = await error404.isVisible().catch(() => false);
-    if (emailPresent && !showing404) return "email";
+    if (emailVisible) {
+      saw404At = 0;
+      return "email";
+    }
+    // A hidden txtEmailAddress sits in the DOM while the SPA is still routing.
+    // Counting that as ready made every row time out on the same invisible field.
+    const bodyNow = ((await form.locator("body").innerText().catch(() => "")) || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (/\b404\b/.test(bodyNow)) {
+      if (!saw404At) saw404At = Date.now();
+      else if (Date.now() - saw404At > 8000) {
+        throw new Error(
+          `Seriti finance form did not open (iframe 404).${hint}`
+        );
+      }
+    } else {
+      saw404At = 0;
+    }
     await sleep(200);
   }
   const body = ((await form.locator("body").innerText().catch(() => "")) || "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 180);
-  const hint = " Not a sheet cell. Clear Status, run load-only.";
   if (/\b404\b/.test(body)) {
     throw new Error(`Seriti finance form did not open (iframe 404).${hint}`);
   }
@@ -107,6 +122,7 @@ export async function clickApplyForFinance(page: Page, config: AppConfig): Promi
   };
 
   let lastError = "Finance application iframe did not load";
+  const seritiSaid = watchCompanyCodeRejection(page);
   for (let attempt = 1; attempt <= 2; attempt++) {
     if (!page.frame({ url: FORM_FRAME_PATTERN }) || attempt > 1) {
       await clickApply();
@@ -125,7 +141,26 @@ export async function clickApplyForFinance(page: Page, config: AppConfig): Promi
       lastError = err instanceof Error ? err.message : String(err);
     }
   }
-  throw new Error(lastError);
+  const said = seritiSaid().replace(/\.+$/, "");
+  throw new Error(said ? `${lastError} Seriti said: ${said}.` : lastError);
+}
+
+/** Seriti validate 404: company code is not a child of EXFA. */
+function watchCompanyCodeRejection(page: Page): () => string {
+  let message = "";
+  page.on("response", (response) => {
+    if (!/financeapplication\/validate/i.test(response.url()) || response.status() < 400) return;
+    void response
+      .json()
+      .then((body: unknown) => {
+        const data = (body as { data?: unknown }).data ?? body;
+        const text = Array.isArray(data) ? data.map(String).join("; ") : String(data ?? "");
+        const compact = text.replace(/\s+/g, " ").trim();
+        if (compact) message = compact.slice(0, 200);
+      })
+      .catch(() => undefined);
+  });
+  return () => message;
 }
 
 export async function waitForHeading(form: FormScope, pattern: RegExp, timeoutMs = 20000): Promise<void> {
@@ -338,11 +373,17 @@ export async function clickNextAndWait(
     await waitForSelectorVisible(form, nextSelector, 20000);
   } catch (err) {
     const alerts = await readVisibleAlerts(form);
-    const timeout = err instanceof Error ? err.message : String(err);
+    const visible = alerts
+      ? ""
+      : ((await form.locator("body").innerText().catch(() => "")) || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 140);
     throw new Error(
       `${sectionLabel} Next did not open the next page.` +
         (alerts ? ` Form said: ${alerts}.` : "") +
-        ` Waiting for ${nextSelector}. ${timeout}`
+        (visible ? ` Visible text: ${visible}.` : "") +
+        ` Waiting for ${nextSelector}.`
     );
   }
 }

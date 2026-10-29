@@ -2,6 +2,7 @@ import type { FillContext } from "../fieldResolver.js";
 import { fillField } from "../fieldResolver.js";
 import {
   clickNext,
+  clickNextAndWait,
   dismissCookieBanners,
   fillRadioGroupsByAnswer,
   fillSelectByVisibleText,
@@ -69,11 +70,9 @@ export async function runSection1(ctx: FillContext): Promise<void> {
     }
 
     if (!config.dryRun) {
-      await clickNext(form, config);
+      await clickNextAndWait(form, config, '[id="txtEmailAddress"]', "Applicant type");
     }
-  }
-
-  if (start === "email" || !config.dryRun) {
+  } else if (!config.dryRun) {
     await waitForSelectorVisible(form, '[id="txtEmailAddress"]');
   }
 

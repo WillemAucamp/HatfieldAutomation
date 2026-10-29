@@ -110,6 +110,16 @@ describe("formatRuntimeErrorCell", () => {
     assert.match(cell, /Not telephone\/bank/);
   });
 
+  it("explains QUALIFYING_NEXT_FAILED without a Playwright locator dump", () => {
+    const cell = formatRuntimeErrorCell(
+      'Applicant type Next did not open the next page. Waiting for [id="txtEmailAddress"]. locator.waitFor: Timeout 20000ms exceeded.',
+      0
+    );
+    assert.match(cell, /^error QUALIFYING_NEXT_FAILED:/);
+    assert.match(cell, /Applicant type Next did not open the email step/);
+    assert.doesNotMatch(cell, /locator\.waitFor/);
+  });
+
   it("explains FORM_START_FAILED is not applicant sheet data", () => {
     const cell = formatRuntimeErrorCell(
       'Applicant type selector not found (expected "Private Individual").',
@@ -117,6 +127,16 @@ describe("formatRuntimeErrorCell", () => {
     );
     assert.match(cell, /^error FORM_START_FAILED:/);
     assert.match(cell, /Not a sheet cell/);
+  });
+
+  it("puts the Seriti company-code rejection on the status cell", () => {
+    const cell = formatRuntimeErrorCell(
+      "Seriti finance form did not open (iframe 404). Not a sheet cell. Clear Status, run load-only. Seriti said: The Company Code provided is not a valid child company of EXFA with access to the company web method.",
+      0
+    );
+    assert.match(cell, /^error FORM_START_FAILED:/);
+    assert.match(cell, /not a valid child company of EXFA/);
+    assert.doesNotMatch(cell, /txtEmailAddress/);
   });
 });
 
