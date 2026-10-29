@@ -116,11 +116,11 @@ export function humanHintForError(error: string, code: string): string {
     );
   }
   if (code === "PERSONAL_NEXT_FAILED") {
+    const invalid = text.match(/Invalid: ([^.]+)/i);
     return (
       "Personal Next did not open Work." +
-      (formSaid
-        ? ` Form said: ${formSaid[1].trim()}.`
-        : " Check residency date, postal code, ID, province.") +
+      (formSaid ? ` Form said: ${formSaid[1].trim()}.` : "") +
+      (invalid ? ` Invalid: ${invalid[1].trim()}.` : " Check residency date, postal code, ID, province.") +
       " Clear Status, run load-only."
     );
   }

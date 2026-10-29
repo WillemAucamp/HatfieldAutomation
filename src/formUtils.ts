@@ -250,7 +250,8 @@ export async function domClick(locator: Locator): Promise<void> {
 }
 
 export async function clickNext(form: FormScope, config: AppConfig): Promise<void> {
-  const next = form.locator("button:visible").filter({ hasText: /^next$/i }).first();
+  // Earlier wizard steps stay in the DOM. The current step's Next is the last visible one.
+  const next = form.locator("button:visible").filter({ hasText: /^next$/i }).last();
   await next.waitFor({ state: "visible", timeout: 15000 });
   await domClick(next);
 }
@@ -428,15 +429,32 @@ export async function clickNextAndWait(
     await waitForSelectorVisible(form, nextSelector, 20000);
   } catch (err) {
     const alerts = await readVisibleAlerts(form);
+    const invalid = await form
+      .locator(".ng-invalid:visible")
+      .evaluateAll((els) =>
+        els
+          .map((el) => {
+            const input = el as HTMLElement;
+            const label = input.closest("label, .form-group, .row")?.textContent || "";
+            const title = input.getAttribute("title") || input.getAttribute("name") || input.id;
+            const text = (label || title || "").replace(/\s+/g, " ").trim();
+            return text.slice(0, 80);
+          })
+          .filter(Boolean)
+          .slice(0, 4)
+      )
+      .catch(() => [] as string[]);
     const visible = alerts
       ? ""
       : ((await form.locator("body").innerText().catch(() => "")) || "")
           .replace(/\s+/g, " ")
           .trim()
           .slice(0, 140);
+    const invalidText = invalid.length ? ` Invalid: ${invalid.join(" | ")}.` : "";
     throw new Error(
       `${sectionLabel} Next did not open the next page.` +
         (alerts ? ` Form said: ${alerts}.` : "") +
+        invalidText +
         (visible ? ` Visible text: ${visible}.` : "") +
         ` Waiting for ${nextSelector}.`
     );
