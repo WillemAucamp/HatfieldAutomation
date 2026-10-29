@@ -4,6 +4,7 @@ import {
   clickNext,
   clickNextAndWait,
   dismissCookieBanners,
+  domClick,
   fillRadioGroupsByAnswer,
   fillSelectByVisibleText,
   screenshotSection,
@@ -24,49 +25,16 @@ export async function runSection1(ctx: FillContext): Promise<void> {
   const start = await waitForFinanceFormReady(form);
 
   if (start === "applicant-type") {
-    const applicantTypePatterns: RegExp[] = [
-      /Private Individual/i,
-      /Private/i,
-      /Individual/i,
-    ];
-    let clicked = false;
-    for (const re of applicantTypePatterns) {
-      const label = form.locator("label").filter({ hasText: re }).first();
-      try {
+    const privateRadio = form.locator('input[type="radio"][value="PRIVATE"]').first();
+    const alreadyPrivate = await privateRadio.isChecked().catch(() => false);
+    if (!alreadyPrivate) {
+      if ((await privateRadio.count().catch(() => 0)) > 0) {
+        await domClick(privateRadio);
+      } else {
+        const label = form.getByText(/private individual/i).first();
         await label.waitFor({ state: "visible", timeout: 8000 });
-        await label.scrollIntoViewIfNeeded().catch(() => undefined);
-        await label.click({ timeout: 8000 });
-        clicked = true;
-        break;
-      } catch {
-        // Try next pattern
+        await domClick(label);
       }
-    }
-    if (!clicked) {
-      const radio = form
-        .getByRole("radio", { name: /Private Individual|Private|Individual/i })
-        .first();
-      try {
-        await radio.waitFor({ state: "visible", timeout: 8000 });
-        await radio.scrollIntoViewIfNeeded().catch(() => undefined);
-        await radio.click({ timeout: 8000 });
-        clicked = true;
-      } catch {
-        // ignore
-      }
-    }
-    if (!clicked) {
-      const anyRadios = form.getByRole("radio").filter({ visible: true });
-      if ((await anyRadios.count()) > 0) {
-        await anyRadios.first().scrollIntoViewIfNeeded().catch(() => undefined);
-        await anyRadios.first().click({ timeout: 8000 });
-        clicked = true;
-      }
-    }
-    if (!clicked) {
-      throw new Error(
-        "Seriti finance form did not open (applicant type visible but not clickable). Not a sheet cell. Clear Status, run load-only."
-      );
     }
 
     if (!config.dryRun) {
