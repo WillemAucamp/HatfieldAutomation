@@ -335,7 +335,9 @@ export async function fillSelectByVisibleText(
 ): Promise<void> {
   const select = form.locator(selectLocator).filter({ visible: true }).first();
   await select.waitFor({ state: "visible", timeout: 15000 });
-  await select.scrollIntoViewIfNeeded().catch(() => undefined);
+  await select.evaluate((el) => {
+    (el as HTMLElement).scrollIntoView({ block: "center", inline: "nearest" });
+  });
 
   const match = await matchSelectOption(select, value, { fieldName });
   await select.selectOption({ value: match.value });
