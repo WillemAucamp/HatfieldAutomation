@@ -236,10 +236,23 @@ export async function waitForVisibleButton(
     .waitFor({ state: "visible", timeout: timeoutMs });
 }
 
+/**
+ * Playwright's mouse click waits until the target stops moving. Seriti's
+ * Angular form never settles, so that wait times out on the applicant-type
+ * radio and on Next. A DOM click still runs the ng-click handler.
+ */
+export async function domClick(locator: Locator): Promise<void> {
+  await locator.evaluate((el) => {
+    const node = el as HTMLElement;
+    node.scrollIntoView({ block: "center", inline: "nearest" });
+    node.click();
+  });
+}
+
 export async function clickNext(form: FormScope, config: AppConfig): Promise<void> {
   const next = form.locator("button:visible").filter({ hasText: /^next$/i }).first();
   await next.waitFor({ state: "visible", timeout: 15000 });
-  await next.click();
+  await domClick(next);
 }
 
 /** After postal autocomplete, derive a short address line from the selected suburb. */
@@ -309,7 +322,7 @@ export async function fillRadioGroupsByAnswer(
 
   for (const name of slice) {
     const radio = scope.locator(`input[type="radio"][name="${name}"]`).nth(answerIndex);
-    await radio.check({ force: true });
+    await domClick(radio);
   }
 }
 
