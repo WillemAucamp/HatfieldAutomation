@@ -181,6 +181,7 @@ describe("validateIdNumber", () => {
 describe("formatDateForForm", () => {
   it("converts MM DD YYYY sheet dates to DD Mon YYYY", () => {
     assert.equal(formatDateForForm("08 18 2011"), "18 Aug 2011");
+    assert.equal(formatDateForForm("23 04 2026"), "23 Apr 2026");
     assert.equal(formatDateForForm("02 18 2015"), "18 Feb 2015");
   });
 

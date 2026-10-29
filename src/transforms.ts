@@ -183,6 +183,10 @@ export function formatDateForForm(raw: string | undefined | null): string {
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
       return `${String(day).padStart(2, "0")} ${MONTH_ABBR[month - 1]} ${year}`;
     }
+    // Sheet sometimes stores the marriage date as DD MM YYYY ("23 04 2026").
+    if (month > 12 && month <= 31 && day >= 1 && day <= 12) {
+      return `${String(month).padStart(2, "0")} ${MONTH_ABBR[day - 1]} ${year}`;
+    }
   }
   return trimmed;
 }

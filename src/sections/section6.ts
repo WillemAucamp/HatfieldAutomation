@@ -1,5 +1,5 @@
 import type { FillContext } from "../fieldResolver.js";
-import { clickNext, screenshotSection, waitForVisibleButton } from "../formUtils.js";
+import { clickNext, domClick, screenshotSection, waitForVisibleButton } from "../formUtils.js";
 import { parseReferenceNumber } from "../reference.js";
 
 const SECTION = "section6";
@@ -11,7 +11,7 @@ export async function runSection6(ctx: FillContext): Promise<string> {
   await screenshotSection(page, form, ctx.screenshotDir, SECTION, "before", config);
   const finish = form.locator("button").filter({ hasText: /^finish$/i }).filter({ visible: true }).first();
   await finish.waitFor({ state: "visible", timeout: 15000 });
-  await finish.click();
+  await domClick(finish);
   console.log("  [section6] Clicked FINISH");
 
   const reference = await waitForReference(ctx);
@@ -32,7 +32,7 @@ async function waitForReference(ctx: FillContext): Promise<string> {
         console.log(`  [section6] Captured reference ${parsed}`);
         const ok = scope.getByRole("button", { name: /^ok$/i }).first();
         if (await ok.isVisible({ timeout: 500 }).catch(() => false)) {
-          await ok.click();
+          await domClick(ok);
         }
         return parsed;
       }
