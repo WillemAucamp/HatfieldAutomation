@@ -23,6 +23,10 @@ import {
   runSection5,
 } from "./sections/index.js";
 import { appendLoadedClient, renumberSheetRows, writeRowOutcomeToSheet } from "./sheetWriter.js";
+import {
+  createEasysocialDraftIfNeeded,
+  resetEasysocialDraftCaches,
+} from "./easysocialDraft.js";
 import type {
   ApplicantRecord,
   ApplicantRunResult,
@@ -248,6 +252,19 @@ async function persistOutcome(
         result.warnings = warnings;
       }
     }
+
+    const referenceForDraft = successfulReferenceFromCell(result.sheetStatus ?? sheetStatus);
+    if (referenceForDraft && result.status === "submitted") {
+      const draft = await createEasysocialDraftIfNeeded(
+        config,
+        applicant,
+        referenceForDraft
+      );
+      if (draft.error) {
+        warnings.push(createWarning("easysocial-draft", "gmail-draft", draft.error));
+        result.warnings = warnings;
+      }
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     warnings.push(createWarning("status", "sheet-write", msg));
@@ -283,6 +300,7 @@ export async function runBatchMain(): Promise<void> {
   }
 
   console.log(`Fetching applicant data${config.dryRun ? " (DRY RUN)" : ""}...`);
+  resetEasysocialDraftCaches();
   const applicants = await fetchSheetData({
     csvUrl: config.sheetCsvUrl,
     mapping,

@@ -16,7 +16,7 @@
  *                   (also insertColumn + dataValidation dropdowns)
  *   readSheet     — read rows (used for Google Form intake)
  *   appendApplicant — append a formatted finance row on the automation sheet
- *
+ *   createEasysocialDraft — Gmail draft after successful Seriti load (Execute as Me)
  * Operator menu (after this file is in Apps Script, reload the spreadsheet):
  *   Hatfield → Process now / Ingest only / Load open rows
  *   Hatfield → Turn on 5-minute GitHub poll — external cron using GITHUB_TOKEN (idle-aware)
@@ -44,7 +44,7 @@ function doGet() {
   // returns this probe instead of the doPost JSON — keep shape stable.
   return json_({
     ok: true,
-    version: "hatfield-intake-3",
+    version: "hatfield-intake-4",
     actions: [
       "appendLoaded",
       "writeStatus",
@@ -52,6 +52,7 @@ function doGet() {
       "updateSheet",
       "readSheet",
       "appendApplicant",
+      "createEasysocialDraft",
     ],
     leadsSheetGid: LEADS_SHEET_GID,
     approvedSheetGid: APPROVED_SHEET_GID,
@@ -80,6 +81,9 @@ function doPost(e) {
     }
     if (action === "appendApplicant") {
       return json_(appendApplicant_(data));
+    }
+    if (action === "createEasysocialDraft") {
+      return json_(createEasysocialDraft_(data));
     }
     return json_({ ok: false, error: "Unknown action: " + action });
   } catch (err) {
@@ -191,6 +195,56 @@ function appendLoaded_(data) {
   sheet.getRange(appendRow, nameCol).setValue(name);
   writePhone_(sheet, appendRow, numberCol, normalizeSaMobile_(number) || number);
   return { ok: true, row: appendRow, name: name, number: number };
+}
+
+function normalizeEmailList_(list) {
+  if (!list) return [];
+  if (Array.isArray(list)) {
+    return list
+      .map(function (item) {
+        return String(item || "").trim();
+      })
+      .filter(Boolean);
+  }
+  return String(list)
+    .split(",")
+    .map(function (part) {
+      return part.trim();
+    })
+    .filter(Boolean);
+}
+
+/** Gmail draft in the deployer's mailbox (Execute as Me). To and CC must match. */
+function createEasysocialDraft_(data) {
+  var to = normalizeEmailList_(data.to);
+  var cc = normalizeEmailList_(data.cc);
+  if (!to.length) {
+    return { ok: false, error: "to is required" };
+  }
+  if (to.length !== cc.length) {
+    return { ok: false, error: "to and cc must have the same number of addresses" };
+  }
+  for (var i = 0; i < to.length; i++) {
+    if (to[i].toLowerCase() !== cc[i].toLowerCase()) {
+      return { ok: false, error: "to and cc must be identical" };
+    }
+  }
+  var subject = String(data.subject || "").trim();
+  var body = String(data.body == null ? "" : data.body);
+  if (!subject) {
+    return { ok: false, error: "subject is required" };
+  }
+  var recipients = to.join(", ");
+  var draft = GmailApp.createDraft(recipients, {
+    cc: recipients,
+    subject: subject,
+    body: body,
+  });
+  return {
+    ok: true,
+    draftId: draft.getId(),
+    messageId: draft.getMessage().getId(),
+  };
 }
 
 /**

@@ -32,6 +32,8 @@ npm run process         # one local run: ingest then Seriti
 
 Leads **Approved/Declined** WhatsApp: `npm run notify-leads` (see [`config/leads-whatsapp-automation.md`](./config/leads-whatsapp-automation.md)). Do not turn the Cursor 24/7 intake agent back on.
 
+After a **successful Seriti load** (reference in Status), optional **Easysocial Gmail drafts**: set `EASYSOCIAL_DRAFT_ENABLED=true` and four addresses in `EASYSOCIAL_RECIPIENTS` (identical To/CC). Redeploy `apps-script/Code.gs` for `createEasysocialDraft`. See [`config/YOU_DO.md`](./config/YOU_DO.md).
+
 Intake sheet (Willem/Sihle tab only): https://docs.google.com/spreadsheets/d/1qzp0v1_lHzAUj7TGXIj-cz0zuWctBX8de1wR46hKcLY/edit?gid=880063023#gid=880063023  
 Automation sheet: https://docs.google.com/spreadsheets/d/12uKI418JWRhns8GQpWF1ACxlKc_zN-FcXL0NC_afMZI/edit?gid=0#gid=0
 

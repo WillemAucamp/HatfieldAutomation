@@ -1,5 +1,5 @@
 import { pathToFileURL } from "node:url";
-import { loadConfig } from "./config.js";
+import { loadConfig, parseEasysocialRecipients } from "./config.js";
 import { postWebhookJson } from "./sheetWriter.js";
 import { loadIntakeMapping } from "./intake/mapping.js";
 import { enrichWithGemini } from "./intake/gemini.js";
@@ -145,6 +145,37 @@ export async function doctorMain(): Promise<number> {
           : unknownAction
             ? "old deploy — paste apps-script/Code.gs and Deploy → New version"
             : probe.error || JSON.stringify(probe.raw ?? probe).slice(0, 240),
+    });
+  }
+
+  if (config.easysocialDraftEnabled) {
+    const recipients = config.easysocialRecipients;
+    checks.push({
+      name: "EASYSOCIAL_RECIPIENTS",
+      ok: recipients.length === 4 && recipients.every((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)),
+      detail:
+        recipients.length === 4
+          ? recipients.join(", ")
+          : `need exactly 4 emails (got ${recipients.length}) — set EASYSOCIAL_RECIPIENTS`,
+    });
+    checks.push({
+      name: "Easysocial draft webhook",
+      ok: Boolean(config.sheetWebhookUrl),
+      detail: config.sheetWebhookUrl
+        ? "SHEET_WEBHOOK_URL set (redeploy Apps Script with createEasysocialDraft)"
+        : "missing SHEET_WEBHOOK_URL — drafts use GmailApp in Apps Script",
+    });
+  } else {
+    const preview = parseEasysocialRecipients(
+      process.env.EASYSOCIAL_RECIPIENTS
+    );
+    checks.push({
+      name: "Easysocial Gmail draft",
+      ok: true,
+      detail:
+        preview.length > 0
+          ? `optional — set EASYSOCIAL_DRAFT_ENABLED=true with 4 addresses (have ${preview.length})`
+          : "optional — EASYSOCIAL_DRAFT_ENABLED=false",
     });
   }
 
