@@ -27,6 +27,16 @@ Create or fix these two repository secrets:
 | `GEMINI_API_KEY` | your Gemini key (same one already in Cursor secrets) |
 | `SHEET_WEBHOOK_URL` | **only** the Apps Script URL, like `https://script.google.com/macros/s/…/exec` |
 
+Optional — **Easysocial Gmail draft** after each successful Seriti load:
+
+| Name | Value |
+| --- | --- |
+| `EASYSOCIAL_DRAFT_ENABLED` | `true` |
+| `EASYSOCIAL_RECIPIENTS` | four comma-separated emails (same list used for **To** and **CC**) |
+| `EASYSOCIAL_DRAFT_COLUMN` | optional; default `Easysocial draft` on the automation sheet |
+
+Paste the latest `apps-script/Code.gs` and **Deploy → New version** so the webhook exposes `createEasysocialDraft`. Drafts appear in the Google account that deployed the web app. Add column **Easysocial draft** on the automation sheet (or run `npm run sheet-update -- --insert-column-after Timing --header "Easysocial draft"`) so retries do not duplicate drafts.
+
 If `SHEET_WEBHOOK_URL` currently looks like `SHEET_WEBHOOK_URL=https://script.google.com/…`, edit it and delete the `SHEET_WEBHOOK_URL=` prefix. The url must start with `https://`.
 
 ---

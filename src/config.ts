@@ -216,7 +216,22 @@ export function loadConfig(): AppConfig {
       nameField: process.env.WHATSAPP_NAME_FIELD || "name",
       bodyTemplate: process.env.WHATSAPP_BODY_TEMPLATE || "",
     },
+    easysocialDraftEnabled: parseBool(process.env.EASYSOCIAL_DRAFT_ENABLED, false),
+    easysocialRecipients: parseEasysocialRecipients(
+      normalizeEnvValue(process.env.EASYSOCIAL_RECIPIENTS, "EASYSOCIAL_RECIPIENTS")
+    ),
+    easysocialDraftColumn:
+      process.env.EASYSOCIAL_DRAFT_COLUMN?.trim() || "Easysocial draft",
   };
+}
+
+/** Comma-separated list; trims and drops empties. Doctor requires length 4 when enabled. */
+export function parseEasysocialRecipients(raw: string | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
 }
 
 /** 0 or empty = unlimited. Negative / NaN falls back to the default. */

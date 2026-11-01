@@ -169,6 +169,11 @@ export interface AppConfig {
   leadsStatusColumn: string;
   leadsWhatsappSentColumn: string;
   whatsapp: WhatsAppConfig;
+  /** After successful Seriti load, create Easysocial Gmail draft via Apps Script. */
+  easysocialDraftEnabled: boolean;
+  /** Exactly four addresses when enabled; used for both To and CC. */
+  easysocialRecipients: string[];
+  easysocialDraftColumn: string;
 }
 
 export type FieldStrategy =
