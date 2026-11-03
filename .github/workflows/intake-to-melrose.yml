@@ -116,4 +116,4 @@ jobs:
         if: ${{ always() && ((github.event_name != 'schedule' && github.event.inputs.scheduledTick != 'true') || steps.pending.outputs.should_run != 'false') && (github.event_name == 'schedule' || github.event.inputs.dryRun != 'true') }}
         env:
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
-        run: npx tsx src/carryApprovedLeads.ts
+        run: npx tsx src/carryApprovedLeads.ts --all

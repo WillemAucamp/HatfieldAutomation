@@ -13,7 +13,7 @@ import type { AppConfig } from "./types.js";
 
 export async function carryRecentApprovedLeads(
   config: AppConfig,
-  windowRows = 120
+  windowRows: number | null = 120
 ): Promise<string[]> {
   const leads = await readMoneySheetRows(
     config,
@@ -50,9 +50,15 @@ async function main(): Promise<void> {
     console.log("No SHEET_WEBHOOK_URL; skipping Approved-tab carry.");
     return;
   }
-  const carried = await carryRecentApprovedLeads(config);
+  const scanAll = process.argv.includes("--all");
+  const windowRows = scanAll ? null : 120;
+  const carried = await carryRecentApprovedLeads(config, windowRows);
   if (carried.length === 0) {
-    console.log("Approved tab already has the recent Approved leads.");
+    console.log(
+      scanAll
+        ? "Approved tab already has every carry-eligible lead from Leads."
+        : "Approved tab already has the recent Approved leads."
+    );
     return;
   }
   console.log(`Carried ${carried.length} approved lead(s) onto the Approved tab.`);

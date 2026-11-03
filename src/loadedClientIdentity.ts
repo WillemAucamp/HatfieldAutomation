@@ -1,3 +1,4 @@
+import { isApprovedForCarryTab } from "./leadStatus.js";
 import { transformMobile } from "./transforms.js";
 
 /**
@@ -148,16 +149,16 @@ export function approvedRowMissing(
 export function approvedLeadsToCarry(
   leads: ApprovedLeadRow[],
   approvedTab: Array<{ name: string; number: string }>,
-  windowRows = 120
+  windowRows: number | null = 120
 ): ApprovedLeadRow[] {
   const named = leads.filter((row) => row.name.trim());
   if (named.length === 0) return [];
   const last = Math.max(...named.map((row) => row.rowIndex));
-  const floor = last - windowRows;
+  const floor = windowRows == null ? 0 : last - windowRows;
   const carry: ApprovedLeadRow[] = [];
   for (const row of named) {
     if (row.rowIndex < floor) continue;
-    if (row.status.trim().toLowerCase() !== "approved") continue;
+    if (!isApprovedForCarryTab(row.status)) continue;
     if (!normalizeLoadedPhone(row.number)) continue;
     if (!approvedRowMissing(approvedTab, row.name, row.number)) continue;
     carry.push(row);

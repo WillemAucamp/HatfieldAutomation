@@ -94,4 +94,21 @@ describe("approvedLeadsToCarry", () => {
       false
     );
   });
+
+  it("carries Approved no message sent and can scan the full Leads sheet", () => {
+    const allLeads = [
+      ...leads,
+      {
+        rowIndex: 628,
+        name: "Damien Pasich-Britz",
+        number: "0820001234",
+        status: "Approved no message sent",
+      },
+    ];
+    const carry = approvedLeadsToCarry(allLeads, approvedTab, null);
+    assert.equal(
+      carry.some((row) => row.name === "Damien Pasich-Britz"),
+      true
+    );
+  });
 });

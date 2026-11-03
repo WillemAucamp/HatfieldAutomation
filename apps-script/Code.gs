@@ -47,7 +47,7 @@ function doGet() {
   // returns this probe instead of the doPost JSON — keep shape stable.
   return json_({
     ok: true,
-    version: "hatfield-intake-4",
+    version: "hatfield-intake-5",
     actions: [
       "appendLoaded",
       "writeStatus",
@@ -311,7 +311,7 @@ function maybeCarryApprovedFromWrites_(sheet, written) {
       colName = LEADS_STATUS_HEADER;
     }
     if (!rowNum || !/^status$/i.test(colName)) continue;
-    if (String(item.value || "").trim().toLowerCase() !== "approved") continue;
+    if (!isApprovedForCarry_(item.value)) continue;
     rows[rowNum] = true;
   }
 
@@ -377,6 +377,67 @@ function carryApprovedLead_(name, number, comment) {
     sheet.getRange(row, commentCol).setValue(note);
   }
   return { ok: true, row: row, name: cleanName, number: phone };
+}
+
+/**
+ * Backfill: copy every Leads row whose Status is Approved or Approved no message sent
+ * when that client is not already on the Approved tab (full sheet scan).
+ */
+function carryAllMissingApprovedLeads_() {
+  var ss = SpreadsheetApp.openById(LOADED_SHEET_ID);
+  var leads = ss.getSheetById(LEADS_SHEET_GID);
+  if (!leads) return { ok: false, error: "Leads tab missing", carried: 0, names: [] };
+
+  var lastCol = Math.max(leads.getLastColumn(), 1);
+  var lastRow = leads.getLastRow();
+  if (lastRow < 2) return { ok: true, carried: 0, names: [] };
+
+  var headers = leads.getRange(1, 1, 1, lastCol).getValues()[0];
+  var statusCol = headers.indexOf(LEADS_STATUS_HEADER) + 1;
+  var nameCol = headers.indexOf("Name") + 1;
+  var numberCol = headers.indexOf("Number") + 1;
+  if (!statusCol || !nameCol || !numberCol) {
+    return { ok: false, error: "Leads tab missing Name, Number, or Status", carried: 0, names: [] };
+  }
+
+  var values = leads.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  var carried = [];
+  for (var i = 0; i < values.length; i++) {
+    var rowIndex = i + 2;
+    var status = String(values[i][statusCol - 1] || "").trim();
+    if (!isApprovedForCarry_(status)) continue;
+    var leadName = String(values[i][nameCol - 1] || "").trim();
+    var leadNumber = String(values[i][numberCol - 1] || "").trim();
+    if (!leadName) continue;
+    var comment = readLeadComment_(leads, rowIndex, headers);
+    var result = carryApprovedLead_(leadName, leadNumber, comment);
+    if (result && result.ok) {
+      carried.push(leadName);
+    }
+  }
+  return { ok: true, carried: carried.length, names: carried };
+}
+
+function menuCarryMissingApproved() {
+  var ui = SpreadsheetApp.getUi();
+  var result = carryAllMissingApprovedLeads_();
+  if (!result.ok) {
+    ui.alert("Approved backfill failed", String(result.error || "Unknown error"), ui.ButtonSet.OK);
+    return;
+  }
+  if (result.carried === 0) {
+    ui.alert(
+      "Approved tab up to date",
+      "Every Approved / Approved no message sent lead on Leads is already on the Approved tab.",
+      ui.ButtonSet.OK
+    );
+    return;
+  }
+  ui.alert(
+    "Copied to Approved tab",
+    "Added or updated " + result.carried + " client(s):\n\n" + result.names.join("\n"),
+    ui.ButtonSet.OK
+  );
 }
 
 function writeStatus_(data) {
@@ -989,6 +1050,8 @@ function onOpen() {
     .addItem("Turn on 5-minute GitHub poll", "menuTurnOnPipelinePoll")
     .addItem("Turn off 5-minute GitHub poll", "menuTurnOffPipelinePoll")
     .addSeparator()
+    .addItem("Copy missing Approved leads to Approved tab", "menuCarryMissingApproved")
+    .addSeparator()
     .addItem("Mark old Form rows skipped…", "menuSkipHistorical")
     .addToUi();
 }
@@ -1184,6 +1247,15 @@ function isNotifiableLeadStatus_(value) {
   return s === "approved" || s === "declined";
 }
 
+/** Plain Approved and Approved no message sent both belong on the Approved tab. */
+function isApprovedForCarry_(value) {
+  var s = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  return s === "approved" || s === "approved no message sent";
+}
+
 /**
  * Installable onEdit: Leads Status → Approved tab + WhatsApp wake-up; Comment sync both ways.
  *
@@ -1275,17 +1347,17 @@ function handleLeadsSheetEdit_(e, sheet) {
   for (var r = 0; r < numRows; r++) {
     var row = startRow + r;
     var status = String(sheet.getRange(row, statusCol).getValue() || "").trim();
-    if (!isNotifiableLeadStatus_(status)) continue;
     var leadName = nameCol ? String(sheet.getRange(row, nameCol).getValue() || "") : "";
     var leadNumber = numberCol ? String(sheet.getRange(row, numberCol).getValue() || "") : "";
     var leadComment = readLeadComment_(sheet, row, headers);
-    if (String(status).trim().toLowerCase() === "approved") {
+    if (isApprovedForCarry_(status)) {
       try {
         carryApprovedLead_(leadName, leadNumber, leadComment);
       } catch (carryErr) {
         console.error(carryErr);
       }
     }
+    if (!isNotifiableLeadStatus_(status)) continue;
     var sent = sentCol ? String(sheet.getRange(row, sentCol).getValue() || "").trim() : "";
     if (/^yes$/i.test(sent) || /^sent/i.test(sent)) continue;
     notified.push({
