@@ -143,6 +143,26 @@ export function approvedRowMissing(
 }
 
 /**
+ * Approved-tab row with a blank Name but this cellphone, which the carry should
+ * reuse instead of appending a second row for the same number.
+ */
+export function findOrphanPhoneRow(
+  approvedTab: Array<{ rowIndex: number; name: string; number: string }>,
+  number: string,
+  usedRows: ReadonlySet<number> = new Set()
+): number {
+  const phone = normalizeLoadedPhone(number);
+  if (!phone) return 0;
+  const orphan = approvedTab.find(
+    (row) =>
+      !usedRows.has(row.rowIndex) &&
+      !row.name.trim() &&
+      normalizeLoadedPhone(row.number) === phone
+  );
+  return orphan ? orphan.rowIndex : 0;
+}
+
+/**
  * Approved leads the F&I tab does not have yet.
  * Only the recent window is copied, so old approvals are not dumped onto the working list.
  */

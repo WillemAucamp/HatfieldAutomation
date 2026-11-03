@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   approvedLeadsToCarry,
   approvedRowMissing,
+  findOrphanPhoneRow,
   normalizeLoadedPhone,
   planLoadedUpsert,
   sameLoadedPerson,
@@ -110,6 +111,17 @@ describe("approvedLeadsToCarry", () => {
       carry.some((row) => row.name === "Damien Pasich-Britz"),
       true
     );
+  });
+
+  it("finds a phone-only stub row to reuse, once per run", () => {
+    const tab = [
+      { rowIndex: 10, name: "Sipho Dube", number: "0820000001" },
+      { rowIndex: 11, name: "", number: "715316597" },
+    ];
+    assert.equal(findOrphanPhoneRow(tab, "0715316597"), 11);
+    assert.equal(findOrphanPhoneRow(tab, "0715316597", new Set([11])), 0);
+    assert.equal(findOrphanPhoneRow(tab, "0820000001"), 0);
+    assert.equal(findOrphanPhoneRow(tab, ""), 0);
   });
 
   it("carries Approved leads even when Number is blank (name only)", () => {
