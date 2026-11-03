@@ -31,7 +31,13 @@ export async function carryRecentApprovedLeads(
   const missing = approvedLeadsToCarry(leads, approvedTab, windowRows);
   const carried: string[] = [];
   for (const row of missing) {
-    await appendMoneySheetRow(config, config.approvedSheetGid, row.name, row.number);
+    await appendMoneySheetRow(
+      config,
+      config.approvedSheetGid,
+      row.name,
+      row.number,
+      row.comment ?? ""
+    );
     carried.push(row.name);
     console.log(`Approved tab: ${row.name} (Leads row ${row.rowIndex})`);
   }

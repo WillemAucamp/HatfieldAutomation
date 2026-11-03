@@ -123,6 +123,7 @@ export interface ApprovedLeadRow {
   name: string;
   number: string;
   status: string;
+  comment?: string;
 }
 
 /** True when this approved client is not already on the Approved follow-up tab. */
@@ -133,9 +134,10 @@ export function approvedRowMissing(
 ): boolean {
   const phone = normalizeLoadedPhone(number);
   return !approvedTab.some((row) => {
-    if (sameLoadedPerson(row.name, name)) return true;
-    if (phone && !row.name.trim() && normalizeLoadedPhone(row.number) === phone) return true;
-    return false;
+    if (!sameLoadedPerson(row.name, name)) return false;
+    const existingPhone = normalizeLoadedPhone(row.number);
+    if (!phone || !existingPhone) return true;
+    return existingPhone === phone;
   });
 }
 

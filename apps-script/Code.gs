@@ -38,13 +38,16 @@ var LEADS_SHEET_GID = 2126384446;
 var APPROVED_SHEET_GID = 1730847217;
 var LEADS_STATUS_HEADER = "Status";
 var LEADS_WHATSAPP_SENT_HEADER = "WhatsApp sent";
+var LEADS_COMMENT_HEADER = "Comment";
+/** Prevents onEdit loops when mirroring Comment between Leads and Approved. */
+var COMMENT_SYNC_DEPTH_ = 0;
 
 function doGet() {
   // Client code (postWebhookJson) retries when a 302 confirmation wrongly
   // returns this probe instead of the doPost JSON — keep shape stable.
   return json_({
     ok: true,
-    version: "hatfield-intake-3",
+    version: "hatfield-intake-4",
     actions: [
       "appendLoaded",
       "writeStatus",
@@ -197,6 +200,97 @@ function appendLoaded_(data) {
  * updateSheet writes do not fire onEdit. If this write set Leads Status to Approved,
  * copy that client onto the Approved tab.
  */
+function findClientRowOnSheet_(sheet, nameCol, numberCol, cleanName, phone) {
+  var last = Math.max(sheet.getLastRow(), 1);
+  if (last < 2) return 0;
+  var names = sheet.getRange(2, nameCol, last - 1, 1).getValues();
+  var numbers = sheet.getRange(2, numberCol, last - 1, 1).getValues();
+  for (var i = 0; i < names.length; i++) {
+    var rowName = String(names[i][0] || "");
+    var rowPhone = normalizeSaMobile_(numbers[i][0]);
+    if (!samePerson_(rowName, cleanName)) continue;
+    if (rowPhone && phone && rowPhone !== phone) continue;
+    return i + 2;
+  }
+  return 0;
+}
+
+function findOrphanPhoneRow_(sheet, nameCol, numberCol, phone) {
+  var last = Math.max(sheet.getLastRow(), 1);
+  if (last < 2 || !phone) return 0;
+  var names = sheet.getRange(2, nameCol, last - 1, 1).getValues();
+  var numbers = sheet.getRange(2, numberCol, last - 1, 1).getValues();
+  for (var i = 0; i < names.length; i++) {
+    if (String(names[i][0] || "").trim()) continue;
+    if (normalizeSaMobile_(numbers[i][0]) === phone) return i + 2;
+  }
+  return 0;
+}
+
+function clearApprovedRowContent_(sheet, row) {
+  if (row < 2) return;
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  sheet.getRange(row, 1, 1, lastCol).clearContent();
+}
+  var commentCol = headers.indexOf(LEADS_COMMENT_HEADER) + 1;
+  if (!commentCol || row < 2) return "";
+  return String(leadsSheet.getRange(row, commentCol).getValue() || "");
+}
+
+function readLeadComment_(leadsSheet, row, headers) {
+  var commentCol = headers.indexOf(LEADS_COMMENT_HEADER) + 1;
+  if (!commentCol || row < 2) return "";
+  return String(leadsSheet.getRange(row, commentCol).getValue() || "");
+}
+
+function syncLeadComment_(name, number, comment, sourceIsLeads) {
+  if (COMMENT_SYNC_DEPTH_ > 0) return;
+  var cleanName = String(name || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  var phone = normalizeSaMobile_(number);
+  if (!cleanName) return;
+
+  var ss = SpreadsheetApp.openById(LOADED_SHEET_ID);
+  var leads = ss.getSheetById(LEADS_SHEET_GID);
+  var approved = ss.getSheetById(APPROVED_SHEET_GID);
+  if (!leads || !approved) return;
+
+  var leadsHeaders = leads.getRange(1, 1, 1, Math.max(leads.getLastColumn(), 1)).getValues()[0];
+  var approvedHeaders = approved.getRange(1, 1, 1, Math.max(approved.getLastColumn(), 1)).getValues()[0];
+  var leadsNameCol = leadsHeaders.indexOf("Name") + 1;
+  var leadsNumberCol = leadsHeaders.indexOf("Number") + 1;
+  var leadsCommentCol = leadsHeaders.indexOf(LEADS_COMMENT_HEADER) + 1;
+  var approvedNameCol = approvedHeaders.indexOf("Name") + 1;
+  var approvedNumberCol = approvedHeaders.indexOf("Number") + 1;
+  var approvedCommentCol = approvedHeaders.indexOf(LEADS_COMMENT_HEADER) + 1;
+  if (!leadsNameCol || !leadsNumberCol || !approvedNameCol || !approvedNumberCol) return;
+  if (!leadsCommentCol || !approvedCommentCol) return;
+
+  COMMENT_SYNC_DEPTH_ = 1;
+  try {
+    if (sourceIsLeads) {
+      var approvedRow = findClientRowOnSheet_(
+        approved,
+        approvedNameCol,
+        approvedNumberCol,
+        cleanName,
+        phone
+      );
+      if (approvedRow) {
+        approved.getRange(approvedRow, approvedCommentCol).setValue(comment);
+      }
+    } else {
+      var leadsRow = findClientRowOnSheet_(leads, leadsNameCol, leadsNumberCol, cleanName, phone);
+      if (leadsRow) {
+        leads.getRange(leadsRow, leadsCommentCol).setValue(comment);
+      }
+    }
+  } finally {
+    COMMENT_SYNC_DEPTH_ = 0;
+  }
+}
+
 function maybeCarryApprovedFromWrites_(sheet, written) {
   if (!sheet || sheet.getSheetId() !== LEADS_SHEET_GID) return;
   var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
@@ -227,7 +321,8 @@ function maybeCarryApprovedFromWrites_(sheet, written) {
     try {
       carryApprovedLead_(
         String(sheet.getRange(r, nameCol).getValue() || ""),
-        String(sheet.getRange(r, numberCol).getValue() || "")
+        String(sheet.getRange(r, numberCol).getValue() || ""),
+        readLeadComment_(sheet, r, headers)
       );
     } catch (carryErr) {
       console.error(carryErr);
@@ -239,7 +334,7 @@ function maybeCarryApprovedFromWrites_(sheet, written) {
  * Put an Approved lead on the Approved follow-up tab if they are not already there.
  * Same cellphone under a different name still gets a row — do not hide the new client.
  */
-function carryApprovedLead_(name, number) {
+function carryApprovedLead_(name, number, comment) {
   var cleanName = String(name || "")
     .trim()
     .replace(/\s+/g, " ");
@@ -250,28 +345,37 @@ function carryApprovedLead_(name, number) {
   var sheet = ss.getSheetById(APPROVED_SHEET_GID);
   if (!sheet) return { ok: false, error: "Approved tab missing" };
 
-  var headers = ensureHeaders_(sheet, ["Name", "Number"]);
+  var headers = ensureHeaders_(sheet, ["Name", "Number", LEADS_COMMENT_HEADER]);
   var nameCol = headers.indexOf("Name") + 1;
   var numberCol = headers.indexOf("Number") + 1;
+  var commentCol = headers.indexOf(LEADS_COMMENT_HEADER) + 1;
+  var note = comment != null ? String(comment) : "";
+
   var last = Math.max(sheet.getLastRow(), 1);
-  if (last >= 2) {
-    var names = sheet.getRange(2, nameCol, last - 1, 1).getValues();
-    var numbers = sheet.getRange(2, numberCol, last - 1, 1).getValues();
-    for (var i = 0; i < names.length; i++) {
-      if (samePerson_(names[i][0], cleanName)) {
-        return { ok: true, skipped: true, row: i + 2, name: cleanName };
-      }
-      if (!String(names[i][0] || "").trim() && normalizeSaMobile_(numbers[i][0]) === phone) {
-        sheet.getRange(i + 2, nameCol).setValue(cleanName);
-        writePhone_(sheet, i + 2, numberCol, phone);
-        return { ok: true, updated: true, row: i + 2, name: cleanName };
-      }
+  var existingRow = findClientRowOnSheet_(sheet, nameCol, numberCol, cleanName, phone);
+  var reusedOrphan = false;
+  if (!existingRow) {
+    existingRow = findOrphanPhoneRow_(sheet, nameCol, numberCol, phone);
+    reusedOrphan = existingRow > 0;
+  }
+  if (existingRow) {
+    if (reusedOrphan) {
+      clearApprovedRowContent_(sheet, existingRow);
     }
+    sheet.getRange(existingRow, nameCol).setValue(cleanName);
+    writePhone_(sheet, existingRow, numberCol, phone);
+    if (commentCol && note) {
+      sheet.getRange(existingRow, commentCol).setValue(note);
+    }
+    return { ok: true, updated: true, row: existingRow, name: cleanName };
   }
 
   var row = Math.max(last + 1, 2);
   sheet.getRange(row, nameCol).setValue(cleanName);
   writePhone_(sheet, row, numberCol, phone);
+  if (commentCol && note) {
+    sheet.getRange(row, commentCol).setValue(note);
+  }
   return { ok: true, row: row, name: cleanName, number: phone };
 }
 
@@ -1081,31 +1185,83 @@ function isNotifiableLeadStatus_(value) {
 }
 
 /**
- * Installable onEdit: when Leads Status becomes Approved/Declined, ping Cursor
- * so the agent can run `npm run notify-leads`. WhatsApp secrets stay in Node.
+ * Installable onEdit: Leads Status → Approved tab + WhatsApp wake-up; Comment sync both ways.
  *
  * Also ensures a "WhatsApp sent" column exists (Yes/No dropdown).
  */
 function onLeadsEdit(e) {
+  onMoneySheetEdit(e);
+}
+
+function onMoneySheetEdit(e) {
   if (!e || !e.range) return;
   var sheet = e.range.getSheet();
-  if (sheet.getSheetId() !== LEADS_SHEET_GID) return;
+  var sheetId = sheet.getSheetId();
+  if (sheetId === LEADS_SHEET_GID) {
+    handleLeadsSheetEdit_(e, sheet);
+    return;
+  }
+  if (sheetId === APPROVED_SHEET_GID) {
+    handleApprovedSheetEdit_(e, sheet);
+  }
+}
+
+function handleApprovedSheetEdit_(e, sheet) {
+  if (e.range.getRow() < 2) return;
+  var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  var commentCol = headers.indexOf(LEADS_COMMENT_HEADER) + 1;
+  if (!commentCol) return;
+  var editedCol = e.range.getColumn();
+  var editedCols = e.range.getNumColumns();
+  if (!(editedCol <= commentCol && editedCol + editedCols - 1 >= commentCol)) return;
+
+  var nameCol = headers.indexOf("Name") + 1;
+  var numberCol = headers.indexOf("Number") + 1;
+  if (!nameCol || !numberCol) return;
+
+  var startRow = e.range.getRow();
+  var numRows = e.range.getNumRows();
+  for (var r = 0; r < numRows; r++) {
+    var row = startRow + r;
+    var leadName = String(sheet.getRange(row, nameCol).getValue() || "");
+    var leadNumber = String(sheet.getRange(row, numberCol).getValue() || "");
+    var comment = String(sheet.getRange(row, commentCol).getValue() || "");
+    syncLeadComment_(leadName, leadNumber, comment, false);
+  }
+}
+
+function handleLeadsSheetEdit_(e, sheet) {
   if (e.range.getRow() < 2) return;
 
   var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
   var statusCol = headers.indexOf(LEADS_STATUS_HEADER) + 1;
-  if (!statusCol) return;
+  var commentCol = headers.indexOf(LEADS_COMMENT_HEADER) + 1;
+  var nameCol = headers.indexOf("Name") + 1;
+  var numberCol = headers.indexOf("Number") + 1;
+  if (!statusCol || !nameCol || !numberCol) return;
 
   var editedCol = e.range.getColumn();
   var editedCols = e.range.getNumColumns();
+  var touchesComment =
+    commentCol && editedCol <= commentCol && editedCol + editedCols - 1 >= commentCol;
   var touchesStatus =
     editedCol <= statusCol && editedCol + editedCols - 1 >= statusCol;
+
+  if (touchesComment && !touchesStatus) {
+    var startComment = e.range.getRow();
+    var commentRows = e.range.getNumRows();
+    for (var c = 0; c < commentRows; c++) {
+      var crow = startComment + c;
+      var cname = String(sheet.getRange(crow, nameCol).getValue() || "");
+      var cnumber = String(sheet.getRange(crow, numberCol).getValue() || "");
+      var ctext = String(sheet.getRange(crow, commentCol).getValue() || "");
+      syncLeadComment_(cname, cnumber, ctext, true);
+    }
+    return;
+  }
+
   if (!touchesStatus) return;
 
-  var startRow = e.range.getRow();
-  var numRows = e.range.getNumRows();
-  var nameCol = headers.indexOf("Name") + 1;
-  var numberCol = headers.indexOf("Number") + 1;
   ensureColumn_(sheet, headers, LEADS_WHATSAPP_SENT_HEADER);
   headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
   var sentCol = headers.indexOf(LEADS_WHATSAPP_SENT_HEADER) + 1;
@@ -1113,6 +1269,8 @@ function onLeadsEdit(e) {
     setColumnValidation_(sheet, sentCol, ["Yes", "No"], { fromRow: 2, toRow: 2000 });
   }
 
+  var startRow = e.range.getRow();
+  var numRows = e.range.getNumRows();
   var notified = [];
   for (var r = 0; r < numRows; r++) {
     var row = startRow + r;
@@ -1120,10 +1278,10 @@ function onLeadsEdit(e) {
     if (!isNotifiableLeadStatus_(status)) continue;
     var leadName = nameCol ? String(sheet.getRange(row, nameCol).getValue() || "") : "";
     var leadNumber = numberCol ? String(sheet.getRange(row, numberCol).getValue() || "") : "";
-    // Copy even when WhatsApp was already sent — the Approved tab is a separate miss.
+    var leadComment = readLeadComment_(sheet, row, headers);
     if (String(status).trim().toLowerCase() === "approved") {
       try {
-        carryApprovedLead_(leadName, leadNumber);
+        carryApprovedLead_(leadName, leadNumber, leadComment);
       } catch (carryErr) {
         console.error(carryErr);
       }
@@ -1156,15 +1314,17 @@ function setupLeadsWhatsAppWatch() {
   var ss = SpreadsheetApp.openById(LOADED_SHEET_ID);
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === "onLeadsEdit") {
+    var handler = triggers[i].getHandlerFunction();
+    if (handler === "onLeadsEdit" || handler === "onMoneySheetEdit") {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
-  ScriptApp.newTrigger("onLeadsEdit").forSpreadsheet(ss).onEdit().create();
+  ScriptApp.newTrigger("onMoneySheetEdit").forSpreadsheet(ss).onEdit().create();
   return {
     ok: true,
     spreadsheet: ss.getName(),
-    handler: "onLeadsEdit",
+    handler: "onMoneySheetEdit",
     leadsSheetGid: LEADS_SHEET_GID,
+    approvedSheetGid: APPROVED_SHEET_GID,
   };
 }

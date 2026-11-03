@@ -192,6 +192,7 @@ export function loadConfig(): AppConfig {
     leadsNumberColumn: process.env.LEADS_NUMBER_COLUMN || "Number",
     leadsStatusColumn: process.env.LEADS_STATUS_COLUMN || "Status",
     leadsWhatsappSentColumn: process.env.LEADS_WHATSAPP_SENT_COLUMN || "WhatsApp sent",
+    leadsCommentColumn: process.env.LEADS_COMMENT_COLUMN || "Comment",
     whatsapp: {
       provider: (process.env.WHATSAPP_PROVIDER || "meta").toLowerCase() === "custom" ? "custom" : "meta",
       apiUrl: process.env.WHATSAPP_API_URL || "",

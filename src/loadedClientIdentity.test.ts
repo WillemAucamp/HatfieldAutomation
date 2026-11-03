@@ -82,6 +82,11 @@ describe("approvedLeadsToCarry", () => {
     assert.equal(approvedRowMissing(approvedTab, "Buhle Masinga", "0715316597"), false);
   });
 
+  it("does not treat a blank-name row with the same phone as already carrying that client", () => {
+    const tab = [{ name: "", number: "0715316597" }];
+    assert.equal(approvedRowMissing(tab, "Buhle Masinga", "0715316597"), true);
+  });
+
   it("does not backfill approvals outside the recent window", () => {
     const carry = approvedLeadsToCarry(leads, approvedTab, 120);
     assert.equal(

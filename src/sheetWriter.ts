@@ -339,13 +339,15 @@ function cellValue(values: Record<string, string>, header: string): string {
 
 export interface MoneySheetRow extends LoadedIdentityRow {
   status: string;
+  comment: string;
 }
 
 function loadedRowsFromWebhook(
   rows: unknown,
   nameColumn: string,
   numberColumn: string,
-  statusColumn = ""
+  statusColumn = "",
+  commentColumn = "Comment"
 ): MoneySheetRow[] {
   if (!Array.isArray(rows)) return [];
   const loaded: MoneySheetRow[] = [];
@@ -359,6 +361,7 @@ function loadedRowsFromWebhook(
       name: cellValue(values, nameColumn),
       number: cellValue(values, numberColumn),
       status: statusColumn ? cellValue(values, statusColumn) : "",
+      comment: commentColumn ? cellValue(values, commentColumn) : "",
     });
   }
   return loaded;
@@ -633,20 +636,24 @@ export async function appendMoneySheetRow(
   config: AppConfig,
   sheetGid: number,
   name: string,
-  phone: string
+  phone: string,
+  comment = ""
 ): Promise<void> {
   const webhook = config.loadedSheetWebhookUrl || config.sheetWebhookUrl;
   if (!webhook) throw new Error("SHEET_WEBHOOK_URL is required");
   const textPhone = sheetTextPhone(phone);
   if (!name.trim() || !textPhone) throw new Error("name and number are required");
+  const append: Record<string, string> = {
+    [config.loadedNameColumn]: name.trim(),
+    [config.loadedNumberColumn]: textPhone,
+  };
+  const note = String(comment ?? "").trim();
+  if (note) append.Comment = note;
   const parsed = await postWebhookJson(webhook, {
     action: "updateSheet",
     spreadsheetId: config.loadedSheetId || config.leadsSpreadsheetId,
     sheetGid,
-    append: {
-      [config.loadedNameColumn]: name.trim(),
-      [config.loadedNumberColumn]: textPhone,
-    },
+    append,
   });
   if (parsed.ok === false) {
     throw new Error(parsed.error || "updateSheet append failed");
@@ -671,7 +678,13 @@ export async function readMoneySheetRows(
   if (parsed.ok === false) {
     throw new Error(parsed.error || "readSheet failed");
   }
-  return loadedRowsFromWebhook(parsed.rows, nameColumn, numberColumn, statusColumn);
+  return loadedRowsFromWebhook(
+    parsed.rows,
+    nameColumn,
+    numberColumn,
+    statusColumn,
+    config.leadsCommentColumn
+  );
 }
 
 /**
