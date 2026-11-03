@@ -339,13 +339,15 @@ function cellValue(values: Record<string, string>, header: string): string {
 
 export interface MoneySheetRow extends LoadedIdentityRow {
   status: string;
+  comment: string;
 }
 
 function loadedRowsFromWebhook(
   rows: unknown,
   nameColumn: string,
   numberColumn: string,
-  statusColumn = ""
+  statusColumn = "",
+  commentColumn = "Comment"
 ): MoneySheetRow[] {
   if (!Array.isArray(rows)) return [];
   const loaded: MoneySheetRow[] = [];
@@ -359,6 +361,7 @@ function loadedRowsFromWebhook(
       name: cellValue(values, nameColumn),
       number: cellValue(values, numberColumn),
       status: statusColumn ? cellValue(values, statusColumn) : "",
+      comment: commentColumn ? cellValue(values, commentColumn) : "",
     });
   }
   return loaded;
@@ -633,33 +636,84 @@ export async function appendMoneySheetRow(
   config: AppConfig,
   sheetGid: number,
   name: string,
-  phone: string
+  phone: string,
+  comment = ""
 ): Promise<void> {
   const webhook = config.loadedSheetWebhookUrl || config.sheetWebhookUrl;
   if (!webhook) throw new Error("SHEET_WEBHOOK_URL is required");
   const textPhone = sheetTextPhone(phone);
-  if (!name.trim() || !textPhone) throw new Error("name and number are required");
+  if (!name.trim()) throw new Error("name is required");
+  const append: Record<string, string> = {
+    [config.loadedNameColumn]: name.trim(),
+  };
+  if (textPhone) {
+    append[config.loadedNumberColumn] = textPhone;
+  }
+  const note = String(comment ?? "").trim();
+  if (note) append.Comment = note;
   const parsed = await postWebhookJson(webhook, {
     action: "updateSheet",
     spreadsheetId: config.loadedSheetId || config.leadsSpreadsheetId,
     sheetGid,
-    append: {
-      [config.loadedNameColumn]: name.trim(),
-      [config.loadedNumberColumn]: textPhone,
-    },
+    append,
   });
   if (parsed.ok === false) {
     throw new Error(parsed.error || "updateSheet append failed");
   }
 }
 
-export async function readMoneySheetRows(
+/**
+ * Clear a phone-only stub row on a money-workbook tab and write this client into it,
+ * so a stale stub's Vals / Time / notes are not left beside the new name.
+ */
+export async function overwriteMoneySheetRow(
+  config: AppConfig,
+  sheetGid: number,
+  rowIndex: number,
+  columnCount: number,
+  name: string,
+  phone: string,
+  comment = ""
+): Promise<void> {
+  const webhook = config.loadedSheetWebhookUrl || config.sheetWebhookUrl;
+  if (!webhook) throw new Error("SHEET_WEBHOOK_URL is required");
+  if (!name.trim()) throw new Error("name is required");
+  const updates: Array<Record<string, unknown>> = [];
+  for (let col = 1; col <= Math.max(columnCount, 1); col++) {
+    updates.push({ row: rowIndex, columnIndex: col, value: "" });
+  }
+  updates.push({ row: rowIndex, column: config.loadedNameColumn, value: name.trim() });
+  const textPhone = sheetTextPhone(phone).replace(/^'/, "");
+  if (textPhone) {
+    updates.push({ row: rowIndex, column: config.loadedNumberColumn, value: textPhone });
+  }
+  const note = String(comment ?? "").trim();
+  if (note) {
+    updates.push({ row: rowIndex, column: config.leadsCommentColumn, value: note });
+  }
+  const parsed = await postWebhookJson(webhook, {
+    action: "updateSheet",
+    spreadsheetId: config.loadedSheetId || config.leadsSpreadsheetId,
+    sheetGid,
+    updates,
+  });
+  if (parsed.ok === false) {
+    throw new Error(parsed.error || "updateSheet overwrite failed");
+  }
+}
+
+export interface MoneySheetTab {
+  headers: string[];
+  rows: MoneySheetRow[];
+}
+
+export async function readMoneySheetTab(
   config: AppConfig,
   sheetGid: number,
   nameColumn: string,
   numberColumn: string,
   statusColumn = ""
-): Promise<MoneySheetRow[]> {
+): Promise<MoneySheetTab> {
   const webhook = config.loadedSheetWebhookUrl || config.sheetWebhookUrl;
   if (!webhook) throw new Error("SHEET_WEBHOOK_URL is required");
   const parsed = await postWebhookJson(webhook, {
@@ -671,7 +725,30 @@ export async function readMoneySheetRows(
   if (parsed.ok === false) {
     throw new Error(parsed.error || "readSheet failed");
   }
-  return loadedRowsFromWebhook(parsed.rows, nameColumn, numberColumn, statusColumn);
+  const headers = Array.isArray(parsed.headers)
+    ? (parsed.headers as unknown[]).map((h) => String(h ?? ""))
+    : [];
+  return {
+    headers,
+    rows: loadedRowsFromWebhook(
+      parsed.rows,
+      nameColumn,
+      numberColumn,
+      statusColumn,
+      config.leadsCommentColumn
+    ),
+  };
+}
+
+export async function readMoneySheetRows(
+  config: AppConfig,
+  sheetGid: number,
+  nameColumn: string,
+  numberColumn: string,
+  statusColumn = ""
+): Promise<MoneySheetRow[]> {
+  const tab = await readMoneySheetTab(config, sheetGid, nameColumn, numberColumn, statusColumn);
+  return tab.rows;
 }
 
 /**

@@ -14,6 +14,7 @@
  * (unless --skip-whatsapp).
  */
 import { carryRecentApprovedLeads } from "./carryApprovedLeads.js";
+import { statusWriteCarriesToApprovedTab } from "./leadStatus.js";
 import { loadConfig } from "./config.js";
 import { isNotifiableLeadStatus } from "./whatsapp/phone.js";
 import { notifyPendingLeads } from "./whatsapp/leads.js";
@@ -290,15 +291,15 @@ function marksApproved(
   if (
     set &&
     Object.entries(set).some(
-      ([key, value]) => /^status$/i.test(key) && value.trim().toLowerCase() === "approved"
+      ([key, value]) => /^status$/i.test(key) && statusWriteCarriesToApprovedTab(String(value))
     )
   ) {
     return true;
   }
   return updates.some((item) => {
     const column = String(item.column ?? item.header ?? "");
-    const value = String(item.value ?? "").trim().toLowerCase();
-    if (value !== "approved") return false;
+    const value = String(item.value ?? "");
+    if (!statusWriteCarriesToApprovedTab(value)) return false;
     return !column || /^status$/i.test(column);
   });
 }

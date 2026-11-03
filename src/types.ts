@@ -168,6 +168,7 @@ export interface AppConfig {
   leadsNumberColumn: string;
   leadsStatusColumn: string;
   leadsWhatsappSentColumn: string;
+  leadsCommentColumn: string;
   whatsapp: WhatsAppConfig;
 }
 

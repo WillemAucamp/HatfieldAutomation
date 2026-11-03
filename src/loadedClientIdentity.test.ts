@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   approvedLeadsToCarry,
   approvedRowMissing,
+  findOrphanPhoneRow,
   normalizeLoadedPhone,
   planLoadedUpsert,
   sameLoadedPerson,
@@ -82,11 +83,57 @@ describe("approvedLeadsToCarry", () => {
     assert.equal(approvedRowMissing(approvedTab, "Buhle Masinga", "0715316597"), false);
   });
 
+  it("does not treat a blank-name row with the same phone as already carrying that client", () => {
+    const tab = [{ name: "", number: "0715316597" }];
+    assert.equal(approvedRowMissing(tab, "Buhle Masinga", "0715316597"), true);
+  });
+
   it("does not backfill approvals outside the recent window", () => {
     const carry = approvedLeadsToCarry(leads, approvedTab, 120);
     assert.equal(
       carry.some((row) => row.name === "Vinay Maharaj"),
       false
+    );
+  });
+
+  it("carries Approved no message sent and can scan the full Leads sheet", () => {
+    const allLeads = [
+      ...leads,
+      {
+        rowIndex: 628,
+        name: "Damien Pasich-Britz",
+        number: "0820001234",
+        status: "Approved no message sent",
+      },
+    ];
+    const carry = approvedLeadsToCarry(allLeads, approvedTab, null);
+    assert.equal(
+      carry.some((row) => row.name === "Damien Pasich-Britz"),
+      true
+    );
+  });
+
+  it("finds a phone-only stub row to reuse, once per run", () => {
+    const tab = [
+      { rowIndex: 10, name: "Sipho Dube", number: "0820000001" },
+      { rowIndex: 11, name: "", number: "715316597" },
+    ];
+    assert.equal(findOrphanPhoneRow(tab, "0715316597"), 11);
+    assert.equal(findOrphanPhoneRow(tab, "0715316597", new Set([11])), 0);
+    assert.equal(findOrphanPhoneRow(tab, "0820000001"), 0);
+    assert.equal(findOrphanPhoneRow(tab, ""), 0);
+  });
+
+  it("carries Approved leads even when Number is blank (name only)", () => {
+    const allLeads = [
+      ...leads,
+      { rowIndex: 664, name: "willie", number: "", status: "Approved" },
+      { rowIndex: 665, name: "Willem", number: "", status: "Approved" },
+    ];
+    const carry = approvedLeadsToCarry(allLeads, approvedTab, null);
+    assert.deepEqual(
+      carry.filter((row) => row.rowIndex >= 664).map((row) => row.name),
+      ["willie", "Willem"]
     );
   });
 });

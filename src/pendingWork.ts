@@ -100,7 +100,7 @@ export async function countPendingWork(config: AppConfig): Promise<PendingWorkCo
     config.loadedNameColumn,
     config.loadedNumberColumn
   );
-  const approved = approvedLeadsToCarry(leads, approvedTab).length;
+  const approved = approvedLeadsToCarry(leads, approvedTab, null).length;
 
   return { intake: intakeRows.length, loadable, approved };
 }

@@ -1,3 +1,4 @@
+import { isApprovedForCarryTab } from "./leadStatus.js";
 import { transformMobile } from "./transforms.js";
 
 /**
@@ -123,6 +124,7 @@ export interface ApprovedLeadRow {
   name: string;
   number: string;
   status: string;
+  comment?: string;
 }
 
 /** True when this approved client is not already on the Approved follow-up tab. */
@@ -133,10 +135,31 @@ export function approvedRowMissing(
 ): boolean {
   const phone = normalizeLoadedPhone(number);
   return !approvedTab.some((row) => {
-    if (sameLoadedPerson(row.name, name)) return true;
-    if (phone && !row.name.trim() && normalizeLoadedPhone(row.number) === phone) return true;
-    return false;
+    if (!sameLoadedPerson(row.name, name)) return false;
+    const existingPhone = normalizeLoadedPhone(row.number);
+    if (!phone || !existingPhone) return true;
+    return existingPhone === phone;
   });
+}
+
+/**
+ * Approved-tab row with a blank Name but this cellphone, which the carry should
+ * reuse instead of appending a second row for the same number.
+ */
+export function findOrphanPhoneRow(
+  approvedTab: Array<{ rowIndex: number; name: string; number: string }>,
+  number: string,
+  usedRows: ReadonlySet<number> = new Set()
+): number {
+  const phone = normalizeLoadedPhone(number);
+  if (!phone) return 0;
+  const orphan = approvedTab.find(
+    (row) =>
+      !usedRows.has(row.rowIndex) &&
+      !row.name.trim() &&
+      normalizeLoadedPhone(row.number) === phone
+  );
+  return orphan ? orphan.rowIndex : 0;
 }
 
 /**
@@ -146,17 +169,16 @@ export function approvedRowMissing(
 export function approvedLeadsToCarry(
   leads: ApprovedLeadRow[],
   approvedTab: Array<{ name: string; number: string }>,
-  windowRows = 120
+  windowRows: number | null = 120
 ): ApprovedLeadRow[] {
   const named = leads.filter((row) => row.name.trim());
   if (named.length === 0) return [];
   const last = Math.max(...named.map((row) => row.rowIndex));
-  const floor = last - windowRows;
+  const floor = windowRows == null ? 0 : last - windowRows;
   const carry: ApprovedLeadRow[] = [];
   for (const row of named) {
     if (row.rowIndex < floor) continue;
-    if (row.status.trim().toLowerCase() !== "approved") continue;
-    if (!normalizeLoadedPhone(row.number)) continue;
+    if (!isApprovedForCarryTab(row.status)) continue;
     if (!approvedRowMissing(approvedTab, row.name, row.number)) continue;
     carry.push(row);
   }
