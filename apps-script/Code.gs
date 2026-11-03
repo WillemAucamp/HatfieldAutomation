@@ -232,10 +232,6 @@ function clearApprovedRowContent_(sheet, row) {
   var lastCol = Math.max(sheet.getLastColumn(), 1);
   sheet.getRange(row, 1, 1, lastCol).clearContent();
 }
-  var commentCol = headers.indexOf(LEADS_COMMENT_HEADER) + 1;
-  if (!commentCol || row < 2) return "";
-  return String(leadsSheet.getRange(row, commentCol).getValue() || "");
-}
 
 function readLeadComment_(leadsSheet, row, headers) {
   var commentCol = headers.indexOf(LEADS_COMMENT_HEADER) + 1;
