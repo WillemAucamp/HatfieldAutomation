@@ -47,7 +47,7 @@ function doGet() {
   // returns this probe instead of the doPost JSON — keep shape stable.
   return json_({
     ok: true,
-    version: "hatfield-intake-5",
+    version: "hatfield-intake-6",
     actions: [
       "appendLoaded",
       "writeStatus",
@@ -200,6 +200,23 @@ function appendLoaded_(data) {
  * updateSheet writes do not fire onEdit. If this write set Leads Status to Approved,
  * copy that client onto the Approved tab.
  */
+function normalizeLeadStatus_(raw) {
+  return String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+/** Plain Approved and no-WhatsApp variants (e.g. Approve_no message) belong on the Approved tab. */
+function isApprovedForCarry_(value) {
+  var s = normalizeLeadStatus_(value);
+  if (s === "approved") return true;
+  if (s === "approved no message sent") return true;
+  if (/^approve(d)?\b/.test(s) && /\bno message\b/.test(s)) return true;
+  return false;
+}
+
 function findClientRowOnSheet_(sheet, nameCol, numberCol, cleanName, phone) {
   var last = Math.max(sheet.getLastRow(), 1);
   if (last < 2) return 0;
@@ -481,7 +498,8 @@ function ensureHeaders_(sheet, names) {
   for (var i = 0; i < names.length; i++) {
     ensureColumn_(sheet, headers, names[i]);
   }
-  return headers;
+  lastCol = Math.max(sheet.getLastColumn(), 1);
+  return sheet.getRange(1, 1, 1, lastCol).getValues()[0];
 }
 
 function renumberRows_(data) {
@@ -1241,15 +1259,6 @@ function isNotifiableLeadStatus_(value) {
     .trim()
     .toLowerCase();
   return s === "approved" || s === "declined";
-}
-
-/** Plain Approved and Approved no message sent both belong on the Approved tab. */
-function isApprovedForCarry_(value) {
-  var s = String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-  return s === "approved" || s === "approved no message sent";
 }
 
 /**

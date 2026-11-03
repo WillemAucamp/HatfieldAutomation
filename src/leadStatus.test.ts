@@ -8,6 +8,7 @@ describe("isApprovedForCarryTab", () => {
     assert.equal(isApprovedForCarryTab("approved"), true);
     assert.equal(isApprovedForCarryTab("Approved no message sent"), true);
     assert.equal(isApprovedForCarryTab("  Approved   no   message sent  "), true);
+    assert.equal(isApprovedForCarryTab("Approve_no message"), true);
   });
 
   it("excludes Declined and unrelated statuses", () => {
