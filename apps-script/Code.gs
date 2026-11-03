@@ -352,7 +352,7 @@ function carryApprovedLead_(name, number, comment) {
     .trim()
     .replace(/\s+/g, " ");
   var phone = normalizeSaMobile_(number);
-  if (!cleanName || !phone) return { ok: false, error: "name and number are required" };
+  if (!cleanName) return { ok: false, error: "name is required" };
 
   var ss = SpreadsheetApp.openById(LOADED_SHEET_ID);
   var sheet = ss.getSheetById(APPROVED_SHEET_GID);
@@ -367,7 +367,7 @@ function carryApprovedLead_(name, number, comment) {
   var last = Math.max(sheet.getLastRow(), 1);
   var existingRow = findClientRowOnSheet_(sheet, nameCol, numberCol, cleanName, phone);
   var reusedOrphan = false;
-  if (!existingRow) {
+  if (!existingRow && phone) {
     existingRow = findOrphanPhoneRow_(sheet, nameCol, numberCol, phone);
     reusedOrphan = existingRow > 0;
   }
@@ -376,20 +376,20 @@ function carryApprovedLead_(name, number, comment) {
       clearApprovedRowContent_(sheet, existingRow);
     }
     sheet.getRange(existingRow, nameCol).setValue(cleanName);
-    writePhone_(sheet, existingRow, numberCol, phone);
+    if (phone) writePhone_(sheet, existingRow, numberCol, phone);
     if (commentCol && note) {
       sheet.getRange(existingRow, commentCol).setValue(note);
     }
-    return { ok: true, updated: true, row: existingRow, name: cleanName };
+    return { ok: true, updated: true, row: existingRow, name: cleanName, nameOnly: !phone };
   }
 
   var row = Math.max(last + 1, 2);
   sheet.getRange(row, nameCol).setValue(cleanName);
-  writePhone_(sheet, row, numberCol, phone);
+  if (phone) writePhone_(sheet, row, numberCol, phone);
   if (commentCol && note) {
     sheet.getRange(row, commentCol).setValue(note);
   }
-  return { ok: true, row: row, name: cleanName, number: phone };
+  return { ok: true, row: row, name: cleanName, number: phone || "", nameOnly: !phone };
 }
 
 /**
@@ -415,6 +415,7 @@ function carryAllMissingApprovedLeads_() {
 
   var values = leads.getRange(2, 1, lastRow - 1, lastCol).getValues();
   var carried = [];
+  var failed = [];
   for (var i = 0; i < values.length; i++) {
     var rowIndex = i + 2;
     var status = String(values[i][statusCol - 1] || "").trim();
@@ -426,9 +427,11 @@ function carryAllMissingApprovedLeads_() {
     var result = carryApprovedLead_(leadName, leadNumber, comment);
     if (result && result.ok) {
       carried.push(leadName);
+    } else if (result && result.error) {
+      failed.push(leadName + ": " + result.error);
     }
   }
-  return { ok: true, carried: carried.length, names: carried };
+  return { ok: true, carried: carried.length, names: carried, failed: failed };
 }
 
 function menuCarryMissingApproved() {
@@ -451,6 +454,9 @@ function menuCarryMissingApproved() {
     "Added or updated " + result.carried + " client(s):\n\n" + result.names.join("\n"),
     ui.ButtonSet.OK
   );
+  if (result.failed && result.failed.length) {
+    ui.alert("Some rows were not copied", result.failed.join("\n"), ui.ButtonSet.OK);
+  }
 }
 
 function writeStatus_(data) {
@@ -1357,9 +1363,23 @@ function handleLeadsSheetEdit_(e, sheet) {
     var leadComment = readLeadComment_(sheet, row, headers);
     if (isApprovedForCarry_(status)) {
       try {
-        carryApprovedLead_(leadName, leadNumber, leadComment);
+        var carryResult = carryApprovedLead_(leadName, leadNumber, leadComment);
+        if (carryResult && !carryResult.ok) {
+          SpreadsheetApp.getActiveSpreadsheet().toast(
+            carryResult.error || "Could not copy to Approved tab",
+            "Approved copy",
+            10
+          );
+        } else if (carryResult && carryResult.ok && carryResult.nameOnly) {
+          SpreadsheetApp.getActiveSpreadsheet().toast(
+            "Copied without Number — add a cellphone on Leads for WhatsApp.",
+            "Approved copy",
+            8
+          );
+        }
       } catch (carryErr) {
         console.error(carryErr);
+        SpreadsheetApp.getActiveSpreadsheet().toast(String(carryErr), "Approved copy failed", 10);
       }
     }
     if (!isNotifiableLeadStatus_(status)) continue;

@@ -159,7 +159,6 @@ export function approvedLeadsToCarry(
   for (const row of named) {
     if (row.rowIndex < floor) continue;
     if (!isApprovedForCarryTab(row.status)) continue;
-    if (!normalizeLoadedPhone(row.number)) continue;
     if (!approvedRowMissing(approvedTab, row.name, row.number)) continue;
     carry.push(row);
   }

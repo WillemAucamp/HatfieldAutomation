@@ -111,4 +111,17 @@ describe("approvedLeadsToCarry", () => {
       true
     );
   });
+
+  it("carries Approved leads even when Number is blank (name only)", () => {
+    const allLeads = [
+      ...leads,
+      { rowIndex: 664, name: "willie", number: "", status: "Approved" },
+      { rowIndex: 665, name: "Willem", number: "", status: "Approved" },
+    ];
+    const carry = approvedLeadsToCarry(allLeads, approvedTab, null);
+    assert.deepEqual(
+      carry.filter((row) => row.rowIndex >= 664).map((row) => row.name),
+      ["willie", "Willem"]
+    );
+  });
 });

@@ -642,11 +642,13 @@ export async function appendMoneySheetRow(
   const webhook = config.loadedSheetWebhookUrl || config.sheetWebhookUrl;
   if (!webhook) throw new Error("SHEET_WEBHOOK_URL is required");
   const textPhone = sheetTextPhone(phone);
-  if (!name.trim() || !textPhone) throw new Error("name and number are required");
+  if (!name.trim()) throw new Error("name is required");
   const append: Record<string, string> = {
     [config.loadedNameColumn]: name.trim(),
-    [config.loadedNumberColumn]: textPhone,
   };
+  if (textPhone) {
+    append[config.loadedNumberColumn] = textPhone;
+  }
   const note = String(comment ?? "").trim();
   if (note) append.Comment = note;
   const parsed = await postWebhookJson(webhook, {
