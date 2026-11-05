@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  approvedAppendRow,
   approvedLeadsToCarry,
   approvedRowMissing,
   findOrphanPhoneRow,
@@ -111,6 +112,26 @@ describe("approvedLeadsToCarry", () => {
       carry.some((row) => row.name === "Damien Pasich-Britz"),
       true
     );
+  });
+
+  it("appends under the working list, not below a stray cell far down the tab", () => {
+    const tab: Array<{ rowIndex: number; name: string; number: string }> = [];
+    for (let r = 2; r <= 146; r++) {
+      tab.push({ rowIndex: r, name: r === 14 ? "" : `Client ${r}`, number: r === 14 ? "" : "0820000000" });
+    }
+    for (let r = 147; r <= 998; r++) tab.push({ rowIndex: r, name: "", number: "" });
+    tab.push({ rowIndex: 999, name: "Vinay Maharaj", number: "0817022504" });
+    assert.equal(approvedAppendRow(tab), 147);
+  });
+
+  it("appends after the last row when the list has no long blank stretch", () => {
+    const tab = [
+      { rowIndex: 2, name: "A", number: "0820000001" },
+      { rowIndex: 3, name: "", number: "" },
+      { rowIndex: 4, name: "B", number: "0820000002" },
+    ];
+    assert.equal(approvedAppendRow(tab), 5);
+    assert.equal(approvedAppendRow([]), 2);
   });
 
   it("finds a phone-only stub row to reuse, once per run", () => {

@@ -683,7 +683,8 @@ export async function overwriteMoneySheetRow(
     updates.push({ row: rowIndex, columnIndex: col, value: "" });
   }
   updates.push({ row: rowIndex, column: config.loadedNameColumn, value: name.trim() });
-  const textPhone = sheetTextPhone(phone).replace(/^'/, "");
+  // Keep the apostrophe: older web app deploys setValue() Number as-is and would drop the 0.
+  const textPhone = sheetTextPhone(phone);
   if (textPhone) {
     updates.push({ row: rowIndex, column: config.loadedNumberColumn, value: textPhone });
   }
