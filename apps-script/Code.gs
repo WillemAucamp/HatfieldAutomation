@@ -47,7 +47,7 @@ function doGet() {
   // returns this probe instead of the doPost JSON — keep shape stable.
   return json_({
     ok: true,
-    version: "hatfield-intake-6",
+    version: "hatfield-intake-7",
     actions: [
       "appendLoaded",
       "writeStatus",
@@ -344,8 +344,35 @@ function maybeCarryApprovedFromWrites_(sheet, written) {
 }
 
 /**
+ * Stray cells far down the Approved tab (e.g. a lone note on row 998) push getLastRow()
+ * past the working list, so new clients must go into the first long blank stretch
+ * instead. Short gaps inside the list are left alone.
+ */
+var APPROVED_APPEND_GAP_ROWS = 20;
+
+function approvedAppendRow_(sheet, nameCol, numberCol) {
+  var last = Math.max(sheet.getLastRow(), 1);
+  if (last < 2) return 2;
+  var names = sheet.getRange(2, nameCol, last - 1, 1).getValues();
+  var numbers = sheet.getRange(2, numberCol, last - 1, 1).getValues();
+  var runStart = 0;
+  for (var i = 0; i < names.length; i++) {
+    var r = i + 2;
+    var blank = !String(names[i][0] || "").trim() && !String(numbers[i][0] || "").trim();
+    if (blank) {
+      if (!runStart) runStart = r;
+      continue;
+    }
+    if (runStart && r - runStart >= APPROVED_APPEND_GAP_ROWS) return runStart;
+    runStart = 0;
+  }
+  return runStart || last + 1;
+}
+
+/**
  * Put an Approved lead on the Approved follow-up tab if they are not already there.
  * Same cellphone under a different name still gets a row — do not hide the new client.
+ * A client already on the tab keeps their Approved-tab notes; only a missing Number is filled.
  */
 function carryApprovedLead_(name, number, comment) {
   var cleanName = String(name || "")
@@ -358,38 +385,50 @@ function carryApprovedLead_(name, number, comment) {
   var sheet = ss.getSheetById(APPROVED_SHEET_GID);
   if (!sheet) return { ok: false, error: "Approved tab missing" };
 
-  var headers = ensureHeaders_(sheet, ["Name", "Number", LEADS_COMMENT_HEADER]);
-  var nameCol = headers.indexOf("Name") + 1;
-  var numberCol = headers.indexOf("Number") + 1;
-  var commentCol = headers.indexOf(LEADS_COMMENT_HEADER) + 1;
-  var note = comment != null ? String(comment) : "";
+  // The edit trigger and the catch-up menu can run at once; both must not pick the same row.
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var headers = ensureHeaders_(sheet, ["Name", "Number", LEADS_COMMENT_HEADER]);
+    var nameCol = headers.indexOf("Name") + 1;
+    var numberCol = headers.indexOf("Number") + 1;
+    var commentCol = headers.indexOf(LEADS_COMMENT_HEADER) + 1;
+    var note = comment != null ? String(comment) : "";
 
-  var last = Math.max(sheet.getLastRow(), 1);
-  var existingRow = findClientRowOnSheet_(sheet, nameCol, numberCol, cleanName, phone);
-  var reusedOrphan = false;
-  if (!existingRow && phone) {
-    existingRow = findOrphanPhoneRow_(sheet, nameCol, numberCol, phone);
-    reusedOrphan = existingRow > 0;
-  }
-  if (existingRow) {
-    if (reusedOrphan) {
-      clearApprovedRowContent_(sheet, existingRow);
+    var existingRow = findClientRowOnSheet_(sheet, nameCol, numberCol, cleanName, phone);
+    if (existingRow) {
+      if (phone && !normalizeSaMobile_(sheet.getRange(existingRow, numberCol).getValue())) {
+        writePhone_(sheet, existingRow, numberCol, phone);
+        return { ok: true, updated: true, row: existingRow, name: cleanName };
+      }
+      return { ok: true, skipped: true, row: existingRow, name: cleanName };
     }
-    sheet.getRange(existingRow, nameCol).setValue(cleanName);
-    if (phone) writePhone_(sheet, existingRow, numberCol, phone);
+
+    var reusedOrphan = false;
+    var row = phone ? findOrphanPhoneRow_(sheet, nameCol, numberCol, phone) : 0;
+    if (row) {
+      reusedOrphan = true;
+    } else {
+      row = approvedAppendRow_(sheet, nameCol, numberCol);
+    }
+    clearApprovedRowContent_(sheet, row);
+    sheet.getRange(row, nameCol).setValue(cleanName);
+    if (phone) writePhone_(sheet, row, numberCol, phone);
     if (commentCol && note) {
-      sheet.getRange(existingRow, commentCol).setValue(note);
+      sheet.getRange(row, commentCol).setValue(note);
     }
-    return { ok: true, updated: true, row: existingRow, name: cleanName, nameOnly: !phone };
+    SpreadsheetApp.flush();
+    return {
+      ok: true,
+      row: row,
+      name: cleanName,
+      number: phone || "",
+      nameOnly: !phone,
+      reused: reusedOrphan,
+    };
+  } finally {
+    lock.releaseLock();
   }
-
-  var row = Math.max(last + 1, 2);
-  sheet.getRange(row, nameCol).setValue(cleanName);
-  if (phone) writePhone_(sheet, row, numberCol, phone);
-  if (commentCol && note) {
-    sheet.getRange(row, commentCol).setValue(note);
-  }
-  return { ok: true, row: row, name: cleanName, number: phone || "", nameOnly: !phone };
 }
 
 /**
@@ -425,8 +464,8 @@ function carryAllMissingApprovedLeads_() {
     if (!leadName) continue;
     var comment = readLeadComment_(leads, rowIndex, headers);
     var result = carryApprovedLead_(leadName, leadNumber, comment);
-    if (result && result.ok) {
-      carried.push(leadName);
+    if (result && result.ok && !result.skipped) {
+      carried.push(leadName + (result.updated ? " (Number filled in)" : "") + " → row " + result.row);
     } else if (result && result.error) {
       failed.push(leadName + ": " + result.error);
     }
@@ -451,7 +490,7 @@ function menuCarryMissingApproved() {
   }
   ui.alert(
     "Copied to Approved tab",
-    "Added or updated " + result.carried + " client(s):\n\n" + result.names.join("\n"),
+    "Copied " + result.carried + " client(s):\n\n" + result.names.join("\n"),
     ui.ButtonSet.OK
   );
   if (result.failed && result.failed.length) {
@@ -538,6 +577,8 @@ function ensureColumn_(sheet, headers, name) {
   var col = headers.indexOf(name) + 1;
   if (col === 0) {
     col = headers.length + 1;
+    var maxCols = sheet.getMaxColumns();
+    if (col > maxCols) sheet.insertColumnsAfter(maxCols, col - maxCols);
     sheet.getRange(1, col).setValue(name);
     headers[col - 1] = name;
   }
@@ -777,12 +818,14 @@ function setColumnValidation_(sheet, colNum, options, spec) {
   var lastRow = sheet.getLastRow();
   var fromRow = Number(spec.fromRow) || 2;
   var toRow = Number(spec.toRow) || Math.max(lastRow, Number(spec.validationRows) || 2000);
+  toRow = Math.min(toRow, sheet.getMaxRows());
   if (toRow < fromRow) toRow = fromRow;
   var rule = SpreadsheetApp.newDataValidation()
     .requireValueInList(options, true)
     .setAllowInvalid(false)
     .build();
-  sheet.getRange(fromRow, colNum, toRow, colNum).setDataValidation(rule);
+  // getRange(row, column, numRows, numColumns) — not end-row / end-column corners.
+  sheet.getRange(fromRow, colNum, toRow - fromRow + 1, 1).setDataValidation(rule);
   return { fromRow: fromRow, toRow: toRow };
 }
 
@@ -1070,6 +1113,7 @@ function onOpen() {
     .addItem("Turn on 5-minute GitHub poll", "menuTurnOnPipelinePoll")
     .addItem("Turn off 5-minute GitHub poll", "menuTurnOffPipelinePoll")
     .addSeparator()
+    .addItem("Turn on auto-copy to Approved tab", "menuTurnOnApprovedAutoCopy")
     .addItem("Copy missing Approved leads to Approved tab", "menuCarryMissingApproved")
     .addSeparator()
     .addItem("Mark old Form rows skipped…", "menuSkipHistorical")
@@ -1345,43 +1389,65 @@ function handleLeadsSheetEdit_(e, sheet) {
 
   if (!touchesStatus) return;
 
-  ensureColumn_(sheet, headers, LEADS_WHATSAPP_SENT_HEADER);
-  headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
-  var sentCol = headers.indexOf(LEADS_WHATSAPP_SENT_HEADER) + 1;
-  if (sentCol) {
-    setColumnValidation_(sheet, sentCol, ["Yes", "No"], { fromRow: 2, toRow: 2000 });
-  }
-
   var startRow = e.range.getRow();
   var numRows = e.range.getNumRows();
+  var ss = sheet.getParent();
+
+  // Copy to Approved first so a WhatsApp-column problem can never block it.
+  for (var a = 0; a < numRows; a++) {
+    var carryRow = startRow + a;
+    var carryStatus = String(sheet.getRange(carryRow, statusCol).getValue() || "").trim();
+    if (!isApprovedForCarry_(carryStatus)) continue;
+    var carryName = String(sheet.getRange(carryRow, nameCol).getValue() || "");
+    try {
+      var carryResult = carryApprovedLead_(
+        carryName,
+        String(sheet.getRange(carryRow, numberCol).getValue() || ""),
+        readLeadComment_(sheet, carryRow, headers)
+      );
+      if (!carryResult || !carryResult.ok) {
+        ss.toast(
+          (carryResult && carryResult.error) || "Could not copy to Approved tab",
+          "Approved copy",
+          10
+        );
+      } else if (carryResult.skipped) {
+        ss.toast(carryName + " is already on Approved (row " + carryResult.row + ").", "Approved copy", 6);
+      } else {
+        ss.toast(
+          "Copied " +
+            carryName +
+            " to Approved row " +
+            carryResult.row +
+            (carryResult.nameOnly ? " — no Number on Leads, add one for WhatsApp." : "."),
+          "Approved copy",
+          8
+        );
+      }
+    } catch (carryErr) {
+      console.error(carryErr);
+      ss.toast(String(carryErr), "Approved copy failed", 10);
+    }
+  }
+
+  var sentCol = 0;
+  try {
+    ensureColumn_(sheet, headers, LEADS_WHATSAPP_SENT_HEADER);
+    headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+    sentCol = headers.indexOf(LEADS_WHATSAPP_SENT_HEADER) + 1;
+    if (sentCol) {
+      setColumnValidation_(sheet, sentCol, ["Yes", "No"], { fromRow: 2, toRow: 2000 });
+    }
+  } catch (sentErr) {
+    console.error(sentErr);
+  }
+
   var notified = [];
   for (var r = 0; r < numRows; r++) {
     var row = startRow + r;
     var status = String(sheet.getRange(row, statusCol).getValue() || "").trim();
-    var leadName = nameCol ? String(sheet.getRange(row, nameCol).getValue() || "") : "";
-    var leadNumber = numberCol ? String(sheet.getRange(row, numberCol).getValue() || "") : "";
-    var leadComment = readLeadComment_(sheet, row, headers);
-    if (isApprovedForCarry_(status)) {
-      try {
-        var carryResult = carryApprovedLead_(leadName, leadNumber, leadComment);
-        if (carryResult && !carryResult.ok) {
-          SpreadsheetApp.getActiveSpreadsheet().toast(
-            carryResult.error || "Could not copy to Approved tab",
-            "Approved copy",
-            10
-          );
-        } else if (carryResult && carryResult.ok && carryResult.nameOnly) {
-          SpreadsheetApp.getActiveSpreadsheet().toast(
-            "Copied without Number — add a cellphone on Leads for WhatsApp.",
-            "Approved copy",
-            8
-          );
-        }
-      } catch (carryErr) {
-        console.error(carryErr);
-        SpreadsheetApp.getActiveSpreadsheet().toast(String(carryErr), "Approved copy failed", 10);
-      }
-    }
+    var leadName = String(sheet.getRange(row, nameCol).getValue() || "");
+    var leadNumber = String(sheet.getRange(row, numberCol).getValue() || "");
     if (!isNotifiableLeadStatus_(status)) continue;
     var sent = sentCol ? String(sheet.getRange(row, sentCol).getValue() || "").trim() : "";
     if (/^yes$/i.test(sent) || /^sent/i.test(sent)) continue;
@@ -1404,8 +1470,28 @@ function handleLeadsSheetEdit_(e, sheet) {
 }
 
 /**
- * Run once from the Apps Script editor after CURSOR_WEBHOOK_URL is set.
- * Creates an installable onEdit trigger on the loaded-clients / Leads spreadsheet.
+ * Pasting and saving Code.gs does not create the installable On edit trigger; without it,
+ * changing Status on Leads never runs onMoneySheetEdit.
+ */
+function menuTurnOnApprovedAutoCopy() {
+  var ui = SpreadsheetApp.getUi();
+  var result = setupLeadsWhatsAppWatch();
+  ui.alert(
+    "Auto-copy is on",
+    "Changing Status on Leads to Approved (or Approve_no message) now copies the client to the " +
+      "Approved tab. A small message appears bottom-right with the Approved row number.\n\n" +
+      "Trigger: " +
+      result.handler +
+      " on " +
+      result.spreadsheet +
+      ".",
+    ui.ButtonSet.OK
+  );
+}
+
+/**
+ * Creates the installable onEdit trigger on the loaded-clients / Leads spreadsheet.
+ * Also reachable from Hatfield → Turn on auto-copy to Approved tab.
  */
 function setupLeadsWhatsAppWatch() {
   var ss = SpreadsheetApp.openById(LOADED_SHEET_ID);
