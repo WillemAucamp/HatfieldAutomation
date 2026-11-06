@@ -255,7 +255,7 @@ The only automatic rewrites are known Google Sheets artefacts:
 
 | Code | Meaning |
 |---|---|
-| `NO_CONSENT` | Form consent was not Yes. The row is still written to the automation sheet but is not loaded. Confirm with the client, clear **Status**, run load-only. Or set intake **Enrichment Status** to `retry` and ingest again. |
+| `error_no_consent_given` | Form consent was not Yes. The row is still written to the automation sheet but is not loaded into Seriti. |
 | `ID_NOT_13_DIGITS` | RSA ID is not exactly 13 digits (after optional leading-0 restore) |
 | `ID_EMPTY` | ID number cell is empty |
 | `MOBILE_NOT_10_DIGITS` | Mobile is not 10 digits starting with 0 (after optional leading-0 restore) |

@@ -49,6 +49,7 @@ describe("isStatusPopulated", () => {
   it("treats any non-empty Status cell as already handled", () => {
     assert.equal(isStatusPopulated("ZAHTVW0013281422"), true);
     assert.equal(isStatusPopulated("error ID_NOT_13_DIGITS"), true);
+    assert.equal(isStatusPopulated("error_no_consent_given"), true);
     assert.equal(isStatusPopulated(""), false);
     assert.equal(isStatusPopulated("   "), false);
   });

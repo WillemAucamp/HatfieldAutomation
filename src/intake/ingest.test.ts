@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { capIntakeRows, isIntakeRetry, stampIngestRowStatus } from "./ingest.js";
+import { capIntakeRows, NO_CONSENT_GIVEN_STATUS, stampIngestRowStatus } from "./ingest.js";
 
 describe("capIntakeRows", () => {
   it("leaves the list unchanged when max is 0 (unlimited)", () => {
@@ -21,27 +21,17 @@ describe("capIntakeRows", () => {
   });
 });
 
-describe("isIntakeRetry", () => {
-  it("treats Enrichment Status retry as an operator override", () => {
-    assert.equal(isIntakeRetry("retry"), true);
-    assert.equal(isIntakeRetry("RETRY"), true);
-    assert.equal(isIntakeRetry(""), false);
-    assert.equal(isIntakeRetry("skipped_no_consent"), false);
-    assert.equal(isIntakeRetry("new"), false);
-  });
-});
-
 describe("stampIngestRowStatus", () => {
   const validId = "8603206249081";
 
-  it("appends declined-consent rows with NO_CONSENT instead of dropping them", () => {
+  it("appends declined-consent rows with error_no_consent_given instead of dropping them", () => {
     const stamped = stampIngestRowStatus(
       { "Full name": "Fatima Hassim", "ID number": validId, Status: "" },
       { consent: "No" }
     );
     assert.equal(stamped.consentBlocked, true);
-    assert.match(stamped.values.Status, /error NO_CONSENT/);
-    assert.match(stamped.values.Status, /clear Status/i);
+    assert.equal(stamped.values.Status, NO_CONSENT_GIVEN_STATUS);
+    assert.equal(stamped.values.Status, "error_no_consent_given");
     assert.equal(stamped.values["Full name"], "Fatima Hassim");
   });
 
@@ -54,15 +44,6 @@ describe("stampIngestRowStatus", () => {
       stampIngestRowStatus({ "ID number": validId }, { consent: "Yes" }).values.Status,
       undefined
     );
-  });
-
-  it("lets an operator retry load a Form No after verbal confirmation", () => {
-    const stamped = stampIngestRowStatus(
-      { "ID number": validId, Status: "" },
-      { consent: "No", operatorRetry: true }
-    );
-    assert.equal(stamped.consentBlocked, false);
-    assert.equal(stamped.values.Status, "");
   });
 
   it("keeps a bad RSA ID blocked even when consent is Yes", () => {

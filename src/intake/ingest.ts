@@ -31,10 +31,8 @@ export function capIntakeRows<T>(rows: T[], max: number): { rows: T[]; remaining
   return { rows: rows.slice(0, max), remaining: rows.length - max };
 }
 
-/** Operator set Enrichment Status to retry after confirming consent off-form. */
-export function isIntakeRetry(status: string | undefined | null): boolean {
-  return /^retry$/i.test(String(status ?? "").trim());
-}
+/** Status written on the automation sheet so Seriti skips the row. */
+export const NO_CONSENT_GIVEN_STATUS = "error_no_consent_given";
 
 const INGEST_ID_BLOCK_CODES = new Set(["ID_CHECKSUM_INVALID", "ID_NOT_13_DIGITS"]);
 
@@ -45,7 +43,7 @@ const INGEST_ID_BLOCK_CODES = new Set(["ID_CHECKSUM_INVALID", "ID_NOT_13_DIGITS"
  */
 export function stampIngestRowStatus(
   values: Record<string, string>,
-  options: { consent: string; operatorRetry?: boolean }
+  options: { consent: string }
 ): { values: Record<string, string>; consentBlocked: boolean } {
   const next = { ...values };
   const errors: Array<{ code: string; message?: string }> = [];
@@ -56,14 +54,10 @@ export function stampIngestRowStatus(
   }
 
   const consentRaw = String(options.consent ?? "").trim();
-  const consentBlocked =
-    Boolean(consentRaw) && !hasConsent(consentRaw) && !options.operatorRetry;
+  const consentBlocked = Boolean(consentRaw) && !hasConsent(consentRaw);
   if (consentBlocked) {
-    errors.push({
-      code: "NO_CONSENT",
-      message:
-        "Form consent was not Yes. Confirm with the client, then clear Status and run load-only.",
-    });
+    next.Status = NO_CONSENT_GIVEN_STATUS;
+    return { values: next, consentBlocked };
   }
 
   if (errors.length > 0) {
@@ -122,12 +116,6 @@ export async function ingestNewRows(
     const name = formApplicantName(intake.values, mapping);
     const label = `intake row ${intake.rowIndex}${name ? ` (${name})` : ""}`;
     const consent = cell(intake.values, mapping.intake_headers.consent);
-    const operatorRetry = isIntakeRetry(intake.status);
-    if (consent && !hasConsent(consent) && operatorRetry) {
-      console.warn(
-        `${label}: Form consent was "${consent.slice(0, 40)}"; operator retry — ingesting without NO_CONSENT block`
-      );
-    }
     if (!name) {
       result.skipped += 1;
       if (!dryRun) {
@@ -164,7 +152,7 @@ export async function ingestNewRows(
       });
       console.log(`Gemini finished ${label} in ${((Date.now() - startedMs) / 1000).toFixed(1)}s`);
       const built = buildOutputValues(mapping, fields, intake.values);
-      const stamped = stampIngestRowStatus(built, { consent, operatorRetry });
+      const stamped = stampIngestRowStatus(built, { consent });
       const values = stamped.values;
       if (stamped.consentBlocked) {
         console.warn(
