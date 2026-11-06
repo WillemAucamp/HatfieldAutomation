@@ -39,6 +39,7 @@ describe("isRepairableAutomationStatus", () => {
     assert.equal(isRepairableAutomationStatus("ZAHTVW0013281422"), false);
     assert.equal(isRepairableAutomationStatus("error ID_CHECKSUM_INVALID"), false);
     assert.equal(isRepairableAutomationStatus("error AFFORDABILITY_ERROR"), false);
+    assert.equal(isRepairableAutomationStatus("error_no_consent_given"), false);
     assert.equal(
       isRepairableAutomationStatus("error MARITAL_DATE_EMPTY, ID_CHECKSUM_INVALID"),
       false

@@ -73,6 +73,7 @@ describe("intake headers", () => {
     assert.equal(hasConsent("I agree"), true);
     assert.equal(hasConsent("No"), false);
     assert.equal(hasConsent(""), false);
+    assert.equal(hasConsent("I am okay"), false);
   });
 
   it("matches the new intakes sheet debt-review and housing headers", () => {

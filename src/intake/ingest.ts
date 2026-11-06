@@ -3,7 +3,7 @@ import { enrichWithGemini } from "./gemini.js";
 import { assertIntakeHeadersPresent, cell, flattenRow, hasConsent } from "./headers.js";
 import { formApplicantName } from "./name.js";
 import { loadIntakeMapping, requiredIntakeHeaderLabels } from "./mapping.js";
-import { formatErrorCell } from "../outcome.js";
+import { formatDataErrorCell } from "../outcome.js";
 import { validateIdNumber } from "../transforms.js";
 import { buildOutputValues } from "./row.js";
 import {
@@ -29,6 +29,41 @@ export function capIntakeRows<T>(rows: T[], max: number): { rows: T[]; remaining
     return { rows, remaining: 0 };
   }
   return { rows: rows.slice(0, max), remaining: rows.length - max };
+}
+
+/** Status written on the automation sheet so Seriti skips the row. */
+export const NO_CONSENT_GIVEN_STATUS = "error_no_consent_given";
+
+const INGEST_ID_BLOCK_CODES = new Set(["ID_CHECKSUM_INVALID", "ID_NOT_13_DIGITS"]);
+
+/**
+ * Stamp Status so Seriti will not load the row. Consent "No" used to drop the
+ * applicant from ingest entirely — they never appeared on the automation sheet.
+ * The standing rule is "do not load", not "do not append".
+ */
+export function stampIngestRowStatus(
+  values: Record<string, string>,
+  options: { consent: string }
+): { values: Record<string, string>; consentBlocked: boolean } {
+  const next = { ...values };
+  const errors: Array<{ code: string; message?: string }> = [];
+
+  const idCheck = validateIdNumber(next["ID number"]);
+  if (!idCheck.valid && idCheck.code && INGEST_ID_BLOCK_CODES.has(idCheck.code)) {
+    errors.push({ code: idCheck.code, message: idCheck.message });
+  }
+
+  const consentRaw = String(options.consent ?? "").trim();
+  const consentBlocked = Boolean(consentRaw) && !hasConsent(consentRaw);
+  if (consentBlocked) {
+    next.Status = NO_CONSENT_GIVEN_STATUS;
+    return { values: next, consentBlocked };
+  }
+
+  if (errors.length > 0) {
+    next.Status = formatDataErrorCell(errors);
+  }
+  return { values: next, consentBlocked };
 }
 
 export async function ingestNewRows(
@@ -81,21 +116,6 @@ export async function ingestNewRows(
     const name = formApplicantName(intake.values, mapping);
     const label = `intake row ${intake.rowIndex}${name ? ` (${name})` : ""}`;
     const consent = cell(intake.values, mapping.intake_headers.consent);
-    if (!hasConsent(consent) && consent) {
-      result.skipped += 1;
-      if (!dryRun) {
-        await markIntakeStatus({
-          webhookUrl: config.sheetWebhookUrl,
-          spreadsheetId: config.intakeSpreadsheetId,
-          rowIndex: intake.rowIndex,
-          statusColumn: config.intakeStatusColumn,
-          status: "skipped_no_consent",
-          ...intakeTab,
-        });
-      }
-      console.log(`Skip ${label}: consent not given`);
-      continue;
-    }
     if (!name) {
       result.skipped += 1;
       if (!dryRun) {
@@ -131,19 +151,15 @@ export async function ingestNewRows(
         model: config.geminiModel,
       });
       console.log(`Gemini finished ${label} in ${((Date.now() - startedMs) / 1000).toFixed(1)}s`);
-      const values = buildOutputValues(mapping, fields, intake.values);
-
-      // Bad RSA IDs never pass Seriti Personal Next — stamp Status at ingest time.
-      const idCheck = validateIdNumber(values["ID number"]);
-      if (
-        !idCheck.valid &&
-        idCheck.code &&
-        ["ID_CHECKSUM_INVALID", "ID_NOT_13_DIGITS"].includes(idCheck.code)
-      ) {
-        values.Status = formatErrorCell([idCheck.code]);
+      const built = buildOutputValues(mapping, fields, intake.values);
+      const stamped = stampIngestRowStatus(built, { consent });
+      const values = stamped.values;
+      if (stamped.consentBlocked) {
         console.warn(
-          `${label}: ${idCheck.code} — appending with Status=${values.Status} (will not load)`
+          `${label}: Form consent was "${consent.slice(0, 40)}" — appending with Status=${values.Status} (will not load)`
         );
+      } else if (values.Status) {
+        console.warn(`${label}: appending with Status=${values.Status} (will not load)`);
       }
 
       if (dryRun) {
