@@ -40,6 +40,12 @@ describe("isRepairableAutomationStatus", () => {
     assert.equal(isRepairableAutomationStatus("error ID_CHECKSUM_INVALID"), false);
     assert.equal(isRepairableAutomationStatus("error AFFORDABILITY_ERROR"), false);
     assert.equal(
+      isRepairableAutomationStatus(
+        "error NO_CONSENT: Form consent was not Yes. Confirm with the client, then clear Status and run load-only."
+      ),
+      false
+    );
+    assert.equal(
       isRepairableAutomationStatus("error MARITAL_DATE_EMPTY, ID_CHECKSUM_INVALID"),
       false
     );
