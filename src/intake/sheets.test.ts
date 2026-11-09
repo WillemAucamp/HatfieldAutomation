@@ -48,6 +48,12 @@ describe("isTerminalIntakeStatus", () => {
     assert.equal(isTerminalIntakeStatus("skipped_already_loaded"), true);
     assert.equal(isTerminalIntakeStatus("processing"), true);
     assert.equal(isTerminalIntakeStatus("error GEMINI_TIMEOUT"), true);
+    assert.equal(isTerminalIntakeStatus("skipped_historical"), true);
+    assert.equal(isTerminalIntakeStatus("skipped_empty"), true);
+  });
+
+  it("reopens skipped_no_consent so the row is appended on a later run", () => {
+    assert.equal(isTerminalIntakeStatus("skipped_no_consent"), false);
   });
 
   it("does not treat Form answers or empty/new/retry as terminal", () => {

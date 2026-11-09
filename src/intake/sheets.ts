@@ -17,6 +17,9 @@ export function isTerminalIntakeStatus(status: string | undefined | null): boole
   const s = String(status ?? "").trim();
   if (!s) return false;
   if (/^enriched row 0\b/i.test(s)) return false;
+  // Declined consent used to stop here and never reach the automation sheet.
+  // A later run appends the row with Status error_no_consent_given.
+  if (/^skipped_no_consent$/i.test(s)) return false;
   return /^(enriched\b|skipped_|processing\b|error\b)/i.test(s);
 }
 
