@@ -8,16 +8,12 @@
 import { pathToFileURL } from "node:url";
 import { loadConfig } from "./config.js";
 import {
+  approvedAppendRow,
   approvedLeadsToCarry,
   approvedRowMissing,
   findOrphanPhoneRow,
 } from "./loadedClientIdentity.js";
-import {
-  appendMoneySheetRow,
-  overwriteMoneySheetRow,
-  readMoneySheetRows,
-  readMoneySheetTab,
-} from "./sheetWriter.js";
+import { overwriteMoneySheetRow, readMoneySheetRows, readMoneySheetTab } from "./sheetWriter.js";
 import type { AppConfig } from "./types.js";
 
 export async function carryRecentApprovedLeads(
@@ -45,39 +41,34 @@ export async function carryRecentApprovedLeads(
     // Two Leads rows for the same client must not both land on the Approved tab.
     if (!approvedRowMissing(approvedRows, row.name, row.number)) continue;
     const orphanRow = findOrphanPhoneRow(approvedRows, row.number, usedOrphans);
-    if (orphanRow) {
-      await overwriteMoneySheetRow(
-        config,
-        config.approvedSheetGid,
-        orphanRow,
-        approvedTab.headers.length,
-        row.name,
-        row.number,
-        row.comment ?? ""
-      );
-      usedOrphans.add(orphanRow);
-      const stub = approvedRows.find((approved) => approved.rowIndex === orphanRow);
-      if (stub) stub.name = row.name;
-      console.log(
-        `Approved tab: ${row.name} (Leads row ${row.rowIndex}) → reused phone-only row ${orphanRow}`
-      );
+    const targetRow = orphanRow || approvedAppendRow(approvedRows);
+    await overwriteMoneySheetRow(
+      config,
+      config.approvedSheetGid,
+      targetRow,
+      approvedTab.headers.length,
+      row.name,
+      row.number,
+      row.comment ?? ""
+    );
+    if (orphanRow) usedOrphans.add(orphanRow);
+    const existing = approvedRows.find((approved) => approved.rowIndex === targetRow);
+    if (existing) {
+      existing.name = row.name;
+      existing.number = row.number;
     } else {
-      await appendMoneySheetRow(
-        config,
-        config.approvedSheetGid,
-        row.name,
-        row.number,
-        row.comment ?? ""
-      );
       approvedRows.push({
-        rowIndex: 0,
+        rowIndex: targetRow,
         name: row.name,
         number: row.number,
         status: "",
         comment: row.comment ?? "",
       });
-      console.log(`Approved tab: ${row.name} (Leads row ${row.rowIndex})`);
     }
+    console.log(
+      `Approved tab: ${row.name} (Leads row ${row.rowIndex}) → row ${targetRow}` +
+        (orphanRow ? " (reused phone-only row)" : "")
+    );
     carried.push(row.name);
   }
   return carried;
