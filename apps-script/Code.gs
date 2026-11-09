@@ -906,7 +906,8 @@ function readSheet_(data) {
           // enriched row 0 = lost append confirmation — keep processable.
           if (
             /^(enriched\b|skipped_|processing\b|error\b)/i.test(status) &&
-            !/^enriched row 0\b/i.test(status)
+            !/^enriched row 0\b/i.test(status) &&
+            status !== "skipped_no_consent"
           ) {
             continue;
           }
