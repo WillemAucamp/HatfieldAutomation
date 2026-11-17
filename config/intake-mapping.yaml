@@ -64,7 +64,7 @@ intake_headers:
   first_name: First Name
   surname: Surname
   name_and_surname: Name and surname
-  email: Email address
+  email: Email
   call_phone: Call Phone number
   whatsapp_phone: Whatsapp Phone number
   gender: Gender
