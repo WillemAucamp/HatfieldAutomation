@@ -163,6 +163,31 @@ export function findOrphanPhoneRow(
 }
 
 /**
+ * Same rule as `approvedAppendRow_` in Code.gs: a new Approved client goes into the first
+ * blank stretch of at least `gapRows` rows (blank Name and Number), so a stray cell far
+ * down the tab does not push new clients out of sight. Short gaps inside the list are skipped.
+ */
+export function approvedAppendRow(
+  approvedTab: Array<{ rowIndex: number; name: string; number: string }>,
+  gapRows = 20
+): number {
+  const byRow = new Map(approvedTab.map((row) => [row.rowIndex, row]));
+  const lastRow = Math.max(1, ...approvedTab.map((row) => row.rowIndex));
+  let runStart = 0;
+  for (let r = 2; r <= lastRow; r++) {
+    const row = byRow.get(r);
+    const blank = !row || (!row.name.trim() && !row.number.trim());
+    if (blank) {
+      if (!runStart) runStart = r;
+      continue;
+    }
+    if (runStart && r - runStart >= gapRows) return runStart;
+    runStart = 0;
+  }
+  return runStart || lastRow + 1;
+}
+
+/**
  * Approved leads the F&I tab does not have yet.
  * Only the recent window is copied, so old approvals are not dumped onto the working list.
  */
