@@ -13,7 +13,7 @@ const mapping = loadIntakeMapping("./config/intake-mapping.yaml");
 const intakeAda = {
   "First Name": "Ada",
   Surname: "Lovelace",
-  "Email address": "ada@example.com",
+  Email: "ada@example.com",
   Gender: "Female",
   "Highest education": "Grade 12",
   "ID Number": "8705135782080",
